@@ -68,15 +68,13 @@ const SalesModule = {
       const index = element.dataset.index;
       const productSelect = document.getElementById(`line-item-product-${index}`);
       const quantityInput = document.getElementById(`line-item-quantity-${index}`);
-      const priceInput = document.getElementById(`line-item-price-${index}`);
       const giftCheckbox = document.getElementById(`line-item-gift-${index}`);
       
       const productId = productSelect.value;
       const quantity = parseInt(quantityInput.value);
-      const price = parseFloat(priceInput.value);
       const isFreeGift = giftCheckbox.checked;
       
-      if (!productId || isNaN(quantity) || quantity <= 0 || isNaN(price) || price < 0) {
+      if (!productId || isNaN(quantity) || quantity <= 0) {
         valid = false;
         return;
       }
@@ -91,13 +89,12 @@ const SalesModule = {
         productId,
         productName: product.name,
         quantity,
-        price,
         isFreeGift
       });
     });
     
     if (!valid || lineItems.length === 0) {
-      alert('Please check your line items. Each item must have a valid product, quantity, and price.');
+      alert('Please check your line items. Each item must have a valid product and quantity.');
       return;
     }
     
@@ -161,10 +158,6 @@ const SalesModule = {
         <label for="line-item-quantity-${index}">Quantity</label>
         <input type="number" class="line-item-quantity" id="line-item-quantity-${index}" min="1" required>
       </div>
-      <div class="form-group">
-        <label for="line-item-price-${index}">Price</label>
-        <input type="number" class="line-item-price" id="line-item-price-${index}" min="0" step="0.01" required>
-      </div>
       <div class="form-group checkbox">
         <label for="line-item-gift-${index}">
           <input type="checkbox" class="line-item-gift" id="line-item-gift-${index}">
@@ -209,30 +202,6 @@ const SalesModule = {
       removeButton.addEventListener('click', () => this.removeLineItem(index));
     }
     
-    const priceInput = document.getElementById(`line-item-price-${index}`);
-    const quantityInput = document.getElementById(`line-item-quantity-${index}`);
-    const giftCheckbox = document.getElementById(`line-item-gift-${index}`);
-    
-    // Update total amount on price or quantity change
-    if (priceInput) {
-      priceInput.addEventListener('change', this.updateTotalAmount.bind(this));
-    }
-    
-    if (quantityInput) {
-      quantityInput.addEventListener('change', this.updateTotalAmount.bind(this));
-    }
-    
-    if (giftCheckbox) {
-      giftCheckbox.addEventListener('change', () => {
-        if (giftCheckbox.checked) {
-          priceInput.value = "0";
-          priceInput.disabled = true;
-        } else {
-          priceInput.disabled = false;
-        }
-        this.updateTotalAmount();
-      });
-    }
   },
   
   // Remove a line item
@@ -245,35 +214,8 @@ const SalesModule = {
     // Update the visibility of remove buttons
     this.updateRemoveButtons();
     
-    // Update the total amount
-    this.updateTotalAmount();
   },
   
-  // Update the total amount based on line items
-  updateTotalAmount() {
-    let total = 0;
-    const lineItemElements = document.querySelectorAll('.line-item');
-    
-    lineItemElements.forEach((element) => {
-      const index = element.dataset.index;
-      const quantityInput = document.getElementById(`line-item-quantity-${index}`);
-      const priceInput = document.getElementById(`line-item-price-${index}`);
-      const giftCheckbox = document.getElementById(`line-item-gift-${index}`);
-      
-      const quantity = parseInt(quantityInput.value) || 0;
-      const price = parseFloat(priceInput.value) || 0;
-      const isFreeGift = giftCheckbox.checked;
-      
-      if (!isFreeGift) {
-        total += quantity * price;
-      }
-    });
-    
-    const totalAmountInput = document.getElementById('total-amount');
-    if (totalAmountInput) {
-      totalAmountInput.value = total.toFixed(2);
-    }
-  },
   
   // Load recent sales
   loadRecentSales() {
@@ -308,7 +250,7 @@ const SalesModule = {
         const giftBadge = item.isFreeGift ? '<span class="badge">Free Gift</span>' : '';
         lineItemsHtml += `
           <div class="sale-line-item">
-            ${item.productName} x ${item.quantity} - $${(item.price * item.quantity).toFixed(2)} ${giftBadge}
+            ${item.productName} x ${item.quantity} ${giftBadge}
           </div>
         `;
       });

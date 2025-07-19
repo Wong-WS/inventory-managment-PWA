@@ -122,12 +122,10 @@ const ReportsModule = {
           if (!productTotals[item.productId]) {
             productTotals[item.productId] = {
               name: item.productName,
-              quantity: 0,
-              revenue: 0
+              quantity: 0
             };
           }
           productTotals[item.productId].quantity += item.quantity;
-          productTotals[item.productId].revenue += item.price * item.quantity;
         }
       });
     });
@@ -206,18 +204,15 @@ const ReportsModule = {
     // Product breakdown
     reportHTML += '<h4>Sales by Product</h4>';
     reportHTML += '<table class="report-table">';
-    reportHTML += '<tr><th>Product</th><th>Quantity</th><th>Revenue</th><th>% of Total</th></tr>';
+    reportHTML += '<tr><th>Product</th><th>Quantity</th></tr>';
     
     Object.values(productTotals)
-      .sort((a, b) => b.revenue - a.revenue)
+      .sort((a, b) => b.quantity - a.quantity)
       .forEach(product => {
-        const percentage = (product.revenue / totalSales * 100).toFixed(1);
         reportHTML += `
           <tr>
             <td>${product.name}</td>
             <td>${product.quantity}</td>
-            <td>$${product.revenue.toFixed(2)}</td>
-            <td>${percentage}%</td>
           </tr>
         `;
       });

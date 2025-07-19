@@ -40,13 +40,13 @@ The application uses a modular architecture with these main components:
 - **Drivers**: `{id, name, phone, createdAt}`
 - **Assignments**: `{id, driverId, productId, quantity, assignedAt}`
 - **Sales**: `{id, driverId, customerAddress, customerDescription, totalAmount, saleDate, lineItems[]}`
-- **LineItems**: `{productId, productName, quantity, price, isFreeGift}`
+- **LineItems**: `{productId, productName, quantity, isFreeGift}`
 
 ### Business Logic
 - **Inventory Management**: Products start with 0 quantity, increased via assignments to drivers
 - **Assignment Flow**: Assigning products to drivers deducts from main inventory (`totalQuantity`)
 - **Sales Tracking**: Sales reduce driver inventory but don't affect main product quantities
-- **Free Gifts**: Line items can be marked as free gifts (don't count toward sales totals)
+- **Free Gifts**: Line items can be marked as free gifts (reduce inventory but indicated separately)
 
 ## File Structure
 
