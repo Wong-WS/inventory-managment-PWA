@@ -111,16 +111,27 @@ const SalesModule = {
     const newSale = DB.addSale(saleData);
     
     // Reset form
-    salesForm.reset();
+    const salesForm = document.getElementById('sales-form');
+    if (salesForm) {
+      salesForm.reset();
+    }
     
     // Reset line items to just one
     const lineItemsContainer = document.getElementById('line-items-container');
-    lineItemsContainer.innerHTML = '';
-    this.lineItemCounter = 0;
-    this.addLineItem();
+    if (lineItemsContainer) {
+      lineItemsContainer.innerHTML = '';
+      this.lineItemCounter = 0;
+      this.addLineItem();
+    }
+    
+    // Update driver dropdown and product options
+    this.updateDriverDropdown();
+    this.updateLineItemProductOptions();
     
     // Refresh recent sales
-    this.loadRecentSales();
+    setTimeout(() => {
+      this.loadRecentSales();
+    }, 100);
     
     // Update dashboard if it exists
     if (typeof DashboardModule !== 'undefined') {
