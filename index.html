@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4A90E2">
+    <title>Inventory Management</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="images/icons/icon-192x192.png">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Inventory Manager</h1>
+        </header>
+
+        <main id="main-content">
+            <!-- Content will be loaded here based on tab selection -->
+        </main>
+
+        <nav class="tab-navigation">
+            <button id="dashboard-tab" class="tab-button active" data-tab="dashboard">
+                <i class="fas fa-home"></i>
+                <span>Dashboard</span>
+            </button>
+            <button id="products-tab" class="tab-button" data-tab="products">
+                <i class="fas fa-box"></i>
+                <span>Products</span>
+            </button>
+            <button id="drivers-tab" class="tab-button" data-tab="drivers">
+                <i class="fas fa-user"></i>
+                <span>Drivers</span>
+            </button>
+            <button id="assign-tab" class="tab-button" data-tab="assign">
+                <i class="fas fa-truck-loading"></i>
+                <span>Assign</span>
+            </button>
+            <button id="sales-tab" class="tab-button" data-tab="sales">
+                <i class="fas fa-cash-register"></i>
+                <span>Sales</span>
+            </button>
+            <button id="reports-tab" class="tab-button" data-tab="reports">
+                <i class="fas fa-chart-line"></i>
+                <span>Reports</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Templates for different sections -->
+    <!-- Dashboard Template -->
+    <template id="dashboard-template">
+        <div class="dashboard-container">
+            <h2>Dashboard</h2>
+            <div class="dashboard-cards">
+                <div class="card">
+                    <h3>Products</h3>
+                    <p id="product-count">0</p>
+                </div>
+                <div class="card">
+                    <h3>Drivers</h3>
+                    <p id="driver-count">0</p>
+                </div>
+                <div class="card">
+                    <h3>Today's Sales</h3>
+                    <p id="today-sales">$0.00</p>
+                </div>
+                <div class="card">
+                    <h3>Total Inventory</h3>
+                    <p id="total-inventory">0</p>
+                </div>
+            </div>
+            <div class="recent-activity">
+                <h3>Recent Activity</h3>
+                <ul id="recent-activity-list">
+                    <!-- Recent activities will be loaded here -->
+                </ul>
+            </div>
+        </div>
+    </template>
+
+    <!-- Products Template -->
+    <template id="products-template">
+        <div class="products-container">
+            <h2>Products</h2>
+            <form id="add-product-form" class="action-form">
+                <div class="form-group">
+                    <label for="product-name">Product Name</label>
+                    <input type="text" id="product-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="product-quantity">Initial Quantity</label>
+                    <input type="number" id="product-quantity" min="0" value="0" required>
+                </div>
+                <button type="submit" class="primary-button">Add Product</button>
+            </form>
+
+            <div class="list-container">
+                <h3>Current Products</h3>
+                <div class="search-bar">
+                    <input type="text" id="product-search" placeholder="Search products...">
+                </div>
+                <ul id="products-list" class="data-list">
+                    <!-- Products will be loaded here -->
+                </ul>
+            </div>
+        </div>
+    </template>
+
+    <!-- Drivers Template -->
+    <template id="drivers-template">
+        <div class="drivers-container">
+            <h2>Drivers</h2>
+            <form id="add-driver-form" class="action-form">
+                <div class="form-group">
+                    <label for="driver-name">Driver Name</label>
+                    <input type="text" id="driver-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="driver-phone">Phone Number</label>
+                    <input type="tel" id="driver-phone" required>
+                </div>
+                <button type="submit" class="primary-button">Add Driver</button>
+            </form>
+
+            <div class="list-container">
+                <h3>Current Drivers</h3>
+                <div class="search-bar">
+                    <input type="text" id="driver-search" placeholder="Search drivers...">
+                </div>
+                <ul id="drivers-list" class="data-list">
+                    <!-- Drivers will be loaded here -->
+                </ul>
+            </div>
+        </div>
+    </template>
+
+    <!-- Assign Template -->
+    <template id="assign-template">
+        <div class="assign-container">
+            <h2>Assign Products</h2>
+            <form id="assign-form" class="action-form">
+                <div class="form-group">
+                    <label for="assign-driver">Select Driver</label>
+                    <select id="assign-driver" required>
+                        <option value="">-- Select Driver --</option>
+                        <!-- Drivers will be loaded here -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="assign-product">Select Product</label>
+                    <select id="assign-product" required>
+                        <option value="">-- Select Product --</option>
+                        <!-- Products will be loaded here -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="assign-quantity">Quantity</label>
+                    <input type="number" id="assign-quantity" min="1" required>
+                </div>
+                <button type="submit" class="primary-button">Assign Products</button>
+            </form>
+
+            <div class="assignment-history">
+                <h3>Assignment History</h3>
+                <div class="driver-selector">
+                    <label for="history-driver">Filter by Driver</label>
+                    <select id="history-driver">
+                        <option value="">All Drivers</option>
+                        <!-- Drivers will be loaded here -->
+                    </select>
+                </div>
+                <ul id="assignment-history-list" class="data-list">
+                    <!-- Assignment history will be loaded here -->
+                </ul>
+            </div>
+        </div>
+    </template>
+
+    <!-- Sales Template -->
+    <template id="sales-template">
+        <div class="sales-container">
+            <h2>Record Sales</h2>
+            <form id="sales-form" class="action-form">
+                <div class="form-group">
+                    <label for="sales-driver">Select Driver</label>
+                    <select id="sales-driver" required>
+                        <option value="">-- Select Driver --</option>
+                        <!-- Drivers will be loaded here -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="customer-address">Customer Address</label>
+                    <input type="text" id="customer-address" required>
+                </div>
+                <div class="form-group">
+                    <label for="customer-description">Customer Description (Optional)</label>
+                    <input type="text" id="customer-description">
+                </div>
+
+                <h3>Line Items</h3>
+                <div id="line-items-container">
+                    <div class="line-item" data-index="0">
+                        <div class="form-group">
+                            <label for="line-item-product-0">Product</label>
+                            <select class="line-item-product" id="line-item-product-0" required>
+                                <option value="">-- Select Product --</option>
+                                <!-- Products will be loaded here -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="line-item-quantity-0">Quantity</label>
+                            <input type="number" class="line-item-quantity" id="line-item-quantity-0" min="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="line-item-price-0">Price</label>
+                            <input type="number" class="line-item-price" id="line-item-price-0" min="0" step="0.01" required>
+                        </div>
+                        <div class="form-group checkbox">
+                            <label for="line-item-gift-0">
+                                <input type="checkbox" class="line-item-gift" id="line-item-gift-0">
+                                Free Gift
+                            </label>
+                        </div>
+                        <button type="button" class="remove-line-item" style="display: none;">Remove</button>
+                    </div>
+                </div>
+                
+                <button type="button" id="add-line-item" class="secondary-button">Add Another Item</button>
+                
+                <div class="form-group total-amount">
+                    <label for="total-amount">Total Amount</label>
+                    <input type="number" id="total-amount" min="0" step="0.01" readonly>
+                </div>
+                
+                <button type="submit" class="primary-button">Record Sale</button>
+            </form>
+
+            <div class="sales-history">
+                <h3>Recent Sales</h3>
+                <ul id="recent-sales-list" class="data-list">
+                    <!-- Recent sales will be loaded here -->
+                </ul>
+            </div>
+        </div>
+    </template>
+
+    <!-- Reports Template -->
+    <template id="reports-template">
+        <div class="reports-container">
+            <h2>Reports</h2>
+            
+            <div class="report-selector">
+                <button class="report-tab active" data-report="sales">Sales Reports</button>
+                <button class="report-tab" data-report="inventory">Inventory Reports</button>
+            </div>
+            
+            <div id="sales-report" class="report-section active">
+                <h3>Sales Reports</h3>
+                <div class="report-filters">
+                    <div class="form-group">
+                        <label for="report-driver">Driver</label>
+                        <select id="report-driver">
+                            <option value="">All Drivers</option>
+                            <!-- Drivers will be loaded here -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="report-period">Period</label>
+                        <select id="report-period">
+                            <option value="day">Day</option>
+                            <option value="week">Week</option>
+                            <option value="month">Month</option>
+                            <option value="year">Year</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="report-date">Date</label>
+                        <input type="date" id="report-date">
+                    </div>
+                    <button id="generate-sales-report" class="secondary-button">Generate Report</button>
+                </div>
+                <div id="sales-report-results" class="report-results">
+                    <!-- Sales report results will be loaded here -->
+                </div>
+            </div>
+            
+            <div id="inventory-report" class="report-section">
+                <h3>Inventory Reports</h3>
+                <div class="report-filters">
+                    <div class="form-group">
+                        <label for="inventory-driver">Driver</label>
+                        <select id="inventory-driver">
+                            <option value="">All Drivers</option>
+                            <!-- Drivers will be loaded here -->
+                        </select>
+                    </div>
+                    <button id="generate-inventory-report" class="secondary-button">Generate Report</button>
+                </div>
+                <div id="inventory-report-results" class="report-results">
+                    <!-- Inventory report results will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="js/database.js"></script>
+    <script src="js/products.js"></script>
+    <script src="js/drivers.js"></script>
+    <script src="js/assignments.js"></script>
+    <script src="js/sales.js"></script>
+    <script src="js/reports.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        // Register the service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js')
+                .then(registration => {
+                    console.log('Service Worker registered with scope:', registration.scope);
+                })
+                .catch(error => {
+                    console.error('Service Worker registration failed:', error);
+                });
+        }
+    </script>
+</body>
+</html>
