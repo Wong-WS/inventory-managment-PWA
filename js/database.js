@@ -227,7 +227,9 @@ const DB = {
     sales.forEach(sale => {
       sale.lineItems.forEach(item => {
         if (!item.isFreeGift && inventory[item.productId]) {
-          inventory[item.productId].sold += item.quantity;
+          // Use actualQuantity if available (new format), otherwise fall back to quantity (old format)
+          const deductionAmount = item.actualQuantity !== undefined ? item.actualQuantity : item.quantity;
+          inventory[item.productId].sold += deductionAmount;
         }
       });
     });

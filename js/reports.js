@@ -116,8 +116,10 @@ const ReportsModule = {
       // Aggregate by product
       sale.lineItems.forEach(item => {
         if (!item.isFreeGift) {
-          totalItems += item.quantity;
-          driverTotals[sale.driverId].items += item.quantity;
+          // Use actualQuantity if available (new format), otherwise fall back to quantity (old format)
+          const deductionAmount = item.actualQuantity !== undefined ? item.actualQuantity : item.quantity;
+          totalItems += deductionAmount;
+          driverTotals[sale.driverId].items += deductionAmount;
           
           if (!productTotals[item.productId]) {
             productTotals[item.productId] = {
@@ -125,7 +127,7 @@ const ReportsModule = {
               quantity: 0
             };
           }
-          productTotals[item.productId].quantity += item.quantity;
+          productTotals[item.productId].quantity += deductionAmount;
         }
       });
     });

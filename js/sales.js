@@ -4,6 +4,17 @@
  */
 
 const SalesModule = {
+  // Calculate deduction amount based on category
+  getDeductionAmount(category, customQuantity = 0) {
+    switch(category) {
+      case 'Q': return 1;
+      case 'H': return 2;
+      case 'Oz': return 4;
+      case 'Quantity by pcs': return parseInt(customQuantity) || 0;
+      default: return 0;
+    }
+  },
+
   // Initialize the sales module
   init() {
     this.lineItemCounter = 0;
@@ -67,14 +78,22 @@ const SalesModule = {
     lineItemElements.forEach((element) => {
       const index = element.dataset.index;
       const productSelect = document.getElementById(`line-item-product-${index}`);
-      const quantityInput = document.getElementById(`line-item-quantity-${index}`);
+      const categorySelect = document.getElementById(`line-item-category-${index}`);
+      const customQuantityInput = document.getElementById(`line-item-custom-quantity-${index}`);
       const giftCheckbox = document.getElementById(`line-item-gift-${index}`);
       
       const productId = productSelect.value;
-      const quantity = parseInt(quantityInput.value);
+      const category = categorySelect.value;
+      const customQuantity = customQuantityInput ? parseInt(customQuantityInput.value) : 0;
       const isFreeGift = giftCheckbox.checked;
       
-      if (!productId || isNaN(quantity) || quantity <= 0) {
+      if (!productId || !category) {
+        valid = false;
+        return;
+      }
+      
+      // Validate custom quantity for "Quantity by pcs"
+      if (category === 'Quantity by pcs' && (isNaN(customQuantity) || customQuantity <= 0)) {
         valid = false;
         return;
       }
@@ -85,16 +104,20 @@ const SalesModule = {
         return;
       }
       
+      // Calculate actual deduction amount
+      const actualQuantity = this.getDeductionAmount(category, customQuantity);
+      
       lineItems.push({
         productId,
         productName: product.name,
-        quantity,
+        category,
+        actualQuantity,
         isFreeGift
       });
     });
     
     if (!valid || lineItems.length === 0) {
-      alert('Please check your line items. Each item must have a valid product and quantity.');
+      alert('Please check your line items. Each item must have a valid product and quantity type.');
       return;
     }
     
@@ -166,8 +189,18 @@ const SalesModule = {
         </select>
       </div>
       <div class="form-group">
-        <label for="line-item-quantity-${index}">Quantity</label>
-        <input type="number" class="line-item-quantity" id="line-item-quantity-${index}" min="1" required>
+        <label for="line-item-category-${index}">Quantity Type</label>
+        <select class="line-item-category" id="line-item-category-${index}" required>
+          <option value="">-- Select Type --</option>
+          <option value="Q">Q</option>
+          <option value="H">H</option>
+          <option value="Oz">Oz</option>
+          <option value="Quantity by pcs">Quantity by pcs</option>
+        </select>
+      </div>
+      <div class="form-group" id="custom-quantity-group-${index}" style="display: none;">
+        <label for="line-item-custom-quantity-${index}">Custom Quantity</label>
+        <input type="number" class="line-item-custom-quantity" id="line-item-custom-quantity-${index}" min="1">
       </div>
       <div class="form-group checkbox">
         <label for="line-item-gift-${index}">
@@ -213,6 +246,28 @@ const SalesModule = {
       removeButton.addEventListener('click', () => this.removeLineItem(index));
     }
     
+    // Listen for category changes to show/hide custom quantity input
+    const categorySelect = document.getElementById(`line-item-category-${index}`);
+    const customQuantityGroup = document.getElementById(`custom-quantity-group-${index}`);
+    
+    if (categorySelect && customQuantityGroup) {
+      categorySelect.addEventListener('change', () => {
+        if (categorySelect.value === 'Quantity by pcs') {
+          customQuantityGroup.style.display = 'block';
+          const customInput = document.getElementById(`line-item-custom-quantity-${index}`);
+          if (customInput) {
+            customInput.required = true;
+          }
+        } else {
+          customQuantityGroup.style.display = 'none';
+          const customInput = document.getElementById(`line-item-custom-quantity-${index}`);
+          if (customInput) {
+            customInput.required = false;
+            customInput.value = '';
+          }
+        }
+      });
+    }
   },
   
   // Remove a line item
@@ -259,9 +314,11 @@ const SalesModule = {
       let lineItemsHtml = '';
       sale.lineItems.forEach(item => {
         const giftBadge = item.isFreeGift ? '<span class="badge">Free Gift</span>' : '';
+        // Display category if available (new format), otherwise show quantity (old format)
+        const displayText = item.category ? `${item.productName} x ${item.category}` : `${item.productName} x ${item.quantity}`;
         lineItemsHtml += `
           <div class="sale-line-item">
-            ${item.productName} x ${item.quantity} ${giftBadge}
+            ${displayText} ${giftBadge}
           </div>
         `;
       });

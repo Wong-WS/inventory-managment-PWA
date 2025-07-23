@@ -210,8 +210,18 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="line-item-quantity-0">Quantity</label>
-                            <input type="number" class="line-item-quantity" id="line-item-quantity-0" min="1" required>
+                            <label for="line-item-category-0">Quantity Type</label>
+                            <select class="line-item-category" id="line-item-category-0" required>
+                                <option value="">-- Select Type --</option>
+                                <option value="Q">Q</option>
+                                <option value="H">H</option>
+                                <option value="Oz">Oz</option>
+                                <option value="Quantity by pcs">Quantity by pcs</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="custom-quantity-group-0" style="display: none;">
+                            <label for="line-item-custom-quantity-0">Custom Quantity</label>
+                            <input type="number" class="line-item-custom-quantity" id="line-item-custom-quantity-0" min="1">
                         </div>
                         <div class="form-group checkbox">
                             <label for="line-item-gift-0">
