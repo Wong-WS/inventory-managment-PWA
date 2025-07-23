@@ -15,6 +15,67 @@ const SalesModule = {
     }
   },
 
+  // Validate if inventory is available for the selected quantity type
+  validateInventoryAvailability(driverId, productId, category, customQuantity = 0) {
+    if (!driverId || !productId || !category) return false;
+    
+    const driverInventory = DB.getDriverInventory(driverId);
+    const productInventory = driverInventory.find(item => item.id === productId);
+    
+    if (!productInventory) return false;
+    
+    const requiredAmount = this.getDeductionAmount(category, customQuantity);
+    return productInventory.remaining >= requiredAmount;
+  },
+
+  // Show inventory validation error message
+  showInventoryError(productName, available, category, required) {
+    const categoryName = category === 'Quantity by pcs' ? `${category} (${required})` : category;
+    alert(`Not enough inventory! Product "${productName}" has only ${available} units available, but "${categoryName}" requires ${required} units.`);
+  },
+
+  // Validate all line items when driver changes
+  validateAllLineItems() {
+    const lineItemElements = document.querySelectorAll('.line-item');
+    const salesDriverSelect = document.getElementById('sales-driver');
+    const driverId = salesDriverSelect ? salesDriverSelect.value : '';
+    
+    if (!driverId) return;
+    
+    lineItemElements.forEach((element) => {
+      const index = element.dataset.index;
+      const productSelect = document.getElementById(`line-item-product-${index}`);
+      const categorySelect = document.getElementById(`line-item-category-${index}`);
+      const customQuantityInput = document.getElementById(`line-item-custom-quantity-${index}`);
+      
+      if (productSelect && categorySelect && productSelect.value && categorySelect.value) {
+        const customQuantity = customQuantityInput ? customQuantityInput.value : 0;
+        const isValid = this.validateInventoryAvailability(driverId, productSelect.value, categorySelect.value, customQuantity);
+        
+        if (!isValid) {
+          // Reset invalid selections
+          categorySelect.value = '';
+          const customQuantityGroup = document.getElementById(`custom-quantity-group-${index}`);
+          if (customQuantityGroup) {
+            customQuantityGroup.style.display = 'none';
+          }
+          if (customQuantityInput) {
+            customQuantityInput.required = false;
+            customQuantityInput.value = '';
+          }
+          
+          // Show error message
+          const driverInventory = DB.getDriverInventory(driverId);
+          const productInventory = driverInventory.find(item => item.id === productSelect.value);
+          if (productInventory) {
+            const required = this.getDeductionAmount(categorySelect.value, customQuantity);
+            this.showInventoryError(productInventory.name, productInventory.remaining, categorySelect.value, required);
+          }
+        }
+      }
+    });
+  },
+
   // Initialize the sales module
   init() {
     this.lineItemCounter = 0;
@@ -42,7 +103,10 @@ const SalesModule = {
     // Update sales driver selection
     const salesDriverSelect = document.getElementById('sales-driver');
     if (salesDriverSelect) {
-      salesDriverSelect.addEventListener('change', this.updateLineItemProductOptions.bind(this));
+      salesDriverSelect.addEventListener('change', () => {
+        this.updateLineItemProductOptions();
+        this.validateAllLineItems();
+      });
     }
   },
 
@@ -100,6 +164,19 @@ const SalesModule = {
       
       const product = DB.getProductById(productId);
       if (!product) {
+        valid = false;
+        return;
+      }
+      
+      // Final inventory validation check
+      if (!this.validateInventoryAvailability(driverId, productId, category, customQuantity)) {
+        const driverInventory = DB.getDriverInventory(driverId);
+        const productInventory = driverInventory.find(item => item.id === productId);
+        const required = this.getDeductionAmount(category, customQuantity);
+        
+        if (productInventory) {
+          this.showInventoryError(productInventory.name, productInventory.remaining, category, required);
+        }
         valid = false;
         return;
       }
@@ -246,25 +323,84 @@ const SalesModule = {
       removeButton.addEventListener('click', () => this.removeLineItem(index));
     }
     
-    // Listen for category changes to show/hide custom quantity input
+    // Get references to form elements
+    const productSelect = document.getElementById(`line-item-product-${index}`);
     const categorySelect = document.getElementById(`line-item-category-${index}`);
     const customQuantityGroup = document.getElementById(`custom-quantity-group-${index}`);
+    const customQuantityInput = document.getElementById(`line-item-custom-quantity-${index}`);
     
+    // Validation helper for this line item
+    const validateCurrentSelection = () => {
+      const salesDriverSelect = document.getElementById('sales-driver');
+      const driverId = salesDriverSelect ? salesDriverSelect.value : '';
+      const productId = productSelect ? productSelect.value : '';
+      const category = categorySelect ? categorySelect.value : '';
+      const customQuantity = customQuantityInput ? customQuantityInput.value : 0;
+      
+      if (!driverId || !productId || !category) return true; // Skip validation if incomplete
+      
+      const isValid = this.validateInventoryAvailability(driverId, productId, category, customQuantity);
+      
+      if (!isValid) {
+        const driverInventory = DB.getDriverInventory(driverId);
+        const productInventory = driverInventory.find(item => item.id === productId);
+        const required = this.getDeductionAmount(category, customQuantity);
+        
+        if (productInventory) {
+          this.showInventoryError(productInventory.name, productInventory.remaining, category, required);
+        }
+        return false;
+      }
+      return true;
+    };
+    
+    // Listen for product changes
+    if (productSelect) {
+      productSelect.addEventListener('change', () => {
+        if (categorySelect && categorySelect.value) {
+          if (!validateCurrentSelection()) {
+            // Reset category if validation fails
+            categorySelect.value = '';
+            if (customQuantityGroup) {
+              customQuantityGroup.style.display = 'none';
+            }
+            if (customQuantityInput) {
+              customQuantityInput.required = false;
+              customQuantityInput.value = '';
+            }
+          }
+        }
+      });
+    }
+    
+    // Listen for category changes to show/hide custom quantity input and validate
     if (categorySelect && customQuantityGroup) {
       categorySelect.addEventListener('change', () => {
         if (categorySelect.value === 'Quantity by pcs') {
           customQuantityGroup.style.display = 'block';
-          const customInput = document.getElementById(`line-item-custom-quantity-${index}`);
-          if (customInput) {
-            customInput.required = true;
+          if (customQuantityInput) {
+            customQuantityInput.required = true;
           }
         } else {
           customQuantityGroup.style.display = 'none';
-          const customInput = document.getElementById(`line-item-custom-quantity-${index}`);
-          if (customInput) {
-            customInput.required = false;
-            customInput.value = '';
+          if (customQuantityInput) {
+            customQuantityInput.required = false;
+            customQuantityInput.value = '';
           }
+          
+          // Validate non-custom categories
+          if (categorySelect.value && !validateCurrentSelection()) {
+            categorySelect.value = '';
+          }
+        }
+      });
+    }
+    
+    // Listen for custom quantity changes
+    if (customQuantityInput) {
+      customQuantityInput.addEventListener('change', () => {
+        if (!validateCurrentSelection()) {
+          customQuantityInput.value = '';
         }
       });
     }
