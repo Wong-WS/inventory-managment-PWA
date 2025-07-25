@@ -322,6 +322,31 @@ button {
   font-weight: bold;
 }
 
+/* Radio button styling */
+.radio-group {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.radio-group input[type="radio"] {
+  margin: 0;
+}
+
+/* Delivery method display */
+.delivery-method {
+  font-weight: bold;
+  color: #666;
+}
+
 /* Reports */
 .report-selector {
   display: flex;

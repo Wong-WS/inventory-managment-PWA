@@ -118,14 +118,28 @@ const SalesModule = {
     const customerAddressInput = document.getElementById('customer-address');
     const customerDescInput = document.getElementById('customer-description');
     const totalAmountInput = document.getElementById('total-amount');
+    const deliveryMethodInputs = document.querySelectorAll('input[name="delivery-method"]');
     
     const driverId = salesDriverSelect.value;
     const customerAddress = customerAddressInput.value.trim();
     const customerDescription = customerDescInput.value.trim();
     const totalAmount = parseFloat(totalAmountInput.value);
     
+    // Get selected delivery method
+    let deliveryMethod = '';
+    deliveryMethodInputs.forEach(input => {
+      if (input.checked) {
+        deliveryMethod = input.value;
+      }
+    });
+    
     if (!driverId || !customerAddress) {
       alert('Please select a driver and enter a customer address.');
+      return;
+    }
+    
+    if (!deliveryMethod) {
+      alert('Please select a delivery method.');
       return;
     }
     
@@ -203,6 +217,7 @@ const SalesModule = {
       driverId,
       customerAddress,
       customerDescription,
+      deliveryMethod,
       totalAmount,
       lineItems
     };
@@ -214,6 +229,12 @@ const SalesModule = {
     const salesForm = document.getElementById('sales-form');
     if (salesForm) {
       salesForm.reset();
+      
+      // Ensure delivery method radio buttons are cleared
+      const deliveryMethodInputs = document.querySelectorAll('input[name=\"delivery-method\"]');
+      deliveryMethodInputs.forEach(input => {
+        input.checked = false;
+      });
     }
     
     // Reset line items to just one
@@ -450,8 +471,18 @@ const SalesModule = {
       let lineItemsHtml = '';
       sale.lineItems.forEach(item => {
         const giftBadge = item.isFreeGift ? '<span class="badge">Free Gift</span>' : '';
-        // Display category if available (new format), otherwise show quantity (old format)
-        const displayText = item.category ? `${item.productName} x ${item.category}` : `${item.productName} x ${item.quantity}`;
+        
+        // Determine what to display for quantity
+        let displayQuantity;
+        if (item.category) {
+          // For "Quantity by pcs", show the actual custom number instead of category text
+          displayQuantity = item.category === 'Quantity by pcs' ? item.actualQuantity : item.category;
+        } else {
+          // Fallback to old format for backward compatibility
+          displayQuantity = item.quantity;
+        }
+        
+        const displayText = `${item.productName} x ${displayQuantity}`;
         lineItemsHtml += `
           <div class="sale-line-item">
             ${displayText} ${giftBadge}
@@ -462,7 +493,7 @@ const SalesModule = {
       li.innerHTML = `
         <div class="item-details">
           <strong>$${sale.totalAmount.toFixed(2)}</strong> - ${driver.name}<br>
-          <span>${sale.customerAddress}</span>
+          <span>${sale.customerAddress}</span>${sale.deliveryMethod ? ` • <span class="delivery-method">${sale.deliveryMethod}</span>` : ''}
           ${sale.customerDescription ? `<br><small>${sale.customerDescription}</small>` : ''}
           <br><small>${formattedDate}</small>
           <div class="sale-line-items">
