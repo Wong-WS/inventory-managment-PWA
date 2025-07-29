@@ -6,6 +6,8 @@
 const AppModule = {
   // Initialize the application
   init() {
+    console.log('AppModule.init() called');
+    
     // Load the default tab (dashboard)
     this.loadTab('dashboard');
     
@@ -30,8 +32,12 @@ const AppModule = {
   
   // Load a specific tab
   loadTab(tabId) {
+    console.log(`AppModule.loadTab() called with tabId: ${tabId}`);
+    
     // Update active tab button
     const tabButtons = document.querySelectorAll('.tab-button');
+    console.log(`Found ${tabButtons.length} tab buttons`);
+    
     tabButtons.forEach(button => {
       if (button.dataset.tab === tabId) {
         button.classList.add('active');
@@ -44,17 +50,35 @@ const AppModule = {
     const template = document.getElementById(`${tabId}-template`);
     const mainContent = document.getElementById('main-content');
     
+    console.log('Template and content elements:', {
+      template: !!template,
+      mainContent: !!mainContent
+    });
+    
     if (template && mainContent) {
       mainContent.innerHTML = '';
       mainContent.appendChild(document.importNode(template.content, true));
       
       // Initialize module based on tab
       this.initModuleForTab(tabId);
+    } else {
+      console.error(`Failed to load tab ${tabId}: template or mainContent not found`);
     }
   },
   
   // Initialize the appropriate module for the current tab
   initModuleForTab(tabId) {
+    // Check authentication before initializing modules
+    const session = DB.getCurrentSession();
+    if (!session) {
+      return; // Not authenticated, don't initialize modules
+    }
+
+    // Check if user has access to this tab
+    if (typeof AuthModule !== 'undefined' && !AuthModule.canAccessTab(tabId, session.role)) {
+      return; // User doesn't have access to this tab
+    }
+
     switch (tabId) {
       case 'dashboard':
         if (typeof DashboardModule !== 'undefined') {
@@ -84,6 +108,11 @@ const AppModule = {
       case 'reports':
         if (typeof ReportsModule !== 'undefined') {
           ReportsModule.init();
+        }
+        break;
+      case 'users':
+        if (typeof UsersModule !== 'undefined') {
+          UsersModule.init();
         }
         break;
     }
@@ -289,7 +318,5 @@ const DashboardModule = {
   }
 };
 
-// Initialize the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  AppModule.init();
-});
+// Note: App initialization is now handled by AuthModule after authentication
+// The AppModule.init() will be called from AuthModule.showApp() after successful login

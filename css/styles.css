@@ -442,3 +442,155 @@ button {
     max-width: 1024px;
   }
 }
+
+/* Authentication Styles */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 1rem;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+}
+
+.login-form {
+  background: var(--card-background);
+  border-radius: var(--border-radius);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  padding: 2rem;
+  width: 100%;
+  max-width: 400px;
+}
+
+.login-form h2 {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: var(--primary-color);
+}
+
+.error-message {
+  background-color: #fee;
+  color: var(--danger-color);
+  padding: 0.75rem;
+  border-radius: var(--border-radius);
+  border: 1px solid #fcc;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.login-info {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: var(--border-radius);
+  border-left: 4px solid var(--primary-color);
+}
+
+.login-info p {
+  margin-bottom: 0.5rem;
+}
+
+.login-info code {
+  background-color: #e9ecef;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+/* Header with user info */
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1024px;
+  margin: 0 auto;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.user-role {
+  padding: 0.2rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.role-admin {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.role-sales_rep {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.role-driver {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.logout-button {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 0.5rem 1rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: background-color var(--transition-speed);
+}
+
+.logout-button:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* User management styles */
+.status-active {
+  background-color: var(--secondary-color);
+  color: white;
+}
+
+.status-inactive {
+  background-color: var(--warning-color);
+  color: white;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: bold;
+  border-radius: 12px;
+  text-transform: uppercase;
+}
+
+/* Item actions for user management */
+.item-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.item-actions button {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+/* Hide elements by default for different roles */
+@media (max-width: 767px) {
+  .header-content {
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: center;
+  }
+  
+  .user-info {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+}
