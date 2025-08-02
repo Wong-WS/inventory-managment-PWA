@@ -581,6 +581,125 @@ button {
   font-size: 0.8rem;
 }
 
+/* Order Management Styles */
+.orders-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.orders-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.view-switcher {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.view-switcher .secondary-button.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.section {
+  margin-bottom: 2rem;
+}
+
+.orders-filters {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.orders-list {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+}
+
+.order-item {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.order-item:last-child {
+  border-bottom: none;
+}
+
+.order-item.status-pending {
+  border-left: 4px solid var(--warning-color);
+}
+
+.order-item.status-completed {
+  border-left: 4px solid var(--success-color);
+}
+
+.order-item.status-cancelled {
+  border-left: 4px solid var(--danger-color);
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.order-info {
+  margin-bottom: 1rem;
+}
+
+.order-line-items {
+  background-color: rgba(0, 0, 0, 0.03);
+  padding: 0.8rem;
+  border-radius: var(--border-radius);
+  margin-bottom: 1rem;
+}
+
+.order-line-item {
+  padding: 0.3rem 0;
+  font-size: 0.9rem;
+}
+
+.order-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.status-badge {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: bold;
+  border-radius: 12px;
+  text-transform: uppercase;
+}
+
+.status-badge.status-pending {
+  background-color: var(--warning-color);
+  color: white;
+}
+
+.status-badge.status-completed {
+  background-color: var(--success-color);
+  color: white;
+}
+
+.status-badge.status-cancelled {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+.delivery-method {
+  font-style: italic;
+  color: #666;
+}
+
 /* Hide elements by default for different roles */
 @media (max-width: 767px) {
   .header-content {
@@ -592,5 +711,19 @@ button {
   .user-info {
     flex-direction: column;
     gap: 0.25rem;
+  }
+
+  .orders-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .view-switcher {
+    justify-content: center;
+  }
+
+  .order-actions {
+    flex-direction: column;
   }
 }

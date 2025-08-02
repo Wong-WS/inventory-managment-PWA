@@ -82,11 +82,13 @@ const ReportsModule = {
       return;
     }
     
-    // Get sales for the specified period and driver
-    const sales = DB.getSalesByPeriod(driverId, period, date);
+    // Get orders for the specified period and driver (use orders if available, fallback to sales)
+    const orders = typeof DB.getOrdersByPeriod === 'function' ? 
+      DB.getOrdersByPeriod(driverId, period, date) : 
+      (typeof DB.getSalesByPeriod === 'function' ? DB.getSalesByPeriod(driverId, period, date) : []);
     
-    if (sales.length === 0) {
-      resultsDiv.innerHTML = '<p class="no-data">No sales data found for the selected period.</p>';
+    if (orders.length === 0) {
+      resultsDiv.innerHTML = '<p class="no-data">No order data found for the selected period.</p>';
       return;
     }
     
@@ -96,30 +98,30 @@ const ReportsModule = {
     const productTotals = {};
     const driverTotals = {};
     
-    sales.forEach(sale => {
-      const driver = DB.getDriverById(sale.driverId);
+    orders.forEach(order => {
+      const driver = DB.getDriverById(order.driverId);
       if (!driver) return;
       
-      // Aggregate total sales amount
-      totalSales += sale.totalAmount;
+      // Aggregate total order amount
+      totalSales += order.totalAmount;
       
       // Aggregate by driver
-      if (!driverTotals[sale.driverId]) {
-        driverTotals[sale.driverId] = {
+      if (!driverTotals[order.driverId]) {
+        driverTotals[order.driverId] = {
           name: driver.name,
           sales: 0,
           items: 0
         };
       }
-      driverTotals[sale.driverId].sales += sale.totalAmount;
+      driverTotals[order.driverId].sales += order.totalAmount;
       
       // Aggregate by product
-      sale.lineItems.forEach(item => {
+      order.lineItems.forEach(item => {
         if (!item.isFreeGift) {
           // Use actualQuantity if available (new format), otherwise fall back to quantity (old format)
           const deductionAmount = item.actualQuantity !== undefined ? item.actualQuantity : item.quantity;
           totalItems += deductionAmount;
-          driverTotals[sale.driverId].items += deductionAmount;
+          driverTotals[order.driverId].items += deductionAmount;
           
           if (!productTotals[item.productId]) {
             productTotals[item.productId] = {
@@ -162,10 +164,10 @@ const ReportsModule = {
     // Build report HTML
     let reportHTML = `
       <div class="report-summary">
-        <h4>Sales Report: ${dateRangeText}</h4>
+        <h4>Orders Report: ${dateRangeText}</h4>
         <div class="report-stats">
           <div class="stat-item">
-            <span class="stat-label">Total Sales:</span>
+            <span class="stat-label">Total Revenue:</span>
             <span class="stat-value">$${totalSales.toFixed(2)}</span>
           </div>
           <div class="stat-item">
@@ -173,8 +175,8 @@ const ReportsModule = {
             <span class="stat-value">${totalItems}</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Number of Transactions:</span>
-            <span class="stat-value">${sales.length}</span>
+            <span class="stat-label">Number of Orders:</span>
+            <span class="stat-value">${orders.length}</span>
           </div>
         </div>
       </div>
@@ -182,9 +184,9 @@ const ReportsModule = {
     
     // Driver breakdown (if not filtering by a specific driver)
     if (!driverId && Object.keys(driverTotals).length > 1) {
-      reportHTML += '<h4>Sales by Driver</h4>';
+      reportHTML += '<h4>Orders by Driver</h4>';
       reportHTML += '<table class="report-table">';
-      reportHTML += '<tr><th>Driver</th><th>Sales</th><th>Items</th><th>% of Total</th></tr>';
+      reportHTML += '<tr><th>Driver</th><th>Revenue</th><th>Items</th><th>% of Total</th></tr>';
       
       Object.values(driverTotals)
         .sort((a, b) => b.sales - a.sales)

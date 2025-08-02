@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order System Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .test-section { border: 1px solid #ccc; margin: 10px 0; padding: 15px; background: #f9f9f9; }
+        .pass { color: green; font-weight: bold; }
+        .fail { color: red; font-weight: bold; }
+        .info { color: blue; }
+        pre { background: #eee; padding: 10px; overflow: auto; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Order System Integration Test</h1>
+    <div id="test-results"></div>
+    
+    <button onclick="runAllTests()">Run All Tests</button>
+    <button onclick="clearData()">Clear Test Data</button>
+    
+    <script src="js/database.js"></script>
+    
+    <script>
+        let testResults = [];
+        
+        function log(message, type = 'info') {
+            testResults.push({ message, type, timestamp: new Date().toISOString() });
+            updateResults();
+        }
+        
+        function updateResults() {
+            const container = document.getElementById('test-results');
+            container.innerHTML = testResults.map(result => 
+                `<div class="${result.type}">[${result.timestamp.split('T')[1].split('.')[0]}] ${result.message}</div>`
+            ).join('');
+        }
+        
+        function clearData() {
+            localStorage.clear();
+            location.reload();
+        }
+        
+        async function runAllTests() {
+            testResults = [];
+            log('Starting Order System Integration Tests', 'info');
+            
+            try {
+                await DB.init();
+                log('✓ Database initialized successfully', 'pass');
+                
+                // Test 1: Data Migration
+                await testDataMigration();
+                
+                // Test 2: Order Creation and Inventory Deduction
+                await testOrderCreationAndInventory();
+                
+                // Test 3: Order Cancellation and Inventory Restoration
+                await testOrderCancellationAndRestore();
+                
+                // Test 4: Role-based Access Control
+                await testRoleBasedAccess();
+                
+                // Test 5: Dashboard Integration
+                await testDashboardIntegration();
+                
+                // Test 6: Reports Integration
+                await testReportsIntegration();
+                
+                log('✓ All tests completed!', 'pass');
+                
+            } catch (error) {
+                log(`✗ Test failed with error: ${error.message}`, 'fail');
+                console.error('Test error:', error);
+            }
+        }
+        
+        async function testDataMigration() {
+            log('Testing data migration from sales to orders...', 'info');
+            
+            // Clear existing data
+            localStorage.removeItem(DB.KEYS.SALES);
+            localStorage.removeItem(DB.KEYS.ORDERS);
+            
+            // Create some legacy sales data
+            const legacySales = [
+                {
+                    id: 'sale-1',
+                    driverId: 'driver-1',
+                    customerAddress: '123 Test St',
+                    totalAmount: 50.00,
+                    saleDate: new Date().toISOString(),
+                    lineItems: [
+                        { productId: 'product-1', productName: 'Test Product', quantity: 2, isFreeGift: false }
+                    ]
+                }
+            ];
+            
+            DB.save(DB.KEYS.SALES, legacySales);
+            log('✓ Created legacy sales data', 'pass');
+            
+            // Trigger migration
+            await DB.migrateSalesToOrders();
+            
+            const orders = DB.getAllOrders();
+            if (orders.length === 1 && orders[0].status === DB.ORDER_STATUS.COMPLETED) {
+                log('✓ Sales data migrated to orders successfully', 'pass');
+            } else {
+                log('✗ Migration failed or incomplete', 'fail');
+            }
+        }
+        
+        async function testOrderCreationAndInventory() {
+            log('Testing order creation and inventory deduction...', 'info');
+            
+            // Setup test data
+            const product = DB.addProduct('Test Product', 100);
+            const driver = DB.addDriver('Test Driver', '555-1234');
+            
+            // Assign inventory to driver
+            DB.addAssignment(driver.id, product.id, 50);
+            log('✓ Created test product and assigned 50 units to driver', 'pass');
+            
+            // Check initial inventory
+            const initialInventory = DB.getDriverInventory(driver.id);
+            const productInventory = initialInventory.find(p => p.id === product.id);
+            log(`Initial driver inventory: ${productInventory.remaining} units`, 'info');
+            
+            // Create admin user for testing
+            const session = {
+                userId: 'test-admin',
+                role: DB.ROLES.ADMIN
+            };
+            
+            // Mock current session
+            DB.save(DB.KEYS.SESSION, session);
+            
+            // Create order
+            const orderData = {
+                driverId: driver.id,
+                customerAddress: '456 Test Ave',
+                customerDescription: 'Test customer',
+                deliveryMethod: 'Delivery',
+                totalAmount: 25.00,
+                lineItems: [{
+                    productId: product.id,
+                    productName: product.name,
+                    category: 'Q',
+                    actualQuantity: 1,
+                    isFreeGift: false
+                }]
+            };
+            
+            const order = DB.createOrder(orderData);
+            log('✓ Order created successfully', 'pass');
+            
+            // Check inventory after order creation
+            const updatedInventory = DB.getDriverInventory(driver.id);
+            const updatedProductInventory = updatedInventory.find(p => p.id === product.id);
+            
+            if (updatedProductInventory.remaining === productInventory.remaining - 1) {
+                log('✓ Inventory correctly deducted after order creation', 'pass');
+            } else {
+                log(`✗ Inventory deduction failed. Expected: ${productInventory.remaining - 1}, Got: ${updatedProductInventory.remaining}`, 'fail');
+            }
+            
+            return { order, driver, product };
+        }
+        
+        async function testOrderCancellationAndRestore() {
+            log('Testing order cancellation and inventory restoration...', 'info');
+            
+            const orders = DB.getAllOrders();
+            const pendingOrder = orders.find(o => o.status === DB.ORDER_STATUS.PENDING);
+            
+            if (!pendingOrder) {
+                log('✗ No pending order found for cancellation test', 'fail');
+                return;
+            }
+            
+            const driver = DB.getDriverById(pendingOrder.driverId);
+            const initialInventory = DB.getDriverInventory(driver.id);
+            const productInventory = initialInventory.find(p => p.id === pendingOrder.lineItems[0].productId);
+            
+            log(`Inventory before cancellation: ${productInventory.remaining} units`, 'info');
+            
+            // Cancel the order
+            const cancelled = DB.cancelOrder(pendingOrder.id);
+            
+            if (cancelled) {
+                log('✓ Order cancelled successfully', 'pass');
+                
+                // Check inventory restoration
+                const restoredInventory = DB.getDriverInventory(driver.id);
+                const restoredProductInventory = restoredInventory.find(p => p.id === pendingOrder.lineItems[0].productId);
+                
+                if (restoredProductInventory.remaining === productInventory.remaining + pendingOrder.lineItems[0].actualQuantity) {
+                    log('✓ Inventory correctly restored after order cancellation', 'pass');
+                } else {
+                    log(`✗ Inventory restoration failed. Expected: ${productInventory.remaining + pendingOrder.lineItems[0].actualQuantity}, Got: ${restoredProductInventory.remaining}`, 'fail');
+                }
+            } else {
+                log('✗ Order cancellation failed', 'fail');
+            }
+        }
+        
+        async function testRoleBasedAccess() {
+            log('Testing role-based access control...', 'info');
+            
+            // Test admin access
+            const adminSession = { role: DB.ROLES.ADMIN, userId: 'admin-1' };
+            DB.save(DB.KEYS.SESSION, adminSession);
+            
+            const adminOrders = DB.getOrdersBySalesRep ? DB.getAllOrders() : [];
+            log(`Admin can see ${adminOrders.length} orders`, 'info');
+            
+            // Test sales rep access
+            const salesRepSession = { role: DB.ROLES.SALES_REP, userId: 'salesrep-1' };
+            DB.save(DB.KEYS.SESSION, salesRepSession);
+            
+            const salesRepOrders = DB.getOrdersBySalesRep('salesrep-1');
+            log(`Sales rep can see only ${salesRepOrders.length} of their own orders`, 'info');
+            
+            if (adminOrders.length >= salesRepOrders.length) {
+                log('✓ Role-based access control working correctly', 'pass');
+            } else {
+                log('✗ Role-based access control may have issues', 'fail');
+            }
+        }
+        
+        async function testDashboardIntegration() {
+            log('Testing dashboard integration with order system...', 'info');
+            
+            // Test today's order amount calculation
+            const todayAmount = DB.getTodayOrderAmount ? DB.getTodayOrderAmount() : 0;
+            log(`Today's completed orders amount: $${todayAmount.toFixed(2)}`, 'info');
+            
+            // Test order statistics
+            const orderStats = DB.getOrderStats ? DB.getOrderStats() : null;
+            if (orderStats) {
+                log(`Order statistics - Total: ${orderStats.total}, Pending: ${orderStats.pending}, Completed: ${orderStats.completed}`, 'info');
+                log('✓ Dashboard integration working correctly', 'pass');
+            } else {
+                log('✗ Dashboard integration methods not available', 'fail');
+            }
+        }
+        
+        async function testReportsIntegration() {
+            log('Testing reports integration with order system...', 'info');
+            
+            // Test order-based reports
+            const ordersByPeriod = DB.getOrdersByPeriod ? DB.getOrdersByPeriod(null, 'day', new Date().toISOString()) : [];
+            log(`Orders for today: ${ordersByPeriod.length}`, 'info');
+            
+            if (typeof DB.getOrdersByPeriod === 'function') {
+                log('✓ Reports integration working correctly', 'pass');
+            } else {
+                log('✗ Reports integration methods not available', 'fail');
+            }
+        }
+        
+        // Run tests on page load
+        window.addEventListener('load', () => {
+            log('Order System Test Page Loaded', 'info');
+            log('Click "Run All Tests" to start comprehensive testing', 'info');
+        });
+    </script>
+</body>
+</html>

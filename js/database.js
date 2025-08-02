@@ -9,7 +9,8 @@ const DB = {
     PRODUCTS: 'inventory_products',
     DRIVERS: 'inventory_drivers',
     ASSIGNMENTS: 'inventory_assignments',
-    SALES: 'inventory_sales',
+    SALES: 'inventory_sales', // Kept for backward compatibility
+    ORDERS: 'inventory_orders',
     USERS: 'inventory_users',
     SESSION: 'inventory_session',
   },
@@ -19,6 +20,13 @@ const DB = {
     ADMIN: 'admin',
     SALES_REP: 'sales_rep',
     DRIVER: 'driver'
+  },
+
+  // Order status enumeration
+  ORDER_STATUS: {
+    PENDING: 'pending',
+    COMPLETED: 'completed',
+    CANCELLED: 'cancelled'
   },
 
   // Session configuration
@@ -41,6 +49,9 @@ const DB = {
     if (!localStorage.getItem(this.KEYS.SALES)) {
       localStorage.setItem(this.KEYS.SALES, JSON.stringify([]));
     }
+    if (!localStorage.getItem(this.KEYS.ORDERS)) {
+      localStorage.setItem(this.KEYS.ORDERS, JSON.stringify([]));
+    }
     if (!localStorage.getItem(this.KEYS.USERS)) {
       localStorage.setItem(this.KEYS.USERS, JSON.stringify([]));
     }
@@ -50,6 +61,9 @@ const DB = {
     
     // Create default admin user if no users exist
     await this.createDefaultAdmin();
+    
+    // Migrate sales to orders if needed
+    await this.migrateSalesToOrders();
   },
 
   // Generate a unique ID
@@ -797,7 +811,7 @@ const DB = {
     return total;
   },
 
-  // Sales reporting
+  // Sales reporting (kept for backward compatibility)
   getSalesByPeriod(driverId, period, date) {
     const sales = driverId ? this.getSalesByDriver(driverId) : this.getAllSales();
     const targetDate = date ? new Date(date) : new Date();
@@ -830,6 +844,423 @@ const DB = {
   getTodaySalesAmount() {
     const todaySales = this.getSalesByPeriod(null, 'day');
     return todaySales.reduce((total, sale) => total + sale.totalAmount, 0);
+  },
+
+  // ===============================
+  // DATA MIGRATION METHODS
+  // ===============================
+
+  /**
+   * Migrate existing sales data to orders format
+   * This method converts legacy sales to completed orders
+   */
+  async migrateSalesToOrders() {
+    const orders = this.getAll(this.KEYS.ORDERS);
+    const sales = this.getAll(this.KEYS.SALES);
+    
+    // Skip migration if orders already exist or no sales to migrate
+    if (orders.length > 0 || sales.length === 0) {
+      return;
+    }
+    
+    console.log(`Migrating ${sales.length} sales records to orders...`);
+    
+    const migratedOrders = sales.map(sale => ({
+      id: sale.id, // Keep original ID
+      driverId: sale.driverId,
+      salesRepId: sale.salesRepId || null, // If salesRepId exists in old data
+      customerAddress: sale.customerAddress,
+      customerDescription: sale.customerDescription || '',
+      deliveryMethod: sale.deliveryMethod || 'Delivery',
+      totalAmount: sale.totalAmount,
+      status: this.ORDER_STATUS.COMPLETED, // All existing sales become completed orders
+      lineItems: sale.lineItems || [],
+      createdAt: sale.saleDate, // Use original sale date as creation date
+      updatedAt: sale.saleDate,
+      completedAt: sale.saleDate // Mark as completed at the same time
+    }));
+    
+    // Save migrated orders
+    this.save(this.KEYS.ORDERS, migratedOrders);
+    console.log(`Successfully migrated ${migratedOrders.length} orders`);
+  },
+
+  // ===============================
+  // ORDER MANAGEMENT METHODS
+  // ===============================
+
+  /**
+   * Get all orders
+   * @returns {Array} Array of order objects
+   */
+  getAllOrders() {
+    return this.getAll(this.KEYS.ORDERS);
+  },
+
+  /**
+   * Get order by ID
+   * @param {string} id - Order ID
+   * @returns {Object|null} Order object or null
+   */
+  getOrderById(id) {
+    const orders = this.getAllOrders();
+    return orders.find(order => order.id === id) || null;
+  },
+
+  /**
+   * Get orders by driver ID
+   * @param {string} driverId - Driver ID
+   * @returns {Array} Array of orders for the driver
+   */
+  getOrdersByDriver(driverId) {
+    const orders = this.getAllOrders();
+    return orders.filter(order => order.driverId === driverId);
+  },
+
+  /**
+   * Get orders by sales rep ID
+   * @param {string} salesRepId - Sales rep ID
+   * @returns {Array} Array of orders created by the sales rep
+   */
+  getOrdersBySalesRep(salesRepId) {
+    const orders = this.getAllOrders();
+    return orders.filter(order => order.salesRepId === salesRepId);
+  },
+
+  /**
+   * Get orders by status
+   * @param {string} status - Order status
+   * @returns {Array} Array of orders with the specified status
+   */
+  getOrdersByStatus(status) {
+    const orders = this.getAllOrders();
+    return orders.filter(order => order.status === status);
+  },
+
+  /**
+   * Get orders with filtering options
+   * @param {Object} filters - Filter options
+   * @param {string} filters.salesRepId - Filter by sales rep
+   * @param {string} filters.driverId - Filter by driver
+   * @param {string} filters.status - Filter by status
+   * @param {Date} filters.startDate - Filter by start date
+   * @param {Date} filters.endDate - Filter by end date
+   * @returns {Array} Filtered orders
+   */
+  getOrdersWithFilters(filters = {}) {
+    let orders = this.getAllOrders();
+    
+    if (filters.salesRepId) {
+      orders = orders.filter(order => order.salesRepId === filters.salesRepId);
+    }
+    
+    if (filters.driverId) {
+      orders = orders.filter(order => order.driverId === filters.driverId);
+    }
+    
+    if (filters.status) {
+      orders = orders.filter(order => order.status === filters.status);
+    }
+    
+    if (filters.startDate) {
+      const startDate = new Date(filters.startDate);
+      orders = orders.filter(order => new Date(order.createdAt) >= startDate);
+    }
+    
+    if (filters.endDate) {
+      const endDate = new Date(filters.endDate);
+      orders = orders.filter(order => new Date(order.createdAt) <= endDate);
+    }
+    
+    return orders;
+  },
+
+  /**
+   * Create a new order
+   * @param {Object} orderData - Order data
+   * @returns {Object} Created order object
+   */
+  createOrder(orderData) {
+    const session = this.getCurrentSession();
+    if (!session) {
+      throw new Error('No active session found');
+    }
+
+    // Validate required fields
+    if (!orderData.driverId || !orderData.customerAddress || !orderData.lineItems || orderData.lineItems.length === 0) {
+      throw new Error('Missing required order fields');
+    }
+
+    // Validate inventory availability for all line items
+    orderData.lineItems.forEach(item => {
+      if (!item.isFreeGift) {
+        const driverInventory = this.getDriverInventory(orderData.driverId);
+        const productInventory = driverInventory.find(inv => inv.id === item.productId);
+        
+        if (!productInventory || productInventory.remaining < item.actualQuantity) {
+          const product = this.getProductById(item.productId);
+          throw new Error(`Insufficient inventory for ${product ? product.name : 'unknown product'}`);
+        }
+      }
+    });
+
+    const orders = this.getAllOrders();
+    const newOrder = {
+      id: this.generateId(),
+      driverId: orderData.driverId,
+      salesRepId: session.userId, // Track who created the order
+      customerAddress: orderData.customerAddress.trim(),
+      customerDescription: orderData.customerDescription ? orderData.customerDescription.trim() : '',
+      deliveryMethod: orderData.deliveryMethod || 'Delivery',
+      totalAmount: parseFloat(orderData.totalAmount) || 0,
+      status: this.ORDER_STATUS.PENDING,
+      lineItems: orderData.lineItems || [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      completedAt: null
+    };
+
+    orders.push(newOrder);
+    this.save(this.KEYS.ORDERS, orders);
+
+    // Update inventory by creating temporary sales entry for inventory calculation
+    // This affects driver inventory immediately when order is created
+    this.addSale({
+      driverId: orderData.driverId,
+      customerAddress: orderData.customerAddress,
+      customerDescription: orderData.customerDescription,
+      deliveryMethod: orderData.deliveryMethod,
+      totalAmount: orderData.totalAmount,
+      lineItems: orderData.lineItems,
+      orderId: newOrder.id // Link to order for reference
+    });
+
+    return newOrder;
+  },
+
+  /**
+   * Update an existing order
+   * @param {string} id - Order ID
+   * @param {Object} updates - Update data
+   * @returns {Object|null} Updated order or null
+   */
+  updateOrder(id, updates) {
+    const orders = this.getAllOrders();
+    const index = orders.findIndex(order => order.id === id);
+    
+    if (index === -1) {
+      return null;
+    }
+
+    const currentOrder = orders[index];
+    
+    // Prevent updating completed or cancelled orders unless changing status
+    if ((currentOrder.status === this.ORDER_STATUS.COMPLETED || currentOrder.status === this.ORDER_STATUS.CANCELLED) 
+        && !updates.hasOwnProperty('status')) {
+      throw new Error('Cannot update completed or cancelled orders');
+    }
+
+    // Validate status transitions
+    if (updates.status && !this.isValidStatusTransition(currentOrder.status, updates.status)) {
+      throw new Error(`Invalid status transition from ${currentOrder.status} to ${updates.status}`);
+    }
+
+    // Handle inventory changes if line items are updated
+    if (updates.lineItems && currentOrder.status === this.ORDER_STATUS.PENDING) {
+      // This would require more complex inventory rollback logic
+      // For now, we'll prevent line item updates on existing orders
+      throw new Error('Line item updates not supported for existing orders. Cancel and create a new order instead.');
+    }
+
+    const updatedOrder = {
+      ...currentOrder,
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+
+    // Set completion timestamp when marking as completed
+    if (updates.status === this.ORDER_STATUS.COMPLETED && currentOrder.status !== this.ORDER_STATUS.COMPLETED) {
+      updatedOrder.completedAt = new Date().toISOString();
+    }
+
+    orders[index] = updatedOrder;
+    this.save(this.KEYS.ORDERS, orders);
+
+    return updatedOrder;
+  },
+
+  /**
+   * Cancel an order and restore inventory
+   * @param {string} id - Order ID
+   * @returns {boolean} Success status
+   */
+  cancelOrder(id) {
+    const order = this.getOrderById(id);
+    if (!order) {
+      return false;
+    }
+
+    if (order.status !== this.ORDER_STATUS.PENDING) {
+      throw new Error('Only pending orders can be cancelled');
+    }
+
+    // Remove the associated sale to restore inventory
+    const sales = this.getAllSales();
+    const saleIndex = sales.findIndex(sale => sale.orderId === id);
+    if (saleIndex !== -1) {
+      sales.splice(saleIndex, 1);
+      this.save(this.KEYS.SALES, sales);
+    }
+
+    // Update order status
+    this.updateOrder(id, { 
+      status: this.ORDER_STATUS.CANCELLED,
+      cancelledAt: new Date().toISOString()
+    });
+
+    return true;
+  },
+
+  /**
+   * Complete an order
+   * @param {string} id - Order ID
+   * @returns {boolean} Success status
+   */
+  completeOrder(id) {
+    const order = this.getOrderById(id);
+    if (!order) {
+      return false;
+    }
+
+    if (order.status !== this.ORDER_STATUS.PENDING) {
+      throw new Error('Only pending orders can be completed');
+    }
+
+    this.updateOrder(id, { status: this.ORDER_STATUS.COMPLETED });
+    return true;
+  },
+
+  /**
+   * Validate order status transitions
+   * @param {string} currentStatus - Current order status
+   * @param {string} newStatus - New order status
+   * @returns {boolean} True if transition is valid
+   */
+  isValidStatusTransition(currentStatus, newStatus) {
+    const validTransitions = {
+      [this.ORDER_STATUS.PENDING]: [this.ORDER_STATUS.COMPLETED, this.ORDER_STATUS.CANCELLED],
+      [this.ORDER_STATUS.COMPLETED]: [], // Completed orders cannot change status
+      [this.ORDER_STATUS.CANCELLED]: []  // Cancelled orders cannot change status
+    };
+
+    return validTransitions[currentStatus] && validTransitions[currentStatus].includes(newStatus);
+  },
+
+  /**
+   * Get orders with advanced filtering options
+   * @param {Object} filters - Filter options
+   * @returns {Array} Filtered orders
+   */
+  getOrdersWithFilters(filters = {}) {
+    let orders = this.getAllOrders();
+    
+    // Filter by driver
+    if (filters.driverId) {
+      orders = orders.filter(order => order.driverId === filters.driverId);
+    }
+    
+    // Filter by sales rep
+    if (filters.salesRepId) {
+      orders = orders.filter(order => order.salesRepId === filters.salesRepId);
+    }
+    
+    // Filter by status
+    if (filters.status) {
+      orders = orders.filter(order => order.status === filters.status);
+    }
+    
+    // Filter by period
+    if (filters.period && filters.date) {
+      const targetDate = new Date(filters.date);
+      
+      orders = orders.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        
+        switch(filters.period) {
+          case 'day':
+            return orderDate.toDateString() === targetDate.toDateString();
+          case 'week':
+            const weekStart = new Date(targetDate);
+            weekStart.setDate(targetDate.getDate() - targetDate.getDay());
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 6);
+            return orderDate >= weekStart && orderDate <= weekEnd;
+          case 'month':
+            return orderDate.getMonth() === targetDate.getMonth() && 
+                   orderDate.getFullYear() === targetDate.getFullYear();
+          case 'year':
+            return orderDate.getFullYear() === targetDate.getFullYear();
+          default:
+            return true;
+        }
+      });
+    }
+    
+    return orders;
+  },
+
+  /**
+   * Get orders by period (for reports compatibility)
+   * @param {string} driverId - Driver ID (optional)
+   * @param {string} period - Period type
+   * @param {string} date - Target date
+   * @returns {Array} Filtered orders
+   */
+  getOrdersByPeriod(driverId, period, date) {
+    return this.getOrdersWithFilters({
+      driverId: driverId,
+      period: period,
+      date: date,
+      status: this.ORDER_STATUS.COMPLETED // Only show completed orders in reports
+    });
+  },
+
+  /**
+   * Get order statistics
+   * @param {Object} filters - Optional filters (same as getOrdersWithFilters)
+   * @returns {Object} Order statistics
+   */
+  getOrderStats(filters = {}) {
+    const orders = this.getOrdersWithFilters(filters);
+    
+    const stats = {
+      total: orders.length,
+      pending: orders.filter(order => order.status === this.ORDER_STATUS.PENDING).length,
+      completed: orders.filter(order => order.status === this.ORDER_STATUS.COMPLETED).length,
+      cancelled: orders.filter(order => order.status === this.ORDER_STATUS.CANCELLED).length,
+      totalAmount: orders.reduce((sum, order) => sum + order.totalAmount, 0),
+      completedAmount: orders
+        .filter(order => order.status === this.ORDER_STATUS.COMPLETED)
+        .reduce((sum, order) => sum + order.totalAmount, 0)
+    };
+
+    return stats;
+  },
+
+  /**
+   * Get today's order amount (for dashboard compatibility)
+   * @returns {number} Total amount of today's completed orders
+   */
+  getTodayOrderAmount() {
+    const today = new Date();
+    const todayStr = today.toDateString();
+    
+    const todayOrders = this.getAllOrders().filter(order => {
+      const orderDate = new Date(order.createdAt);
+      return orderDate.toDateString() === todayStr && order.status === this.ORDER_STATUS.COMPLETED;
+    });
+    
+    return todayOrders.reduce((total, order) => total + order.totalAmount, 0);
   }
 };
 

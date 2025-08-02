@@ -105,6 +105,11 @@ const AppModule = {
           SalesModule.init();
         }
         break;
+      case 'orders':
+        if (typeof OrdersModule !== 'undefined') {
+          OrdersModule.init();
+        }
+        break;
       case 'reports':
         if (typeof ReportsModule !== 'undefined') {
           ReportsModule.init();
@@ -198,10 +203,12 @@ const DashboardModule = {
       driverCount.textContent = drivers.length;
     }
     
-    // Update today's sales
+    // Update today's sales (now shows completed orders)
     const todaySales = document.getElementById('today-sales');
     if (todaySales) {
-      const amount = DB.getTodaySalesAmount();
+      // Use order system if available, fallback to sales
+      const amount = typeof DB.getTodayOrderAmount === 'function' ? 
+        DB.getTodayOrderAmount() : (typeof DB.getTodaySalesAmount === 'function' ? DB.getTodaySalesAmount() : 0);
       todaySales.textContent = `$${amount.toFixed(2)}`;
     }
     
@@ -218,18 +225,16 @@ const DashboardModule = {
     const activityList = document.getElementById('recent-activity-list');
     if (!activityList) return;
     
-    // Get recent sales
-    const sales = DB.getAllSales();
-    
-    // Get recent assignments
+    // Get recent orders and assignments (no longer show old sales)
+    const orders = DB.getAllOrders ? DB.getAllOrders() : [];
     const assignments = DB.getAllAssignments();
     
     // Combine and sort by date
     const activities = [
-      ...sales.map(sale => ({
-        type: 'sale',
-        date: new Date(sale.saleDate),
-        data: sale
+      ...orders.map(order => ({
+        type: 'order',
+        date: new Date(order.createdAt),
+        data: order
       })),
       ...assignments.map(assignment => ({
         type: 'assignment',
@@ -257,15 +262,17 @@ const DashboardModule = {
       
       const formattedDate = `${activity.date.toLocaleDateString()} ${activity.date.toLocaleTimeString()}`;
       
-      if (activity.type === 'sale') {
-        const sale = activity.data;
-        const driver = DB.getDriverById(sale.driverId);
+      if (activity.type === 'order') {
+        const order = activity.data;
+        const driver = DB.getDriverById(order.driverId);
         if (!driver) return;
         
+        const statusClass = order.status === 'completed' ? 'success' : order.status === 'cancelled' ? 'danger' : 'warning';
+        
         li.innerHTML = `
-          <i class="fas fa-cash-register activity-icon"></i>
+          <i class="fas fa-clipboard-list activity-icon"></i>
           <div class="activity-details">
-            <strong>Sale: $${sale.totalAmount.toFixed(2)}</strong><br>
+            <strong>Order: $${order.totalAmount.toFixed(2)}</strong> <span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span><br>
             <span>Driver: ${driver.name}</span><br>
             <small>${formattedDate}</small>
           </div>

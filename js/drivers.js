@@ -237,6 +237,18 @@ const DriversModule = {
       salesDriverSelect.innerHTML = options;
     }
     
+    // Update order driver dropdown
+    const orderDriverSelect = document.getElementById('order-driver');
+    if (orderDriverSelect) {
+      orderDriverSelect.innerHTML = options;
+    }
+    
+    // Update user driver dropdown
+    const userDriverSelect = document.getElementById('user-driver');
+    if (userDriverSelect) {
+      userDriverSelect.innerHTML = options;
+    }
+    
     // Update report driver dropdown
     const reportDriverSelect = document.getElementById('report-driver');
     if (reportDriverSelect) {
