@@ -35,16 +35,24 @@ const UsersModule = {
   handleRoleChange() {
     const userRoleSelect = document.getElementById('user-role');
     const driverGroup = document.getElementById('user-driver-group');
+    const phoneGroup = document.getElementById('user-phone-group');
     const driverSelect = document.getElementById('user-driver');
+    const phoneInput = document.getElementById('user-phone');
+    const createDriverCheckbox = document.getElementById('create-driver-profile');
 
     if (userRoleSelect && driverGroup && driverSelect) {
       if (userRoleSelect.value === 'driver') {
         driverGroup.style.display = 'block';
-        driverSelect.required = true;
+        if (phoneGroup) phoneGroup.style.display = 'block';
+        // Not required by default since user can link to existing driver
+        driverSelect.required = false;
       } else {
         driverGroup.style.display = 'none';
+        if (phoneGroup) phoneGroup.style.display = 'none';
         driverSelect.required = false;
         driverSelect.value = '';
+        if (phoneInput) phoneInput.value = '';
+        if (createDriverCheckbox) createDriverCheckbox.checked = false;
       }
     }
   },
@@ -56,8 +64,10 @@ const UsersModule = {
     const usernameInput = document.getElementById('user-username');
     const passwordInput = document.getElementById('user-password');
     const nameInput = document.getElementById('user-name');
+    const phoneInput = document.getElementById('user-phone');
     const roleSelect = document.getElementById('user-role');
     const driverSelect = document.getElementById('user-driver');
+    const createDriverCheckbox = document.getElementById('create-driver-profile');
 
     const userData = {
       username: usernameInput.value.trim(),
@@ -66,22 +76,41 @@ const UsersModule = {
       role: roleSelect.value
     };
 
-    // Add driver link if role is driver
-    if (userData.role === 'driver' && driverSelect.value) {
-      userData.driverId = driverSelect.value;
+    // Handle driver role specific logic
+    if (userData.role === 'driver') {
+      if (driverSelect.value) {
+        // Link to existing driver profile
+        userData.driverId = driverSelect.value;
+      } else if (createDriverCheckbox && createDriverCheckbox.checked) {
+        // Create new driver profile automatically
+        userData.createDriverProfile = true;
+        userData.phone = phoneInput ? phoneInput.value.trim() : '';
+      }
     }
 
     try {
       const newUser = await DB.createUser(userData);
       
+      // Show success message with additional info for driver users
+      let message = `User "${newUser.username}" created successfully`;
+      if (userData.role === 'driver' && userData.createDriverProfile) {
+        message += ' with driver profile';
+      }
+      
       // Reset form
       event.target.reset();
       this.handleRoleChange(); // Reset driver group visibility
 
-      // Reload users list
+      // Reload users list and update driver dropdown
       this.loadUsers();
+      this.updateDriverDropdown();
       
-      this.showNotification(`User "${newUser.username}" created successfully`);
+      // Update driver dropdowns in other modules
+      if (typeof DriversModule !== 'undefined') {
+        DriversModule.updateDriverDropdowns();
+      }
+      
+      this.showNotification(message);
     } catch (error) {
       alert(`Failed to create user: ${error.message}`);
     }
@@ -107,13 +136,35 @@ const UsersModule = {
       let driverInfo = '';
       if (user.role === 'driver' && user.driverId) {
         const driver = DB.getDriverById(user.driverId);
-        driverInfo = driver ? ` → ${driver.name}` : ' → Driver not found';
+        driverInfo = driver ? ` → ${driver.name} (${driver.phone})` : ' → Driver not found';
+      } else if (user.role === 'driver' && !user.driverId) {
+        driverInfo = ' → <span style="color: #e74c3c;">No driver profile linked</span>';
       }
 
       const roleDisplayName = this.getRoleDisplayName(user.role);
       const statusBadge = user.isActive ? 
         '<span class="badge status-active">Active</span>' : 
         '<span class="badge status-inactive">Inactive</span>';
+
+      const actions = [];
+      
+      // Standard actions
+      if (user.isActive) {
+        actions.push(`<button class="danger-button" onclick="UsersModule.deactivateUser('${user.id}')">Deactivate</button>`);
+      } else {
+        actions.push(`<button class="secondary-button" onclick="UsersModule.activateUser('${user.id}')">Activate</button>`);
+      }
+      actions.push(`<button class="secondary-button" onclick="UsersModule.resetPassword('${user.id}')">Reset Password</button>`);
+      
+      // Driver-specific actions
+      if (user.role === 'driver') {
+        if (!user.driverId) {
+          actions.push(`<button class="primary-button" onclick="UsersModule.linkToDriver('${user.id}')">Link to Driver</button>`);
+          actions.push(`<button class="secondary-button" onclick="UsersModule.createDriverProfile('${user.id}')">Create Driver Profile</button>`);
+        } else {
+          actions.push(`<button class="secondary-button" onclick="UsersModule.unlinkFromDriver('${user.id}')">Unlink Driver</button>`);
+        }
+      }
 
       li.innerHTML = `
         <div class="item-details">
@@ -124,11 +175,7 @@ const UsersModule = {
           <br>${statusBadge}
         </div>
         <div class="item-actions">
-          ${user.isActive ? 
-            `<button class="danger-button" onclick="UsersModule.deactivateUser('${user.id}')">Deactivate</button>` :
-            `<button class="secondary-button" onclick="UsersModule.activateUser('${user.id}')">Activate</button>`
-          }
-          <button class="secondary-button" onclick="UsersModule.resetPassword('${user.id}')">Reset Password</button>
+          ${actions.join('')}
         </div>
       `;
       
@@ -214,6 +261,100 @@ const UsersModule = {
     } else if (newPassword !== null) {
       alert('Password must be at least 8 characters long');
     }
+  },
+
+  // Link user to existing driver profile
+  async linkToDriver(userId) {
+    const availableDrivers = this.getUnlinkedDrivers();
+    
+    if (availableDrivers.length === 0) {
+      alert('No unlinked driver profiles available. Create a new driver profile first.');
+      return;
+    }
+    
+    const driverOptions = availableDrivers.map(driver => 
+      `${driver.id}: ${driver.name} (${driver.phone})`
+    ).join('\n');
+    
+    const selectedDriverId = prompt(
+      `Select a driver to link to:\n\n${driverOptions}\n\nEnter the driver ID:`
+    );
+    
+    if (selectedDriverId && availableDrivers.find(d => d.id === selectedDriverId)) {
+      try {
+        await DB.linkUserToDriver(userId, selectedDriverId);
+        this.loadUsers();
+        this.updateDriverDropdown();
+        this.showNotification('User linked to driver successfully');
+      } catch (error) {
+        alert(`Failed to link user to driver: ${error.message}`);
+      }
+    }
+  },
+
+  // Create new driver profile for user
+  async createDriverProfile(userId) {
+    const user = DB.getUserById(userId);
+    if (!user) {
+      alert('User not found');
+      return;
+    }
+    
+    const phone = prompt(`Create driver profile for ${user.name}\n\nEnter phone number:`);
+    if (!phone || !phone.trim()) {
+      return;
+    }
+    
+    try {
+      const newDriver = await DB.addDriver(user.name, phone.trim(), { 
+        linkedUserId: user.id 
+      });
+      
+      await DB.updateUser(userId, { driverId: newDriver.id });
+      
+      this.loadUsers();
+      this.updateDriverDropdown();
+      
+      if (typeof DriversModule !== 'undefined') {
+        DriversModule.loadDriversList();
+        DriversModule.updateDriverDropdowns();
+      }
+      
+      this.showNotification(`Driver profile created for ${user.name}`);
+    } catch (error) {
+      alert(`Failed to create driver profile: ${error.message}`);
+    }
+  },
+
+  // Unlink user from driver
+  async unlinkFromDriver(userId) {
+    const user = DB.getUserById(userId);
+    if (!user || !user.driverId) {
+      return;
+    }
+    
+    const driver = DB.getDriverById(user.driverId);
+    const driverName = driver ? driver.name : 'Unknown Driver';
+    
+    if (confirm(`Are you sure you want to unlink ${user.name} from driver profile "${driverName}"?`)) {
+      try {
+        await DB.unlinkUserFromDriver(userId);
+        this.loadUsers();
+        this.updateDriverDropdown();
+        this.showNotification('User unlinked from driver successfully');
+      } catch (error) {
+        alert(`Failed to unlink user: ${error.message}`);
+      }
+    }
+  },
+
+  // Get list of drivers not linked to any user
+  getUnlinkedDrivers() {
+    const drivers = DB.getAllDrivers();
+    const users = DB.getAllUsers();
+    const linkedDriverIds = users.filter(user => user.driverId).map(user => user.driverId);
+    
+    return drivers.filter(driver => !linkedDriverIds.includes(driver.id));
   },
 
   // Show notification

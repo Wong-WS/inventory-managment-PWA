@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+        button { margin: 5px; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Driver User Fix Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Results</h2>
+        <div id="test-results"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Controls</h2>
+        <button onclick="runTests()">Run Tests</button>
+        <button onclick="clearData()">Clear All Data</button>
+        <button onclick="testLogin()">Test Driver Login</button>
+        <button onclick="showCurrentSession()">Show Current Session</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Current Session Info</h2>
+        <div id="session-info"></div>
+    </div>
+
+    <script src="js/database.js"></script>
+    <script>
+        function log(message, isError = false) {
+            const resultsDiv = document.getElementById('test-results');
+            const div = document.createElement('div');
+            div.className = isError ? 'error' : 'success';
+            div.innerHTML = message;
+            resultsDiv.appendChild(div);
+        }
+
+        async function runTests() {
+            document.getElementById('test-results').innerHTML = '';
+            log('Starting tests...');
+            
+            try {
+                // Wait for DB to initialize
+                await DB.init();
+                log('Database initialized successfully');
+                
+                // Test 1: Check if migration runs
+                log('Running migration tests...');
+                
+                // Test 2: Create a driver and user account
+                log('Creating test driver with user account...');
+                const driverResult = await DB.addDriver('Test Driver', '123-456-7890', { createUser: true });
+                
+                if (driverResult.user && driverResult.user.driverId) {
+                    log(`✓ Driver user created successfully with driverId: ${driverResult.user.driverId}`);
+                    log(`✓ Credentials: ${driverResult.credentials.username} / ${driverResult.credentials.password}`);
+                } else {
+                    log('✗ Driver user creation failed - missing driverId', true);
+                }
+                
+                // Test 3: Test login
+                log('Testing driver login...');
+                const loginResult = await DB.login(driverResult.credentials.username, driverResult.credentials.password);
+                
+                if (loginResult && loginResult.user && loginResult.user.driverId) {
+                    log(`✓ Driver login successful with driverId: ${loginResult.user.driverId}`);
+                } else {
+                    log('✗ Driver login failed or missing driverId in session', true);
+                }
+                
+                // Test 4: Check current session
+                const session = DB.getCurrentSession();
+                if (session && session.user && session.user.driverId) {
+                    log(`✓ Current session has driverId: ${session.user.driverId}`);
+                } else {
+                    log('✗ Current session missing driverId', true);
+                }
+                
+                log('Tests completed!');
+                showCurrentSession();
+                
+            } catch(error) {
+                log(`Test error: ${error.message}`, true);
+                console.error('Test error:', error);
+            }
+        }
+
+        async function testLogin() {
+            try {
+                // Try to login with test credentials
+                const result = await DB.login('testdriver', 'Driver123!');
+                if (result) {
+                    log(`Login successful: ${JSON.stringify(result, null, 2)}`);
+                } else {
+                    log('Login failed', true);
+                }
+                showCurrentSession();
+            } catch(error) {
+                log(`Login error: ${error.message}`, true);
+            }
+        }
+
+        function showCurrentSession() {
+            const session = DB.getCurrentSession();
+            const sessionDiv = document.getElementById('session-info');
+            
+            if (session) {
+                sessionDiv.innerHTML = `<pre>${JSON.stringify(session, null, 2)}</pre>`;
+            } else {
+                sessionDiv.innerHTML = '<em>No active session</em>';
+            }
+        }
+
+        function clearData() {
+            if (confirm('This will clear all data. Are you sure?')) {
+                localStorage.clear();
+                location.reload();
+            }
+        }
+
+        // Show initial session on load
+        window.addEventListener('load', () => {
+            showCurrentSession();
+        });
+    </script>
+</body>
+</html>

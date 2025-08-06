@@ -53,6 +53,14 @@
                 <i class="fas fa-clipboard-list"></i>
                 <span>Orders</span>
             </button>
+            <button id="my-orders-tab" class="tab-button" data-tab="my-orders">
+                <i class="fas fa-truck"></i>
+                <span>My Orders</span>
+            </button>
+            <button id="my-inventory-tab" class="tab-button" data-tab="my-inventory">
+                <i class="fas fa-boxes"></i>
+                <span>My Inventory</span>
+            </button>
             <button id="reports-tab" class="tab-button" data-tab="reports">
                 <i class="fas fa-chart-line"></i>
                 <span>Reports</span>
@@ -163,6 +171,15 @@
                 <div class="form-group">
                     <label for="driver-phone">Phone Number</label>
                     <input type="tel" id="driver-phone" required>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="create-user-account">
+                        Create user account for this driver
+                    </label>
+                    <small style="display: block; margin-top: 0.5rem; color: #666;">
+                        If checked, a login account will be created automatically with default password "Driver123!"
+                    </small>
                 </div>
                 <button type="submit" class="primary-button">Add Driver</button>
             </form>
@@ -425,6 +442,16 @@
                         <option value="">-- Select Driver --</option>
                         <!-- Drivers will be loaded here -->
                     </select>
+                    <div style="margin-top: 1rem;">
+                        <label>
+                            <input type="checkbox" id="create-driver-profile">
+                            Create new driver profile if no driver selected
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group" id="user-phone-group" style="display: none;">
+                    <label for="user-phone">Phone Number (for driver profile)</label>
+                    <input type="tel" id="user-phone" placeholder="Enter phone number for driver profile">
                 </div>
                 <button type="submit" class="primary-button">Create User</button>
             </form>
@@ -438,12 +465,110 @@
         </div>
     </template>
 
+    <!-- My Orders Template (Driver View) -->
+    <template id="my-orders-template">
+        <div class="my-orders-container">
+            <h2>My Orders</h2>
+            
+            <div class="orders-filters">
+                <div class="form-group">
+                    <label for="my-order-status-filter">Filter by Status</label>
+                    <select id="my-order-status-filter">
+                        <option value="">All Orders</option>
+                        <option value="pending">Pending</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="my-orders-list">
+                <ul id="my-orders-list" class="data-list">
+                    <!-- Orders will be loaded here -->
+                </ul>
+            </div>
+        </div>
+    </template>
+
+    <!-- My Inventory Template (Driver View) -->
+    <template id="my-inventory-template">
+        <div class="my-inventory-container">
+            <h2>My Inventory</h2>
+            
+            <div class="inventory-filters">
+                <div class="form-group">
+                    <label for="inventory-filter">Filter by Stock Level</label>
+                    <select id="inventory-filter">
+                        <option value="">All Items</option>
+                        <option value="normal">Normal Stock</option>
+                        <option value="warning">Low Stock</option>
+                        <option value="critical">Out of Stock</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="inventory-sort">Sort by</label>
+                    <select id="inventory-sort">
+                        <option value="name">Product Name</option>
+                        <option value="quantity-asc">Quantity (Low to High)</option>
+                        <option value="quantity-desc">Quantity (High to Low)</option>
+                        <option value="alert">Alert Level</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="inventory-summary">
+                <div class="summary-cards">
+                    <div class="summary-card normal">
+                        <div class="summary-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="summary-content">
+                            <div class="summary-number" id="normal-stock-count">0</div>
+                            <div class="summary-label">Normal Stock</div>
+                        </div>
+                    </div>
+                    <div class="summary-card warning">
+                        <div class="summary-icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="summary-content">
+                            <div class="summary-number" id="low-stock-count">0</div>
+                            <div class="summary-label">Low Stock</div>
+                        </div>
+                    </div>
+                    <div class="summary-card critical">
+                        <div class="summary-icon">
+                            <i class="fas fa-times-circle"></i>
+                        </div>
+                        <div class="summary-content">
+                            <div class="summary-number" id="out-stock-count">0</div>
+                            <div class="summary-label">Out of Stock</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="inventory-list">
+                <div id="inventory-items-container" class="inventory-items">
+                    <!-- Inventory items will be loaded here -->
+                </div>
+                <div id="no-inventory-message" class="no-data-message" style="display: none;">
+                    <i class="fas fa-box-open"></i>
+                    <p>No inventory items found</p>
+                    <small>Items will appear here when you have products assigned to you</small>
+                </div>
+            </div>
+        </div>
+    </template>
+
     <script src="js/database.js"></script>
     <script src="js/app.js"></script>
     <script src="js/products.js"></script>
     <script src="js/drivers.js"></script>
     <script src="js/assignments.js"></script>
     <script src="js/orders.js"></script>
+    <script src="js/my-orders.js"></script>
+    <script src="js/my-inventory.js"></script>
     <script src="js/reports.js"></script>
     <script src="js/users.js"></script>
     <script src="js/auth.js"></script>

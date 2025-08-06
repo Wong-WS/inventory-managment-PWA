@@ -64,6 +64,12 @@ const DB = {
     
     // Migrate sales to orders if needed
     await this.migrateSalesToOrders();
+    
+    // Migrate driver-user links if needed
+    await this.migrateDriverUserLinks();
+    
+    // Fix existing driver users with missing driverId
+    await this.fixDriverUserIds();
   },
 
   // Generate a unique ID
@@ -275,6 +281,7 @@ const DB = {
       username: user.username,
       name: user.name,
       role: user.role,
+      driverId: user.driverId,
       isActive: user.isActive,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt
@@ -296,6 +303,7 @@ const DB = {
       username: user.username,
       name: user.name,
       role: user.role,
+      driverId: user.driverId,
       isActive: user.isActive,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt
@@ -341,6 +349,7 @@ const DB = {
       passwordHash: passwordHash,
       salt: salt,
       role: userData.role || this.ROLES.SALES_REP,
+      driverId: userData.driverId || null,
       isActive: true,
       createdAt: new Date().toISOString(),
       lastLoginAt: null
@@ -355,6 +364,7 @@ const DB = {
       username: newUser.username,
       name: newUser.name,
       role: newUser.role,
+      driverId: newUser.driverId,
       isActive: newUser.isActive,
       createdAt: newUser.createdAt,
       lastLoginAt: newUser.lastLoginAt
@@ -492,7 +502,8 @@ const DB = {
           id: user.id,
           username: user.username,
           name: user.name,
-          role: user.role
+          role: user.role,
+          driverId: user.driverId
         },
         role: user.role, // Add role directly to session for backward compatibility
         expiresAt: sessionData.expiresAt
@@ -528,6 +539,8 @@ const DB = {
       const user = this.getUserById(session.userId);
       if (user) {
         session.user = user;
+        // Update the session in storage to include the user object
+        this.save(this.KEYS.SESSION, session);
       }
     }
 
@@ -649,16 +662,58 @@ const DB = {
     return drivers.find(driver => driver.id === id);
   },
 
-  addDriver(name, phone) {
+  async addDriver(name, phone, options = {}) {
     const drivers = this.getAllDrivers();
     const newDriver = {
       id: this.generateId(),
       name,
       phone,
+      linkedUserId: options.linkedUserId || null,
       createdAt: new Date().toISOString()
     };
     drivers.push(newDriver);
     this.save(this.KEYS.DRIVERS, drivers);
+
+    // If creating a driver and requesting user account creation
+    if (options.createUser && !options.linkedUserId) {
+      try {
+        // Generate a username based on the driver's name
+        const baseUsername = name.toLowerCase().replace(/\s+/g, '');
+        let username = baseUsername;
+        let counter = 1;
+        
+        // Ensure username is unique
+        while (this.getUserByUsername(username)) {
+          username = `${baseUsername}${counter}`;
+          counter++;
+        }
+
+        // Create user account with a default password
+        const defaultPassword = 'Driver123!';
+        const newUser = await this.createUser({
+          username: username,
+          password: defaultPassword,
+          name: name,
+          role: this.ROLES.DRIVER,
+          driverId: newDriver.id
+        });
+
+        // Update driver with linked user ID
+        newDriver.linkedUserId = newUser.id;
+        this.save(this.KEYS.DRIVERS, drivers);
+
+        return {
+          driver: newDriver,
+          user: newUser,
+          credentials: { username, password: defaultPassword }
+        };
+      } catch (error) {
+        // If user creation fails, the driver profile is still created
+        console.error('Failed to create user account for driver:', error);
+        return newDriver;
+      }
+    }
+
     return newDriver;
   },
 
@@ -847,6 +902,91 @@ const DB = {
   },
 
   // ===============================
+  // DRIVER-USER LINKING HELPER METHODS
+  // ===============================
+
+  /**
+   * Get user by driver ID
+   * @param {string} driverId - Driver ID
+   * @returns {Object|null} User object or null
+   */
+  getUserByDriverId(driverId) {
+    const users = this.getAll(this.KEYS.USERS);
+    const user = users.find(u => u.driverId === driverId);
+    return user ? this.getUserById(user.id) : null;
+  },
+
+  /**
+   * Get driver by user ID
+   * @param {string} userId - User ID
+   * @returns {Object|null} Driver object or null
+   */
+  getDriverByUserId(userId) {
+    const user = this.getUserById(userId);
+    return user && user.driverId ? this.getDriverById(user.driverId) : null;
+  },
+
+  /**
+   * Link existing user to existing driver
+   * @param {string} userId - User ID
+   * @param {string} driverId - Driver ID
+   * @returns {boolean} Success status
+   */
+  async linkUserToDriver(userId, driverId) {
+    const user = this.getUserById(userId);
+    const driver = this.getDriverById(driverId);
+
+    if (!user || !driver) {
+      throw new Error('User or driver not found');
+    }
+
+    if (user.role !== this.ROLES.DRIVER) {
+      throw new Error('User must have driver role to be linked to a driver profile');
+    }
+
+    // Check if driver is already linked
+    const existingUser = this.getUserByDriverId(driverId);
+    if (existingUser && existingUser.id !== userId) {
+      throw new Error('Driver is already linked to another user');
+    }
+
+    // Check if user is already linked to another driver
+    if (user.driverId && user.driverId !== driverId) {
+      throw new Error('User is already linked to another driver');
+    }
+
+    // Update user with driver link
+    await this.updateUser(userId, { driverId: driverId });
+
+    // Update driver with user link
+    this.updateDriver(driverId, { linkedUserId: userId });
+
+    return true;
+  },
+
+  /**
+   * Unlink user from driver
+   * @param {string} userId - User ID
+   * @returns {boolean} Success status
+   */
+  async unlinkUserFromDriver(userId) {
+    const user = this.getUserById(userId);
+    if (!user || !user.driverId) {
+      return false;
+    }
+
+    const driverId = user.driverId;
+
+    // Remove link from user
+    await this.updateUser(userId, { driverId: null });
+
+    // Remove link from driver
+    this.updateDriver(driverId, { linkedUserId: null });
+
+    return true;
+  },
+
+  // ===============================
   // DATA MIGRATION METHODS
   // ===============================
 
@@ -883,6 +1023,149 @@ const DB = {
     // Save migrated orders
     this.save(this.KEYS.ORDERS, migratedOrders);
     console.log(`Successfully migrated ${migratedOrders.length} orders`);
+  },
+
+  /**
+   * Migrate existing driver-user links
+   * This method adds driverId fields to existing users and linkedUserId to drivers
+   */
+  async migrateDriverUserLinks() {
+    const users = this.getAll(this.KEYS.USERS);
+    const drivers = this.getAll(this.KEYS.DRIVERS);
+    
+    let migratedUsers = 0;
+    let migratedDrivers = 0;
+    
+    // Add driverId field to existing users if not present
+    users.forEach(user => {
+      if (user.driverId === undefined) {
+        user.driverId = null;
+        migratedUsers++;
+      }
+    });
+    
+    // Add linkedUserId field to existing drivers if not present
+    drivers.forEach(driver => {
+      if (driver.linkedUserId === undefined) {
+        driver.linkedUserId = null;
+        migratedDrivers++;
+      }
+    });
+    
+    // Save updated data if any migrations occurred
+    if (migratedUsers > 0) {
+      this.save(this.KEYS.USERS, users);
+      console.log(`Migrated ${migratedUsers} user records with driverId field`);
+    }
+    
+    if (migratedDrivers > 0) {
+      this.save(this.KEYS.DRIVERS, drivers);
+      console.log(`Migrated ${migratedDrivers} driver records with linkedUserId field`);
+    }
+    
+    // Auto-link users and drivers with matching names (best effort)
+    await this.autoLinkDriverUsers();
+  },
+
+  /**
+   * Attempt to automatically link users and drivers with matching names
+   */
+  async autoLinkDriverUsers() {
+    const users = this.getAll(this.KEYS.USERS);
+    const drivers = this.getAll(this.KEYS.DRIVERS);
+    
+    const driverUsers = users.filter(user => 
+      user.role === this.ROLES.DRIVER && 
+      !user.driverId
+    );
+    
+    const unlinkedDrivers = drivers.filter(driver => !driver.linkedUserId);
+    
+    let linkedCount = 0;
+    
+    for (const user of driverUsers) {
+      // Try to find a driver with matching or similar name
+      const matchingDriver = unlinkedDrivers.find(driver => {
+        const userNameNormalized = user.name.toLowerCase().trim();
+        const driverNameNormalized = driver.name.toLowerCase().trim();
+        
+        // Exact match or user name contains driver name or vice versa
+        return userNameNormalized === driverNameNormalized ||
+               userNameNormalized.includes(driverNameNormalized) ||
+               driverNameNormalized.includes(userNameNormalized);
+      });
+      
+      if (matchingDriver) {
+        try {
+          await this.linkUserToDriver(user.id, matchingDriver.id);
+          linkedCount++;
+          
+          // Remove from unlinked list to prevent duplicate linking
+          const index = unlinkedDrivers.indexOf(matchingDriver);
+          if (index > -1) {
+            unlinkedDrivers.splice(index, 1);
+          }
+        } catch (error) {
+          console.warn(`Failed to auto-link user ${user.username} to driver ${matchingDriver.name}:`, error.message);
+        }
+      }
+    }
+    
+    if (linkedCount > 0) {
+      console.log(`Auto-linked ${linkedCount} driver users to driver profiles`);
+    }
+  },
+
+  /**
+   * Fix existing driver users that may have broken driverId fields
+   * This method ensures all driver role users have proper driverId links
+   */
+  async fixDriverUserIds() {
+    const users = this.getAll(this.KEYS.USERS);
+    const drivers = this.getAll(this.KEYS.DRIVERS);
+    
+    let fixedCount = 0;
+    let updated = false;
+    
+    // Check each user with driver role
+    users.forEach(user => {
+      if (user.role === this.ROLES.DRIVER) {
+        // If user doesn't have driverId but a driver is linked to this user
+        if (!user.driverId) {
+          const linkedDriver = drivers.find(driver => driver.linkedUserId === user.id);
+          if (linkedDriver) {
+            user.driverId = linkedDriver.id;
+            fixedCount++;
+            updated = true;
+            console.log(`Fixed missing driverId for user ${user.username}, linked to driver ${linkedDriver.name}`);
+          }
+        }
+        
+        // If user has driverId but the driver doesn't exist or isn't properly linked back
+        if (user.driverId) {
+          const driver = drivers.find(driver => driver.id === user.driverId);
+          if (!driver) {
+            // Driver doesn't exist, clear the driverId
+            user.driverId = null;
+            fixedCount++;
+            updated = true;
+            console.log(`Cleared invalid driverId for user ${user.username}`);
+          } else if (driver.linkedUserId !== user.id) {
+            // Driver exists but isn't properly linked back, fix the link
+            driver.linkedUserId = user.id;
+            updated = true;
+            console.log(`Fixed driver link for driver ${driver.name} to user ${user.username}`);
+          }
+        }
+      }
+    });
+    
+    // Save if any updates were made
+    if (updated) {
+      this.save(this.KEYS.USERS, users);
+      this.save(this.KEYS.DRIVERS, drivers);
+      console.log(`Fixed ${fixedCount} driver user ID links`);
+    }
   },
 
   // ===============================
@@ -1261,6 +1544,76 @@ const DB = {
     });
     
     return todayOrders.reduce((total, order) => total + order.totalAmount, 0);
+  },
+
+  // ===============================
+  // DRIVER-SPECIFIC HELPER METHODS
+  // ===============================
+
+  /**
+   * Get all orders assigned to a specific driver
+   * @param {string} driverId - Driver ID to filter by
+   * @returns {Array} Array of orders for the specified driver
+   */
+  getOrdersByDriver(driverId) {
+    const orders = this.getAllOrders();
+    return orders.filter(order => order.driverId === driverId);
+  },
+
+  /**
+   * Get driver inventory with low stock alerts
+   * @param {string} driverId - Driver ID
+   * @param {number} threshold - Low stock threshold (default: 5)
+   * @returns {Array} Driver inventory with alert flags
+   */
+  getDriverInventoryWithAlerts(driverId, threshold = 5) {
+    const inventory = this.getDriverInventory(driverId);
+    
+    return inventory.map(item => ({
+      ...item,
+      isLowStock: item.remaining <= threshold && item.remaining > 0,
+      isOutOfStock: item.remaining <= 0,
+      alertLevel: item.remaining <= 0 ? 'critical' : 
+                  item.remaining <= threshold ? 'warning' : 'normal'
+    }));
+  },
+
+  /**
+   * Get summary of driver's orders for today
+   * @param {string} driverId - Driver ID
+   * @returns {Object} Order summary with counts and totals
+   */
+  getDriverOrderSummary(driverId) {
+    const today = new Date();
+    const todayStr = today.toDateString();
+    
+    const driverOrders = this.getOrdersByDriver(driverId);
+    const todayOrders = driverOrders.filter(order => {
+      const orderDate = new Date(order.createdAt);
+      return orderDate.toDateString() === todayStr;
+    });
+    
+    const pending = todayOrders.filter(order => order.status === this.ORDER_STATUS.PENDING);
+    const completed = todayOrders.filter(order => order.status === this.ORDER_STATUS.COMPLETED);
+    const cancelled = todayOrders.filter(order => order.status === this.ORDER_STATUS.CANCELLED);
+    
+    return {
+      total: todayOrders.length,
+      pending: {
+        count: pending.length,
+        totalAmount: pending.reduce((sum, order) => sum + order.totalAmount, 0)
+      },
+      completed: {
+        count: completed.length,
+        totalAmount: completed.reduce((sum, order) => sum + order.totalAmount, 0)
+      },
+      cancelled: {
+        count: cancelled.length,
+        totalAmount: cancelled.reduce((sum, order) => sum + order.totalAmount, 0)
+      },
+      totalAmount: todayOrders.reduce((sum, order) => sum + order.totalAmount, 0),
+      completedAmount: completed.reduce((sum, order) => sum + order.totalAmount, 0)
+    };
   }
 };
 
