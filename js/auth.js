@@ -293,8 +293,8 @@ const AuthModule = {
         return ['dashboard', 'orders'].includes(tabId);
         
       case DB.ROLES.DRIVER:
-        // Driver can access dashboard, my-orders, and my-inventory
-        return ['dashboard', 'my-orders', 'my-inventory'].includes(tabId);
+        // Driver can access dashboard, my-orders, my-inventory, and my-earnings
+        return ['dashboard', 'my-orders', 'my-inventory', 'my-earnings'].includes(tabId);
         
       default:
         return false;

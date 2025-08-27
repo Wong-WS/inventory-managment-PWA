@@ -21,13 +21,17 @@ This is a vanilla JavaScript PWA that runs without build tools:
 ### Module System
 The application uses a modular architecture with these main components:
 
-- **`js/database.js`**: Central data layer handling all CRUD operations for products, drivers, assignments, and sales
-- **`js/app.js`**: Main application controller with tab navigation and dashboard functionality
+- **`js/database.js`**: Central data layer handling all CRUD operations for products, drivers, assignments, orders, and users
+- **`js/app.js`**: Main application controller with tab navigation and role-based dashboard functionality
+- **`js/auth.js`**: Authentication system with multi-role support (Admin, Sales Rep, Driver)
 - **`js/products.js`**: Product management UI and operations
 - **`js/drivers.js`**: Driver management UI and operations  
 - **`js/assignments.js`**: Product assignment to drivers functionality
-- **`js/sales.js`**: Sales recording with multi-line item support
-- **`js/reports.js`**: Sales and inventory reporting
+- **`js/orders.js`**: Order management with workflow system (pending/completed/cancelled)
+- **`js/users.js`**: User management system with role-based access control
+- **`js/my-orders.js`**: Driver interface for viewing assigned orders
+- **`js/my-inventory.js`**: Driver interface for inventory monitoring with low stock alerts
+- **`js/reports.js`**: Order and inventory reporting
 
 ### Data Flow
 1. All modules interact through the global `DB` object
@@ -37,16 +41,20 @@ The application uses a modular architecture with these main components:
 
 ### Key Data Structures
 - **Products**: `{id, name, totalQuantity, createdAt}`
-- **Drivers**: `{id, name, phone, createdAt}`
+- **Drivers**: `{id, name, phone, createdAt, linkedUserId?}`
+- **Users**: `{id, username, password, name, role, isActive, createdAt, driverId?}`
 - **Assignments**: `{id, driverId, productId, quantity, assignedAt}`
-- **Sales**: `{id, driverId, customerAddress, customerDescription, totalAmount, saleDate, lineItems[]}`
-- **LineItems**: `{productId, productName, quantity, isFreeGift}`
+- **Orders**: `{id, driverId, salesRepId, customerAddress, customerDescription, deliveryMethod, totalAmount, status, createdAt, completedAt?, lineItems[]}`
+- **LineItems**: `{productId, productName, category, actualQuantity, isFreeGift}`
 
 ### Business Logic
+- **User Roles**: Admin (full access), Sales Rep (orders + dashboard), Driver (view orders + inventory)
+- **Authentication**: Secure PBKDF2 password hashing with session management
 - **Inventory Management**: Products start with 0 quantity, increased via assignments to drivers
 - **Assignment Flow**: Assigning products to drivers deducts from main inventory (`totalQuantity`)
-- **Sales Tracking**: Sales reduce driver inventory but don't affect main product quantities
-- **Free Gifts**: Line items can be marked as free gifts (reduce inventory but indicated separately)
+- **Order Workflow**: Sales reps create orders → drivers view them → sales reps complete/cancel
+- **Inventory Deduction**: Order creation reduces driver inventory, cancellation restores it
+- **Driver Linking**: User accounts linked to driver profiles for proper data access
 
 ## File Structure
 
@@ -58,12 +66,16 @@ The application uses a modular architecture with these main components:
 ├── css/
 │   └── styles.css          # All application styles
 ├── js/
-│   ├── database.js         # localStorage data layer
-│   ├── app.js              # Main app controller & dashboard
+│   ├── database.js         # localStorage data layer with user/order management
+│   ├── app.js              # Main app controller & role-based dashboard
+│   ├── auth.js             # Authentication & session management
 │   ├── products.js         # Product management
 │   ├── drivers.js          # Driver management
 │   ├── assignments.js      # Assignment functionality
-│   ├── sales.js            # Sales recording
+│   ├── orders.js           # Order workflow system
+│   ├── users.js            # User management system
+│   ├── my-orders.js        # Driver order interface
+│   ├── my-inventory.js     # Driver inventory interface
 │   └── reports.js          # Reporting functionality
 └── images/
     └── icons/              # PWA icons (various sizes)

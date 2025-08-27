@@ -120,6 +120,11 @@ const AppModule = {
           MyInventoryModule.init();
         }
         break;
+      case 'my-earnings':
+        if (typeof MyEarningsModule !== 'undefined') {
+          MyEarningsModule.init();
+        }
+        break;
       case 'reports':
         if (typeof ReportsModule !== 'undefined') {
           ReportsModule.init();
