@@ -129,6 +129,7 @@ const OrdersModule = {
     if (statusFilter) {
       statusFilter.addEventListener('change', this.loadOrders.bind(this));
     }
+
   },
 
   // Show create order view
@@ -570,6 +571,18 @@ const OrdersModule = {
           <div class="order-actions">
             <button class="complete-order-btn primary-button" data-order-id="${order.id}">Complete</button>
             <button class="cancel-order-btn danger-button" data-order-id="${order.id}">Cancel</button>
+            <button class="copy-order-btn secondary-button" data-order-id="${order.id}">
+              <i class="fas fa-copy"></i> Copy Details
+            </button>
+          </div>
+        `;
+      } else {
+        // For completed/cancelled orders, only show copy button
+        actionButtons = `
+          <div class="order-actions">
+            <button class="copy-order-btn secondary-button" data-order-id="${order.id}">
+              <i class="fas fa-copy"></i> Copy Details
+            </button>
           </div>
         `;
       }
@@ -604,6 +617,7 @@ const OrdersModule = {
   bindOrderActionListeners() {
     const completeButtons = document.querySelectorAll('.complete-order-btn');
     const cancelButtons = document.querySelectorAll('.cancel-order-btn');
+    const copyButtons = document.querySelectorAll('.copy-order-btn');
     
     completeButtons.forEach(button => {
       button.addEventListener('click', (e) => {
@@ -616,6 +630,18 @@ const OrdersModule = {
       button.addEventListener('click', (e) => {
         const orderId = e.target.dataset.orderId;
         this.cancelOrder(orderId);
+      });
+    });
+
+    copyButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const orderId = e.target.dataset.orderId;
+        const order = DB.getOrderById(orderId);
+        if (order) {
+          this.copyOrderDetails(order);
+        } else {
+          this.showNotification('Order not found');
+        }
       });
     });
   },
@@ -707,5 +733,102 @@ const OrdersModule = {
     } else {
       alert(message);
     }
-  }
+  },
+
+  // Copy order details to clipboard
+  async copyOrderDetails(order) {
+    if (!order) {
+      this.showNotification('Order data not found');
+      return;
+    }
+
+    try {
+      // Get driver information
+      const driver = DB.getDriverById(order.driverId);
+      if (!driver) {
+        this.showNotification('Driver information not found');
+        return;
+      }
+
+      // Format order details
+      const orderText = this.formatOrderDetails(order, driver);
+      
+      // Try to use Clipboard API first
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(orderText);
+        this.showNotification('Order details copied to clipboard! 📋');
+      } else {
+        // Fallback for older browsers or non-secure contexts
+        this.fallbackCopyToClipboard(orderText);
+        this.showNotification('Order details copied to clipboard! 📋');
+      }
+    } catch (error) {
+      console.error('Failed to copy order details:', error);
+      this.showNotification('Failed to copy order details. Please try again.');
+    }
+  },
+
+  // Format order details as text
+  formatOrderDetails(order, driver) {
+    const date = new Date(order.createdAt);
+    const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    
+    // Format line items
+    let itemsText = '';
+    order.lineItems.forEach(item => {
+      const giftNote = item.isFreeGift ? ' (Free Gift)' : '';
+      let displayQuantity;
+      
+      if (item.category) {
+        displayQuantity = item.category === 'Quantity by pcs' ? `${item.actualQuantity} pcs` : item.category;
+      } else {
+        displayQuantity = item.quantity || item.actualQuantity;
+      }
+      
+      itemsText += `• ${item.productName} x ${displayQuantity}${giftNote}\n`;
+    });
+
+    // Determine earnings info for driver
+    const isDelivery = order.deliveryMethod === 'Delivery';
+    const earningsNote = isDelivery ? ' ($30 earned)' : ' (No earnings - pickup)';
+
+    // Build formatted text
+    const orderText = `🚚 ORDER DETAILS
+Driver: ${driver.name}${driver.phone ? ` (${driver.phone})` : ''}
+Customer: ${order.customerAddress}${order.customerDescription ? `\nDescription: ${order.customerDescription}` : ''}
+Delivery: ${order.deliveryMethod}${earningsNote}
+---
+Items:
+${itemsText}---
+Total: $${order.totalAmount.toFixed(2)}
+Order #${order.id.slice(-6).toUpperCase()}
+Status: ${order.status.toUpperCase()}
+Created: ${formattedDate}`;
+
+    return orderText;
+  },
+
+  // Fallback copy method for older browsers
+  fallbackCopyToClipboard(text) {
+    // Create a temporary textarea element
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    
+    textArea.focus();
+    textArea.select();
+    
+    try {
+      document.execCommand('copy');
+    } catch (err) {
+      console.error('Fallback copy failed:', err);
+      throw err;
+    } finally {
+      document.body.removeChild(textArea);
+    }
+  },
+
 };

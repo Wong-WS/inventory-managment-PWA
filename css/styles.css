@@ -208,6 +208,18 @@ main {
   margin-bottom: 1.5rem;
 }
 
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.form-actions button {
+  flex: 0 0 auto;
+}
+
 .form-group {
   margin-bottom: 1.25rem; /* Increased spacing between form groups */
 }
