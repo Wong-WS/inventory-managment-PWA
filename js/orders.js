@@ -170,28 +170,14 @@ const OrdersModule = {
     const customerAddressInput = document.getElementById('customer-address');
     const customerDescInput = document.getElementById('customer-description');
     const totalAmountInput = document.getElementById('total-amount');
-    const deliveryMethodInputs = document.querySelectorAll('input[name="delivery-method"]');
     
     const driverId = orderDriverSelect.value;
     const customerAddress = customerAddressInput.value.trim();
     const customerDescription = customerDescInput.value.trim();
     const totalAmount = parseFloat(totalAmountInput.value);
     
-    // Get selected delivery method
-    let deliveryMethod = '';
-    deliveryMethodInputs.forEach(input => {
-      if (input.checked) {
-        deliveryMethod = input.value;
-      }
-    });
-    
     if (!driverId || !customerAddress) {
       alert('Please select a driver and enter a customer address.');
-      return;
-    }
-    
-    if (!deliveryMethod) {
-      alert('Please select a delivery method.');
       return;
     }
     
@@ -269,7 +255,6 @@ const OrdersModule = {
       driverId,
       customerAddress,
       customerDescription,
-      deliveryMethod,
       totalAmount,
       lineItems
     };
@@ -307,12 +292,6 @@ const OrdersModule = {
     const orderForm = document.getElementById('order-form');
     if (orderForm) {
       orderForm.reset();
-      
-      // Ensure delivery method radio buttons are cleared
-      const deliveryMethodInputs = document.querySelectorAll('input[name="delivery-method"]');
-      deliveryMethodInputs.forEach(input => {
-        input.checked = false;
-      });
     }
     
     // Reset line items to just one
@@ -672,10 +651,14 @@ const OrdersModule = {
       return;
     }
     
+    // Ask whether to pay the driver
+    const payDriver = confirm('Pay the driver $30 for this cancelled order?\n\nClick "OK" to pay the driver $30\nClick "Cancel" to not pay the driver');
+    
     try {
-      DB.cancelOrder(orderId);
+      DB.cancelOrder(orderId, payDriver);
+      const paymentMessage = payDriver ? 'Order cancelled, inventory restored, and driver will be paid $30' : 'Order cancelled, inventory restored, and driver will not be paid';
       this.loadOrders();
-      this.showNotification('Order cancelled and inventory restored');
+      this.showNotification(paymentMessage);
       
       // Update dashboard if it exists
       if (typeof DashboardModule !== 'undefined') {
@@ -788,15 +771,15 @@ const OrdersModule = {
       itemsText += `• ${item.productName} x ${displayQuantity}${giftNote}\n`;
     });
 
-    // Determine earnings info for driver
-    const isDelivery = order.deliveryMethod === 'Delivery';
-    const earningsNote = isDelivery ? ' ($30 earned)' : ' (No earnings - pickup)';
+    // Determine earnings info for driver (support both old and new values)
+    const isPaid = order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery';
+    const earningsNote = isPaid ? ' ($30 earned)' : ' (No payment)';
 
     // Build formatted text
     const orderText = `🚚 ORDER DETAILS
 Driver: ${driver.name}${driver.phone ? ` (${driver.phone})` : ''}
 Customer: ${order.customerAddress}${order.customerDescription ? `\nDescription: ${order.customerDescription}` : ''}
-Delivery: ${order.deliveryMethod}${earningsNote}
+Payment: ${order.deliveryMethod}${earningsNote}
 ---
 Items:
 ${itemsText}---

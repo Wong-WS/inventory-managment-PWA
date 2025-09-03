@@ -203,8 +203,18 @@
     <!-- Assign Template -->
     <template id="assign-template">
         <div class="assign-container">
-            <h2>Assign Products</h2>
-            <form id="assign-form" class="action-form">
+            <div class="assignments-header">
+                <h2>Stock Management</h2>
+                <div class="view-switcher">
+                    <button id="show-assign-stock" class="secondary-button active">Assign Stock</button>
+                    <button id="show-transfer-stock" class="secondary-button">Transfer Stock</button>
+                </div>
+            </div>
+
+            <!-- Assign Stock Section -->
+            <div id="assign-stock-section" class="section">
+                <h3>Assign Products to Drivers</h3>
+                <form id="assign-form" class="action-form">
                 <div class="form-group">
                     <label for="assign-driver">Select Driver</label>
                     <select id="assign-driver" required>
@@ -225,19 +235,76 @@
                 </div>
                 <button type="submit" class="primary-button">Assign Products</button>
             </form>
+            </div>
 
-            <div class="assignment-history">
-                <h3>Assignment History</h3>
-                <div class="driver-selector">
-                    <label for="history-driver">Filter by Driver</label>
-                    <select id="history-driver">
-                        <option value="">All Drivers</option>
-                        <!-- Drivers will be loaded here -->
-                    </select>
+            <!-- Transfer Stock Section -->
+            <div id="transfer-stock-section" class="section" style="display: none;">
+                <h3>Transfer/Collect Stock</h3>
+                <form id="transfer-form" class="action-form">
+                    <div class="form-group">
+                        <label for="transfer-from-driver">From Driver</label>
+                        <select id="transfer-from-driver" required>
+                            <option value="">-- Select Source Driver --</option>
+                            <!-- Drivers will be loaded here -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="transfer-product">Select Product</label>
+                        <select id="transfer-product" required>
+                            <option value="">-- Select Product --</option>
+                            <!-- Products will be filtered by from-driver selection -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="transfer-to-driver">To Destination</label>
+                        <select id="transfer-to-driver" required>
+                            <option value="">-- Select Destination --</option>
+                            <option value="main-inventory">📦 Main Inventory (Collect Stock)</option>
+                            <!-- Other drivers will be loaded here -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="transfer-quantity">Quantity</label>
+                        <input type="number" id="transfer-quantity" min="1" required>
+                        <small id="available-quantity-display" class="quantity-info"></small>
+                    </div>
+                    <button type="submit" class="primary-button">Transfer Stock</button>
+                </form>
+            </div>
+
+            <div class="history-section">
+                <div class="history-tabs">
+                    <button id="show-assignment-history" class="history-tab active">Assignment History</button>
+                    <button id="show-transfer-history" class="history-tab">Transfer History</button>
                 </div>
-                <ul id="assignment-history-list" class="data-list">
-                    <!-- Assignment history will be loaded here -->
-                </ul>
+
+                <!-- Assignment History -->
+                <div id="assignment-history-section" class="history-content">
+                    <div class="driver-selector">
+                        <label for="history-driver">Filter by Driver</label>
+                        <select id="history-driver">
+                            <option value="">All Drivers</option>
+                            <!-- Drivers will be loaded here -->
+                        </select>
+                    </div>
+                    <ul id="assignment-history-list" class="data-list">
+                        <!-- Assignment history will be loaded here -->
+                    </ul>
+                </div>
+
+                <!-- Transfer History -->
+                <div id="transfer-history-section" class="history-content" style="display: none;">
+                    <div class="driver-selector">
+                        <label for="transfer-history-filter">Filter by Driver</label>
+                        <select id="transfer-history-filter">
+                            <option value="">All Transfers</option>
+                            <!-- Drivers will be loaded here -->
+                        </select>
+                    </div>
+                    <ul id="transfer-history-list" class="data-list">
+                        <!-- Transfer history will be loaded here -->
+                    </ul>
+                </div>
             </div>
         </div>
     </template>
@@ -309,19 +376,6 @@
                     
                     <button type="button" id="add-line-item" class="secondary-button">Add Another Item</button>
                     
-                    <div class="form-group">
-                        <label>Delivery Method</label>
-                        <div class="radio-group">
-                            <label>
-                                <input type="radio" name="delivery-method" value="Delivery" required>
-                                Delivery
-                            </label>
-                            <label>
-                                <input type="radio" name="delivery-method" value="Pick up" required>
-                                Pick up
-                            </label>
-                        </div>
-                    </div>
                     
                     <div class="form-group total-amount">
                         <label for="total-amount">Total Amount</label>

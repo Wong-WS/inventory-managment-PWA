@@ -121,17 +121,27 @@ const MyEarningsModule = {
   getFilteredOrders(driverId, period, date) {
     const allOrders = DB.getOrdersByDriver(driverId);
     
-    // Only include completed orders
-    const completedOrders = allOrders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
+    // Include completed orders and cancelled orders where driver should be paid
+    const paidOrders = allOrders.filter(order => {
+      if (order.status === DB.ORDER_STATUS.COMPLETED) {
+        return true;
+      }
+      // Include cancelled orders where driver should still be paid (delivery method remains 'Paid')
+      if (order.status === DB.ORDER_STATUS.CANCELLED) {
+        return order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery';
+      }
+      return false;
+    });
     
     if (!date) {
-      return completedOrders;
+      return paidOrders;
     }
 
     const targetDate = new Date(date);
     
-    return completedOrders.filter(order => {
-      const orderDate = new Date(order.completedAt || order.createdAt);
+    return paidOrders.filter(order => {
+      // Use completedAt for completed orders, cancelledAt for cancelled orders, or createdAt as fallback
+      const orderDate = new Date(order.completedAt || order.cancelledAt || order.createdAt);
       
       switch(period) {
         case 'day':
@@ -155,24 +165,36 @@ const MyEarningsModule = {
 
   // Calculate earnings from orders
   calculateEarnings(orders) {
-    const deliveryOrders = orders.filter(order => order.deliveryMethod === 'Delivery');
-    const pickupOrders = orders.filter(order => order.deliveryMethod === 'Pick up');
+    // Separate completed and cancelled orders
+    const completedOrders = orders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
+    const cancelledOrders = orders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
     
-    const totalSales = orders.reduce((sum, order) => sum + order.totalAmount, 0);
-    const deliveryCount = deliveryOrders.length;
-    const driverSalary = deliveryCount * this.DELIVERY_FEE;
+    // For sales metrics, only count completed orders
+    const totalSales = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+    
+    // For driver salary, count paid orders from both completed and cancelled
+    const paidOrders = orders.filter(order => order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery');
+    const freeOrders = orders.filter(order => order.deliveryMethod === 'Free' || order.deliveryMethod === 'Pick up');
+    
+    const paidCount = paidOrders.length;
+    const driverSalary = paidCount * this.DELIVERY_FEE;
+    
+    // Boss collection = Total completed sales - ALL driver payments (completed + cancelled paid)
+    // This is because driver gets paid from business regardless of order completion
     const bossCollection = totalSales - driverSalary;
 
     return {
-      totalSales,
-      totalOrders: orders.length,
-      deliveryCount,
-      pickupCount: pickupOrders.length,
-      driverSalary,
-      bossCollection,
-      deliveryOrders,
-      pickupOrders,
-      allOrders: orders
+      totalSales, // Only completed orders
+      totalOrders: completedOrders.length, // Only completed orders for sales metrics
+      deliveryCount: paidCount, // Keep old property name for compatibility (includes cancelled paid orders)
+      pickupCount: freeOrders.length,
+      driverSalary, // Includes completed + cancelled paid orders
+      bossCollection, // Based on completed sales only
+      deliveryOrders: paidOrders, // Keep old property name for compatibility
+      pickupOrders: freeOrders,
+      allOrders: orders, // All orders for display purposes
+      completedOrders,
+      cancelledOrders
     };
   },
 
@@ -185,7 +207,7 @@ const MyEarningsModule = {
       totalSalesAmount.textContent = `$${earnings.totalSales.toFixed(2)}`;
     }
     if (totalSalesDetail) {
-      totalSalesDetail.textContent = `${earnings.totalOrders} orders`;
+      totalSalesDetail.textContent = `${earnings.totalOrders} completed orders`;
     }
 
     // Driver salary
@@ -195,7 +217,14 @@ const MyEarningsModule = {
       driverSalaryAmount.textContent = `$${earnings.driverSalary.toFixed(2)}`;
     }
     if (driverSalaryDetail) {
-      driverSalaryDetail.textContent = `${earnings.deliveryCount} deliveries × $30`;
+      const completedPaidCount = earnings.completedOrders.filter(order => order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery').length;
+      const cancelledPaidCount = earnings.cancelledOrders.filter(order => order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery').length;
+      
+      if (cancelledPaidCount > 0) {
+        driverSalaryDetail.textContent = `${completedPaidCount} completed + ${cancelledPaidCount} cancelled (paid) × $30`;
+      } else {
+        driverSalaryDetail.textContent = `${earnings.deliveryCount} paid deliveries × $30`;
+      }
     }
 
     // Boss collection
@@ -264,29 +293,30 @@ const MyEarningsModule = {
     const div = document.createElement('div');
     div.className = `earnings-item ${order.deliveryMethod.toLowerCase().replace(' ', '-')}`;
     
-    const completedDate = new Date(order.completedAt || order.createdAt);
+    const completedDate = new Date(order.completedAt || order.cancelledAt || order.createdAt);
     const formattedDate = completedDate.toLocaleDateString();
     const formattedTime = completedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
-    const isDelivery = order.deliveryMethod === 'Delivery';
-    const earningsAmount = isDelivery ? this.DELIVERY_FEE : 0;
+    const isPaid = order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery';
+    const earningsAmount = isPaid ? this.DELIVERY_FEE : 0;
     
     div.innerHTML = `
       <div class="earnings-item-header">
         <div class="order-info">
           <div class="order-id">Order #${order.id.slice(-6).toUpperCase()}</div>
           <div class="order-date">${formattedDate} at ${formattedTime}</div>
+          <div class="order-status ${order.status.toLowerCase()}">${order.status.charAt(0).toUpperCase() + order.status.slice(1)}</div>
         </div>
         <div class="order-amounts">
           <div class="sale-amount">$${order.totalAmount.toFixed(2)}</div>
-          <div class="earnings-amount ${isDelivery ? 'paid' : 'free'}">
-            ${isDelivery ? `+$${earningsAmount.toFixed(2)}` : 'Free'}
+          <div class="earnings-amount ${isPaid ? 'paid' : 'free'}">
+            ${isPaid ? `+$${earningsAmount.toFixed(2)}` : 'Free'}
           </div>
         </div>
       </div>
       <div class="earnings-item-details">
         <div class="delivery-info">
-          <i class="fas ${isDelivery ? 'fa-truck' : 'fa-store'}"></i>
+          <i class="fas ${isPaid ? 'fa-truck' : 'fa-store'}"></i>
           <span>${order.deliveryMethod}</span>
         </div>
         <div class="customer-info">
@@ -672,6 +702,35 @@ const MyEarningsModule = {
         .customer-info,
         .customer-description {
           font-size: 0.85rem;
+        }
+        
+        .order-status {
+          font-size: 0.75rem;
+          padding: 0.25rem 0.5rem;
+          border-radius: 12px;
+          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-top: 0.25rem;
+          display: inline-block;
+        }
+        
+        .order-status.completed {
+          background: #d4edda;
+          color: #155724;
+        }
+        
+        .order-status.cancelled {
+          background: #f8d7da;
+          color: #721c24;
+        }
+        
+        .earnings-item.paid {
+          border-left: 4px solid #28a745;
+        }
+        
+        .earnings-item.free {
+          border-left: 4px solid #6c757d;
         }
       }
     `;

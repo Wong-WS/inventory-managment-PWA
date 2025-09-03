@@ -13,6 +13,7 @@ const DB = {
     ORDERS: 'inventory_orders',
     USERS: 'inventory_users',
     SESSION: 'inventory_session',
+    STOCK_TRANSFERS: 'inventory_stock_transfers',
   },
 
   // User roles enumeration
@@ -57,6 +58,9 @@ const DB = {
     }
     if (!localStorage.getItem(this.KEYS.SESSION)) {
       localStorage.setItem(this.KEYS.SESSION, JSON.stringify(null));
+    }
+    if (!localStorage.getItem(this.KEYS.STOCK_TRANSFERS)) {
+      localStorage.setItem(this.KEYS.STOCK_TRANSFERS, JSON.stringify([]));
     }
     
     // Create default admin user if no users exist
@@ -1011,7 +1015,7 @@ const DB = {
       salesRepId: sale.salesRepId || null, // If salesRepId exists in old data
       customerAddress: sale.customerAddress,
       customerDescription: sale.customerDescription || '',
-      deliveryMethod: sale.deliveryMethod || 'Delivery',
+      deliveryMethod: sale.deliveryMethod || 'Paid',
       totalAmount: sale.totalAmount,
       status: this.ORDER_STATUS.COMPLETED, // All existing sales become completed orders
       lineItems: sale.lineItems || [],
@@ -1294,7 +1298,7 @@ const DB = {
       salesRepId: session.userId, // Track who created the order
       customerAddress: orderData.customerAddress.trim(),
       customerDescription: orderData.customerDescription ? orderData.customerDescription.trim() : '',
-      deliveryMethod: orderData.deliveryMethod || 'Delivery',
+      deliveryMethod: orderData.deliveryMethod || 'Paid',
       totalAmount: parseFloat(orderData.totalAmount) || 0,
       status: this.ORDER_STATUS.PENDING,
       lineItems: orderData.lineItems || [],
@@ -1375,9 +1379,10 @@ const DB = {
   /**
    * Cancel an order and restore inventory
    * @param {string} id - Order ID
+   * @param {boolean} payDriver - Whether to pay the driver (default: false)
    * @returns {boolean} Success status
    */
-  cancelOrder(id) {
+  cancelOrder(id, payDriver = false) {
     const order = this.getOrderById(id);
     if (!order) {
       return false;
@@ -1395,11 +1400,18 @@ const DB = {
       this.save(this.KEYS.SALES, sales);
     }
 
-    // Update order status
-    this.updateOrder(id, { 
+    // Update order status and payment method based on driver payment choice
+    const updateData = { 
       status: this.ORDER_STATUS.CANCELLED,
       cancelledAt: new Date().toISOString()
-    });
+    };
+    
+    // If not paying driver, change delivery method to 'Free' for earnings calculation
+    if (!payDriver) {
+      updateData.deliveryMethod = 'Free';
+    }
+    
+    this.updateOrder(id, updateData);
 
     return true;
   },
@@ -1614,6 +1626,99 @@ const DB = {
       totalAmount: todayOrders.reduce((sum, order) => sum + order.totalAmount, 0),
       completedAmount: completed.reduce((sum, order) => sum + order.totalAmount, 0)
     };
+  },
+
+  // ============ STOCK TRANSFER METHODS ============
+
+  // Transfer stock between drivers or collect back to main inventory
+  transferStock(fromDriverId, toDriverId, productId, quantity) {
+    if (!fromDriverId || !productId || !quantity || quantity <= 0) {
+      throw new Error('Invalid transfer parameters');
+    }
+
+    // Check if source driver has sufficient stock
+    const driverInventory = this.getDriverInventory(fromDriverId);
+    const productInventory = driverInventory.find(item => item.id === productId);
+    
+    if (!productInventory || productInventory.remaining < quantity) {
+      const product = this.getProductById(productId);
+      const availableQty = productInventory ? productInventory.remaining : 0;
+      throw new Error(`Insufficient stock. ${product?.name || 'Product'} has only ${availableQty} units available.`);
+    }
+
+    const transferId = this.generateId();
+    const transferData = {
+      id: transferId,
+      fromDriverId,
+      toDriverId: toDriverId === 'main-inventory' ? null : toDriverId,
+      productId,
+      quantity,
+      transferType: toDriverId === 'main-inventory' ? 'collect' : 'transfer',
+      transferredAt: new Date().toISOString(),
+      createdBy: this.getCurrentSession()?.userId || null
+    };
+
+    // Record the transfer
+    const transfers = this.getStockTransfers();
+    transfers.push(transferData);
+    localStorage.setItem(this.KEYS.STOCK_TRANSFERS, JSON.stringify(transfers));
+
+    // Handle the actual stock movement
+    if (toDriverId === 'main-inventory') {
+      // Collect stock back to main inventory
+      this.collectStockToMain(productId, quantity);
+    } else {
+      // Transfer to another driver (create new assignment)
+      this.addAssignmentFromTransfer(toDriverId, productId, quantity);
+    }
+
+    return transferData;
+  },
+
+  // Collect stock back to main inventory
+  collectStockToMain(productId, quantity) {
+    const products = this.getAllProducts();
+    const productIndex = products.findIndex(p => p.id === productId);
+    
+    if (productIndex === -1) {
+      throw new Error('Product not found');
+    }
+
+    products[productIndex].totalQuantity += quantity;
+    localStorage.setItem(this.KEYS.PRODUCTS, JSON.stringify(products));
+  },
+
+  // Add assignment from transfer (doesn't deduct from main inventory)
+  addAssignmentFromTransfer(driverId, productId, quantity) {
+    const assignmentId = this.generateId();
+    const assignmentData = {
+      id: assignmentId,
+      driverId,
+      productId,
+      quantity,
+      assignedAt: new Date().toISOString(),
+      source: 'transfer' // Mark as transfer source
+    };
+
+    const assignments = this.getAllAssignments();
+    assignments.push(assignmentData);
+    localStorage.setItem(this.KEYS.ASSIGNMENTS, JSON.stringify(assignments));
+
+    return assignmentData;
+  },
+
+  // Get all stock transfers
+  getStockTransfers() {
+    const transfers = localStorage.getItem(this.KEYS.STOCK_TRANSFERS);
+    return transfers ? JSON.parse(transfers) : [];
+  },
+
+  // Get transfers filtered by driver (either from or to)
+  getTransfersByDriver(driverId) {
+    const transfers = this.getStockTransfers();
+    return transfers.filter(transfer => 
+      transfer.fromDriverId === driverId || transfer.toDriverId === driverId
+    );
   }
 };
 
