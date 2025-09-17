@@ -5,7 +5,7 @@
 
 const UsersModule = {
   // Initialize the users module
-  init() {
+  async init() {
     // Check if user is admin
     if (!DB.isAdmin()) {
       alert('Access denied. Admin privileges required.');
@@ -13,8 +13,8 @@ const UsersModule = {
     }
 
     this.bindEvents();
-    this.loadUsers();
-    this.updateDriverDropdown();
+    await this.loadUsers();
+    await this.updateDriverDropdown();
   },
 
   // Bind event listeners
@@ -102,12 +102,12 @@ const UsersModule = {
       this.handleRoleChange(); // Reset driver group visibility
 
       // Reload users list and update driver dropdown
-      this.loadUsers();
-      this.updateDriverDropdown();
-      
+      await this.loadUsers();
+      await this.updateDriverDropdown();
+
       // Update driver dropdowns in other modules
       if (typeof DriversModule !== 'undefined') {
-        DriversModule.updateDriverDropdowns();
+        await DriversModule.updateDriverDropdowns();
       }
       
       this.showNotification(message);
@@ -117,11 +117,11 @@ const UsersModule = {
   },
 
   // Load and display users
-  loadUsers() {
+  async loadUsers() {
     const usersList = document.getElementById('users-list');
     if (!usersList) return;
 
-    const users = DB.getAllUsers();
+    const users = await DB.getAllUsers();
     usersList.innerHTML = '';
 
     if (users.length === 0) {
@@ -129,13 +129,13 @@ const UsersModule = {
       return;
     }
 
-    users.forEach(user => {
+    for (const user of users) {
       const li = document.createElement('li');
-      
+
       // Get driver name if user is linked to a driver
       let driverInfo = '';
       if (user.role === 'driver' && user.driverId) {
-        const driver = DB.getDriverById(user.driverId);
+        const driver = await DB.getDriverById(user.driverId);
         driverInfo = driver ? ` → ${driver.name} (${driver.phone})` : ' → Driver not found';
       } else if (user.role === 'driver' && !user.driverId) {
         driverInfo = ' → <span style="color: #e74c3c;">No driver profile linked</span>';
@@ -180,17 +180,17 @@ const UsersModule = {
       `;
       
       usersList.appendChild(li);
-    });
+    }
   },
 
   // Update driver dropdown for user creation
-  updateDriverDropdown() {
+  async updateDriverDropdown() {
     const driverSelect = document.getElementById('user-driver');
     if (!driverSelect) return;
 
-    const drivers = DB.getAllDrivers();
-    const users = DB.getAllUsers();
-    
+    const drivers = await DB.getAllDrivers();
+    const users = await DB.getAllUsers();
+
     // Get list of driver IDs that are already linked to users
     const linkedDriverIds = users.filter(user => user.driverId).map(user => user.driverId);
 
@@ -226,8 +226,8 @@ const UsersModule = {
   async deactivateUser(userId) {
     if (confirm('Are you sure you want to deactivate this user?')) {
       try {
-        DB.deactivateUser(userId);
-        this.loadUsers();
+        await DB.deactivateUser(userId);
+        await this.loadUsers();
         this.showNotification('User deactivated successfully');
       } catch (error) {
         alert(`Failed to deactivate user: ${error.message}`);
@@ -239,7 +239,7 @@ const UsersModule = {
   async activateUser(userId) {
     try {
       await DB.updateUser(userId, { isActive: true });
-      this.loadUsers();
+      await this.loadUsers();
       this.showNotification('User activated successfully');
     } catch (error) {
       alert(`Failed to activate user: ${error.message}`);
@@ -265,7 +265,7 @@ const UsersModule = {
 
   // Link user to existing driver profile
   async linkToDriver(userId) {
-    const availableDrivers = this.getUnlinkedDrivers();
+    const availableDrivers = await this.getUnlinkedDrivers();
     
     if (availableDrivers.length === 0) {
       alert('No unlinked driver profiles available. Create a new driver profile first.');
@@ -283,8 +283,8 @@ const UsersModule = {
     if (selectedDriverId && availableDrivers.find(d => d.id === selectedDriverId)) {
       try {
         await DB.linkUserToDriver(userId, selectedDriverId);
-        this.loadUsers();
-        this.updateDriverDropdown();
+        await this.loadUsers();
+        await this.updateDriverDropdown();
         this.showNotification('User linked to driver successfully');
       } catch (error) {
         alert(`Failed to link user to driver: ${error.message}`);
@@ -294,7 +294,7 @@ const UsersModule = {
 
   // Create new driver profile for user
   async createDriverProfile(userId) {
-    const user = DB.getUserById(userId);
+    const user = await DB.getUserById(userId);
     if (!user) {
       alert('User not found');
       return;
@@ -312,12 +312,12 @@ const UsersModule = {
       
       await DB.updateUser(userId, { driverId: newDriver.id });
       
-      this.loadUsers();
-      this.updateDriverDropdown();
-      
+      await this.loadUsers();
+      await this.updateDriverDropdown();
+
       if (typeof DriversModule !== 'undefined') {
-        DriversModule.loadDriversList();
-        DriversModule.updateDriverDropdowns();
+        await DriversModule.loadDriversList();
+        await DriversModule.updateDriverDropdowns();
       }
       
       this.showNotification(`Driver profile created for ${user.name}`);
@@ -328,19 +328,19 @@ const UsersModule = {
 
   // Unlink user from driver
   async unlinkFromDriver(userId) {
-    const user = DB.getUserById(userId);
+    const user = await DB.getUserById(userId);
     if (!user || !user.driverId) {
       return;
     }
-    
-    const driver = DB.getDriverById(user.driverId);
+
+    const driver = await DB.getDriverById(user.driverId);
     const driverName = driver ? driver.name : 'Unknown Driver';
     
     if (confirm(`Are you sure you want to unlink ${user.name} from driver profile "${driverName}"?`)) {
       try {
         await DB.unlinkUserFromDriver(userId);
-        this.loadUsers();
-        this.updateDriverDropdown();
+        await this.loadUsers();
+        await this.updateDriverDropdown();
         this.showNotification('User unlinked from driver successfully');
       } catch (error) {
         alert(`Failed to unlink user: ${error.message}`);
@@ -349,9 +349,9 @@ const UsersModule = {
   },
 
   // Get list of drivers not linked to any user
-  getUnlinkedDrivers() {
-    const drivers = DB.getAllDrivers();
-    const users = DB.getAllUsers();
+  async getUnlinkedDrivers() {
+    const drivers = await DB.getAllDrivers();
+    const users = await DB.getAllUsers();
     const linkedDriverIds = users.filter(user => user.driverId).map(user => user.driverId);
     
     return drivers.filter(driver => !linkedDriverIds.includes(driver.id));
@@ -366,3 +366,7 @@ const UsersModule = {
     }
   }
 };
+
+// Export the module and make it globally available
+export default UsersModule;
+window.UsersModule = UsersModule;

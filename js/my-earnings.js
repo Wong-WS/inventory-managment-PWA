@@ -13,16 +13,16 @@ const MyEarningsModule = {
   currentFilter: 'delivery',
 
   // Initialize the module
-  init() {
+  async init() {
     console.log('MyEarningsModule.init() called');
-    
+
     // Set default date to today
     this.currentDate = new Date().toISOString().split('T')[0];
-    
+
     // Initialize UI
     this.setupUI();
     this.bindEvents();
-    this.loadEarnings();
+    await this.loadEarnings();
   },
 
   // Set up the UI elements
@@ -47,26 +47,26 @@ const MyEarningsModule = {
     // Period filter change
     const periodSelect = document.getElementById('earnings-period');
     if (periodSelect) {
-      periodSelect.addEventListener('change', () => {
+      periodSelect.addEventListener('change', async () => {
         this.currentPeriod = periodSelect.value;
-        this.loadEarnings();
+        await this.loadEarnings();
       });
     }
 
     // Date filter change
     const dateInput = document.getElementById('earnings-date');
     if (dateInput) {
-      dateInput.addEventListener('change', () => {
+      dateInput.addEventListener('change', async () => {
         this.currentDate = dateInput.value;
-        this.loadEarnings();
+        await this.loadEarnings();
       });
     }
 
     // Refresh button
     const refreshBtn = document.getElementById('refresh-earnings');
     if (refreshBtn) {
-      refreshBtn.addEventListener('click', () => {
-        this.loadEarnings();
+      refreshBtn.addEventListener('click', async () => {
+        await this.loadEarnings();
       });
     }
 
@@ -86,9 +86,9 @@ const MyEarningsModule = {
   },
 
   // Load earnings data and update UI
-  loadEarnings() {
+  async loadEarnings() {
     console.log('Loading earnings for period:', this.currentPeriod, 'date:', this.currentDate);
-    
+
     // Get current user and driver ID
     const session = DB.getCurrentSession();
     if (!session) {
@@ -96,7 +96,7 @@ const MyEarningsModule = {
       return;
     }
 
-    const user = DB.getCurrentUser();
+    const user = await DB.getCurrentUser();
     const driverId = user ? user.driverId : null;
 
     if (!driverId) {
@@ -105,7 +105,7 @@ const MyEarningsModule = {
     }
 
     // Get filtered orders for the driver
-    const orders = this.getFilteredOrders(driverId, this.currentPeriod, this.currentDate);
+    const orders = await this.getFilteredOrders(driverId, this.currentPeriod, this.currentDate);
     console.log('Filtered orders:', orders);
 
     // Calculate earnings
@@ -118,8 +118,8 @@ const MyEarningsModule = {
   },
 
   // Get filtered orders based on period and date
-  getFilteredOrders(driverId, period, date) {
-    const allOrders = DB.getOrdersByDriver(driverId);
+  async getFilteredOrders(driverId, period, date) {
+    const allOrders = await DB.getOrdersByDriver(driverId);
     
     // Include completed orders and cancelled orders where driver should be paid
     const paidOrders = allOrders.filter(order => {
@@ -737,3 +737,7 @@ const MyEarningsModule = {
     document.head.appendChild(styles);
   }
 };
+
+// Export the module and make it globally available
+export default MyEarningsModule;
+window.MyEarningsModule = MyEarningsModule;

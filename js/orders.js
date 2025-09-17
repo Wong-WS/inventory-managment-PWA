@@ -16,14 +16,14 @@ const OrdersModule = {
   },
 
   // Validate if inventory is available for the selected quantity type
-  validateInventoryAvailability(driverId, productId, category, customQuantity = 0) {
+  async validateInventoryAvailability(driverId, productId, category, customQuantity = 0) {
     if (!driverId || !productId || !category) return false;
-    
-    const driverInventory = DB.getDriverInventory(driverId);
+
+    const driverInventory = await DB.getDriverInventory(driverId);
     const productInventory = driverInventory.find(item => item.id === productId);
-    
+
     if (!productInventory) return false;
-    
+
     const requiredAmount = this.getDeductionAmount(category, customQuantity);
     return productInventory.remaining >= requiredAmount;
   },
@@ -35,23 +35,23 @@ const OrdersModule = {
   },
 
   // Validate all line items when driver changes
-  validateAllLineItems() {
+  async validateAllLineItems() {
     const lineItemElements = document.querySelectorAll('.line-item');
     const orderDriverSelect = document.getElementById('order-driver');
     const driverId = orderDriverSelect ? orderDriverSelect.value : '';
-    
+
     if (!driverId) return;
-    
-    lineItemElements.forEach((element) => {
+
+    for (const element of lineItemElements) {
       const index = element.dataset.index;
       const productSelect = document.getElementById(`line-item-product-${index}`);
       const categorySelect = document.getElementById(`line-item-category-${index}`);
       const customQuantityInput = document.getElementById(`line-item-custom-quantity-${index}`);
-      
+
       if (productSelect && categorySelect && productSelect.value && categorySelect.value) {
         const customQuantity = customQuantityInput ? customQuantityInput.value : 0;
-        const isValid = this.validateInventoryAvailability(driverId, productSelect.value, categorySelect.value, customQuantity);
-        
+        const isValid = await this.validateInventoryAvailability(driverId, productSelect.value, categorySelect.value, customQuantity);
+
         if (!isValid) {
           // Reset invalid selections
           categorySelect.value = '';
@@ -63,9 +63,9 @@ const OrdersModule = {
             customQuantityInput.required = false;
             customQuantityInput.value = '';
           }
-          
+
           // Show error message
-          const driverInventory = DB.getDriverInventory(driverId);
+          const driverInventory = await DB.getDriverInventory(driverId);
           const productInventory = driverInventory.find(item => item.id === productSelect.value);
           if (productInventory) {
             const required = this.getDeductionAmount(categorySelect.value, customQuantity);
@@ -73,17 +73,17 @@ const OrdersModule = {
           }
         }
       }
-    });
+    }
   },
 
   // Initialize the orders module
-  init() {
+  async init() {
     this.lineItemCounter = 0;
     this.currentView = 'create'; // 'create' or 'manage'
     this.bindEvents();
-    this.loadOrders();
-    this.updateDriverDropdown();
-    this.updateLineItemProductOptions();
+    await this.loadOrders();
+    await this.updateDriverDropdown();
+    await this.updateLineItemProductOptions();
     this.showCreateOrderView(); // Default to create view
   },
 
@@ -92,7 +92,7 @@ const OrdersModule = {
     // Order creation form
     const orderForm = document.getElementById('order-form');
     if (orderForm) {
-      orderForm.addEventListener('submit', this.handleCreateOrder.bind(this));
+      orderForm.addEventListener('submit', async (e) => await this.handleCreateOrder(e));
     }
     
     const addLineItemButton = document.getElementById('add-line-item');
@@ -106,9 +106,9 @@ const OrdersModule = {
     // Update order driver selection
     const orderDriverSelect = document.getElementById('order-driver');
     if (orderDriverSelect) {
-      orderDriverSelect.addEventListener('change', () => {
-        this.updateLineItemProductOptions();
-        this.validateAllLineItems();
+      orderDriverSelect.addEventListener('change', async () => {
+        await this.updateLineItemProductOptions();
+        await this.validateAllLineItems();
       });
     }
 
@@ -121,13 +121,17 @@ const OrdersModule = {
     }
     
     if (manageOrdersBtn) {
-      manageOrdersBtn.addEventListener('click', this.showManageOrdersView.bind(this));
+      manageOrdersBtn.addEventListener('click', async () => {
+        await this.showManageOrdersView();
+      });
     }
 
     // Order status filter
     const statusFilter = document.getElementById('order-status-filter');
     if (statusFilter) {
-      statusFilter.addEventListener('change', this.loadOrders.bind(this));
+      statusFilter.addEventListener('change', async () => {
+        await this.loadOrders();
+      });
     }
 
   },
@@ -147,85 +151,85 @@ const OrdersModule = {
   },
 
   // Show manage orders view
-  showManageOrdersView() {
+  async showManageOrdersView() {
     this.currentView = 'manage';
     const createSection = document.getElementById('create-order-section');
     const manageSection = document.getElementById('manage-orders-section');
     const createBtn = document.getElementById('show-create-order');
     const manageBtn = document.getElementById('show-manage-orders');
-    
+
     if (createSection) createSection.style.display = 'none';
     if (manageSection) manageSection.style.display = 'block';
     if (createBtn) createBtn.classList.remove('active');
     if (manageBtn) manageBtn.classList.add('active');
-    
-    this.loadOrders();
+
+    await this.loadOrders();
   },
 
   // Handle creating a new order
-  handleCreateOrder(event) {
+  async handleCreateOrder(event) {
     event.preventDefault();
-    
+
     const orderDriverSelect = document.getElementById('order-driver');
     const customerAddressInput = document.getElementById('customer-address');
     const customerDescInput = document.getElementById('customer-description');
     const totalAmountInput = document.getElementById('total-amount');
-    
+
     const driverId = orderDriverSelect.value;
     const customerAddress = customerAddressInput.value.trim();
     const customerDescription = customerDescInput.value.trim();
     const totalAmount = parseFloat(totalAmountInput.value);
-    
+
     if (!driverId || !customerAddress) {
       alert('Please select a driver and enter a customer address.');
       return;
     }
-    
+
     if (isNaN(totalAmount) || totalAmount < 0) {
       alert('Total amount is invalid.');
       return;
     }
-    
+
     // Collect line items
     const lineItems = [];
     const lineItemElements = document.querySelectorAll('.line-item');
-    
+
     let valid = true;
-    lineItemElements.forEach((element) => {
+    for (const element of lineItemElements) {
       const index = element.dataset.index;
       const productSelect = document.getElementById(`line-item-product-${index}`);
       const categorySelect = document.getElementById(`line-item-category-${index}`);
       const customQuantityInput = document.getElementById(`line-item-custom-quantity-${index}`);
       const giftCheckbox = document.getElementById(`line-item-gift-${index}`);
-      
+
       const productId = productSelect.value;
       const category = categorySelect.value;
       const customQuantity = customQuantityInput ? parseInt(customQuantityInput.value) : 0;
       const isFreeGift = giftCheckbox.checked;
-      
+
       if (!productId || !category) {
         valid = false;
-        return;
+        break;
       }
-      
+
       // Validate custom quantity for "Quantity by pcs"
       if (category === 'Quantity by pcs' && (isNaN(customQuantity) || customQuantity <= 0)) {
         valid = false;
-        return;
+        break;
       }
-      
-      const product = DB.getProductById(productId);
+
+      const product = await DB.getProductById(productId);
       if (!product) {
         valid = false;
-        return;
+        break;
       }
       
       // Final inventory validation check
-      if (!this.validateInventoryAvailability(driverId, productId, category, customQuantity)) {
-        const driverInventory = DB.getDriverInventory(driverId);
+      if (!(await this.validateInventoryAvailability(driverId, productId, category, customQuantity))) {
+        const driverInventory = await DB.getDriverInventory(driverId);
         const productInventory = driverInventory.find(item => item.id === productId);
         const required = this.getDeductionAmount(category, customQuantity);
-        
+
         if (productInventory) {
           this.showInventoryError(productInventory.name, productInventory.remaining, category, required);
         }
@@ -243,7 +247,7 @@ const OrdersModule = {
         actualQuantity,
         isFreeGift
       });
-    });
+    }
     
     if (!valid || lineItems.length === 0) {
       alert('Please check your line items. Each item must have a valid product and quantity type.');
@@ -261,14 +265,14 @@ const OrdersModule = {
     
     try {
       // Create the order
-      const newOrder = DB.createOrder(orderData);
+      const newOrder = await DB.createOrder(orderData);
       
       // Reset form
-      this.resetOrderForm();
+      await this.resetOrderForm();
       
       // Update driver dropdown and product options
-      this.updateDriverDropdown();
-      this.updateLineItemProductOptions();
+      await this.updateDriverDropdown();
+      await this.updateLineItemProductOptions();
       
       // Update dashboard if it exists
       if (typeof DashboardModule !== 'undefined') {
@@ -276,11 +280,11 @@ const OrdersModule = {
       }
       
       // Show notification
-      const driver = DB.getDriverById(driverId);
+      const driver = await DB.getDriverById(driverId);
       this.showNotification(`Order created for ${driver.name} - $${totalAmount.toFixed(2)} (Status: Pending)`);
       
       // Switch to manage view to show the new order
-      this.showManageOrdersView();
+      await this.showManageOrdersView();
       
     } catch (error) {
       alert(`Failed to create order: ${error.message}`);
@@ -288,23 +292,23 @@ const OrdersModule = {
   },
 
   // Reset the order form
-  resetOrderForm() {
+  async resetOrderForm() {
     const orderForm = document.getElementById('order-form');
     if (orderForm) {
       orderForm.reset();
     }
-    
+
     // Reset line items to just one
     const lineItemsContainer = document.getElementById('line-items-container');
     if (lineItemsContainer) {
       lineItemsContainer.innerHTML = '';
       this.lineItemCounter = 0;
-      this.addLineItem();
+      await this.addLineItem();
     }
   },
 
   // Add a new line item (same as sales module)
-  addLineItem() {
+  async addLineItem() {
     const lineItemsContainer = document.getElementById('line-items-container');
     const index = this.lineItemCounter++;
     
@@ -322,7 +326,7 @@ const OrdersModule = {
         <label for="line-item-product-${index}">Product</label>
         <select class="line-item-product" id="line-item-product-${index}" required>
           <option value="">-- Select Product --</option>
-          ${this.getDriverProductOptions(driverId)}
+          ${await this.getDriverProductOptions(driverId)}
         </select>
       </div>
       <div class="form-group">
@@ -390,22 +394,22 @@ const OrdersModule = {
     const customQuantityInput = document.getElementById(`line-item-custom-quantity-${index}`);
     
     // Validation helper for this line item
-    const validateCurrentSelection = () => {
+    const validateCurrentSelection = async () => {
       const orderDriverSelect = document.getElementById('order-driver');
       const driverId = orderDriverSelect ? orderDriverSelect.value : '';
       const productId = productSelect ? productSelect.value : '';
       const category = categorySelect ? categorySelect.value : '';
       const customQuantity = customQuantityInput ? customQuantityInput.value : 0;
-      
+
       if (!driverId || !productId || !category) return true; // Skip validation if incomplete
-      
-      const isValid = this.validateInventoryAvailability(driverId, productId, category, customQuantity);
-      
+
+      const isValid = await this.validateInventoryAvailability(driverId, productId, category, customQuantity);
+
       if (!isValid) {
-        const driverInventory = DB.getDriverInventory(driverId);
+        const driverInventory = await DB.getDriverInventory(driverId);
         const productInventory = driverInventory.find(item => item.id === productId);
         const required = this.getDeductionAmount(category, customQuantity);
-        
+
         if (productInventory) {
           this.showInventoryError(productInventory.name, productInventory.remaining, category, required);
         }
@@ -416,9 +420,9 @@ const OrdersModule = {
     
     // Listen for product changes
     if (productSelect) {
-      productSelect.addEventListener('change', () => {
+      productSelect.addEventListener('change', async () => {
         if (categorySelect && categorySelect.value) {
-          if (!validateCurrentSelection()) {
+          if (!(await validateCurrentSelection())) {
             // Reset category if validation fails
             categorySelect.value = '';
             if (customQuantityGroup) {
@@ -435,7 +439,7 @@ const OrdersModule = {
     
     // Listen for category changes to show/hide custom quantity input and validate
     if (categorySelect && customQuantityGroup) {
-      categorySelect.addEventListener('change', () => {
+      categorySelect.addEventListener('change', async () => {
         if (categorySelect.value === 'Quantity by pcs') {
           customQuantityGroup.style.display = 'block';
           if (customQuantityInput) {
@@ -447,9 +451,9 @@ const OrdersModule = {
             customQuantityInput.required = false;
             customQuantityInput.value = '';
           }
-          
+
           // Validate non-custom categories
-          if (categorySelect.value && !validateCurrentSelection()) {
+          if (categorySelect.value && !(await validateCurrentSelection())) {
             categorySelect.value = '';
           }
         }
@@ -458,8 +462,8 @@ const OrdersModule = {
     
     // Listen for custom quantity changes
     if (customQuantityInput) {
-      customQuantityInput.addEventListener('change', () => {
-        if (!validateCurrentSelection()) {
+      customQuantityInput.addEventListener('change', async () => {
+        if (!(await validateCurrentSelection())) {
           customQuantityInput.value = '';
         }
       });
@@ -478,7 +482,7 @@ const OrdersModule = {
   },
 
   // Load and display orders
-  loadOrders() {
+  async loadOrders() {
     const ordersList = document.getElementById('orders-list');
     if (!ordersList) return;
 
@@ -492,10 +496,10 @@ const OrdersModule = {
     let orders;
     if (session.role === DB.ROLES.ADMIN) {
       // Admins see all orders
-      orders = selectedStatus ? DB.getOrdersByStatus(selectedStatus) : DB.getAllOrders();
+      orders = selectedStatus ? await DB.getOrdersByStatus(selectedStatus) : await DB.getAllOrders();
     } else {
       // Sales reps see only their own orders
-      const userOrders = DB.getOrdersBySalesRep(session.userId);
+      const userOrders = await DB.getOrdersBySalesRep(session.userId);
       orders = selectedStatus ? userOrders.filter(order => order.status === selectedStatus) : userOrders;
     }
     
@@ -509,10 +513,10 @@ const OrdersModule = {
     // Sort by creation date, newest first
     orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
-    orders.forEach(order => {
-      const driver = DB.getDriverById(order.driverId);
-      const salesRep = DB.getUserById(order.salesRepId);
-      if (!driver) return;
+    for (const order of orders) {
+      const driver = await DB.getDriverById(order.driverId);
+      const salesRep = await DB.getUserById(order.salesRepId);
+      if (!driver) continue;
       
       const li = document.createElement('li');
       li.className = `order-item status-${order.status}`;
@@ -586,7 +590,7 @@ const OrdersModule = {
       `;
       
       ordersList.appendChild(li);
-    });
+    }
 
     // Add event listeners for action buttons
     this.bindOrderActionListeners();
@@ -599,25 +603,25 @@ const OrdersModule = {
     const copyButtons = document.querySelectorAll('.copy-order-btn');
     
     completeButtons.forEach(button => {
-      button.addEventListener('click', (e) => {
+      button.addEventListener('click', async (e) => {
         const orderId = e.target.dataset.orderId;
-        this.completeOrder(orderId);
+        await this.completeOrder(orderId);
       });
     });
     
     cancelButtons.forEach(button => {
-      button.addEventListener('click', (e) => {
+      button.addEventListener('click', async (e) => {
         const orderId = e.target.dataset.orderId;
-        this.cancelOrder(orderId);
+        await this.cancelOrder(orderId);
       });
     });
 
     copyButtons.forEach(button => {
-      button.addEventListener('click', (e) => {
+      button.addEventListener('click', async (e) => {
         const orderId = e.target.dataset.orderId;
-        const order = DB.getOrderById(orderId);
+        const order = await DB.getOrderById(orderId);
         if (order) {
-          this.copyOrderDetails(order);
+          await this.copyOrderDetails(order);
         } else {
           this.showNotification('Order not found');
         }
@@ -626,19 +630,19 @@ const OrdersModule = {
   },
 
   // Complete an order
-  completeOrder(orderId) {
+  async completeOrder(orderId) {
     if (!confirm('Are you sure you want to mark this order as completed?')) {
       return;
     }
-    
+
     try {
-      DB.completeOrder(orderId);
-      this.loadOrders();
+      await DB.completeOrder(orderId);
+      await this.loadOrders();
       this.showNotification('Order marked as completed');
-      
+
       // Update dashboard if it exists
       if (typeof DashboardModule !== 'undefined') {
-        DashboardModule.updateDashboard();
+        await DashboardModule.updateDashboard();
       }
     } catch (error) {
       alert(`Failed to complete order: ${error.message}`);
@@ -646,7 +650,7 @@ const OrdersModule = {
   },
 
   // Cancel an order
-  cancelOrder(orderId) {
+  async cancelOrder(orderId) {
     if (!confirm('Are you sure you want to cancel this order? This will restore the inventory.')) {
       return;
     }
@@ -655,14 +659,14 @@ const OrdersModule = {
     const payDriver = confirm('Pay the driver $30 for this cancelled order?\n\nClick "OK" to pay the driver $30\nClick "Cancel" to not pay the driver');
     
     try {
-      DB.cancelOrder(orderId, payDriver);
+      await DB.cancelOrder(orderId, payDriver);
       const paymentMessage = payDriver ? 'Order cancelled, inventory restored, and driver will be paid $30' : 'Order cancelled, inventory restored, and driver will not be paid';
-      this.loadOrders();
+      await this.loadOrders();
       this.showNotification(paymentMessage);
-      
+
       // Update dashboard if it exists
       if (typeof DashboardModule !== 'undefined') {
-        DashboardModule.updateDashboard();
+        await DashboardModule.updateDashboard();
       }
     } catch (error) {
       alert(`Failed to cancel order: ${error.message}`);
@@ -670,19 +674,19 @@ const OrdersModule = {
   },
   
   // Update driver dropdown
-  updateDriverDropdown() {
+  async updateDriverDropdown() {
     if (typeof DriversModule !== 'undefined') {
-      DriversModule.updateDriverDropdowns();
+      await DriversModule.updateDriverDropdowns();
     }
   },
   
   // Get product options filtered by driver's inventory
-  getDriverProductOptions(driverId) {
+  async getDriverProductOptions(driverId) {
     if (!driverId) {
       return '';
     }
-    
-    const driverInventory = DB.getDriverInventory(driverId);
+
+    const driverInventory = await DB.getDriverInventory(driverId);
     let options = '';
     
     driverInventory
@@ -696,12 +700,12 @@ const OrdersModule = {
   },
   
   // Update line item product options based on selected driver
-  updateLineItemProductOptions() {
+  async updateLineItemProductOptions() {
     const orderDriverSelect = document.getElementById('order-driver');
     if (!orderDriverSelect) return;
-    
+
     const driverId = orderDriverSelect.value;
-    const productOptions = this.getDriverProductOptions(driverId);
+    const productOptions = await this.getDriverProductOptions(driverId);
     
     const lineItemProducts = document.querySelectorAll('.line-item-product');
     lineItemProducts.forEach(select => {
@@ -727,7 +731,7 @@ const OrdersModule = {
 
     try {
       // Get driver information
-      const driver = DB.getDriverById(order.driverId);
+      const driver = await DB.getDriverById(order.driverId);
       if (!driver) {
         this.showNotification('Driver information not found');
         return;
@@ -815,3 +819,7 @@ Created: ${formattedDate}`;
   },
 
 };
+
+// Export the module and make it globally available
+export default OrdersModule;
+window.OrdersModule = OrdersModule;

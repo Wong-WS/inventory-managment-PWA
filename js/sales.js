@@ -89,29 +89,28 @@ const SalesModule = {
   bindEvents() {
     const salesForm = document.getElementById('sales-form');
     if (salesForm) {
-      salesForm.addEventListener('submit', this.handleRecordSale.bind(this));
+      salesForm.addEventListener('submit', async (e) => await this.handleRecordSale(e));
     }
     
     const addLineItemButton = document.getElementById('add-line-item');
     if (addLineItemButton) {
-      addLineItemButton.addEventListener('click', this.addLineItem.bind(this));
+      addLineItemButton.addEventListener('click', async () => await this.addLineItem());
     }
     
-    // Add event listeners for the first line item
-    this.addLineItemListeners(0);
+    // Add event listeners for the first line item (will be handled when addLineItem is called)
     
     // Update sales driver selection
     const salesDriverSelect = document.getElementById('sales-driver');
     if (salesDriverSelect) {
-      salesDriverSelect.addEventListener('change', () => {
-        this.updateLineItemProductOptions();
-        this.validateAllLineItems();
+      salesDriverSelect.addEventListener('change', async () => {
+        await this.updateLineItemProductOptions();
+        await this.validateAllLineItems();
       });
     }
   },
 
   // Handle recording a new sale
-  handleRecordSale(event) {
+  async handleRecordSale(event) {
     event.preventDefault();
     
     const salesDriverSelect = document.getElementById('sales-driver');
@@ -223,7 +222,7 @@ const SalesModule = {
     };
     
     // Add the sale
-    const newSale = DB.addSale(saleData);
+    const newSale = await DB.addSale(saleData);
     
     // Reset form
     const salesForm = document.getElementById('sales-form');
@@ -242,37 +241,37 @@ const SalesModule = {
     if (lineItemsContainer) {
       lineItemsContainer.innerHTML = '';
       this.lineItemCounter = 0;
-      this.addLineItem();
+      await this.addLineItem();
     }
     
     // Update driver dropdown and product options
-    this.updateDriverDropdown();
-    this.updateLineItemProductOptions();
+    await this.updateDriverDropdown();
+    await this.updateLineItemProductOptions();
     
     // Refresh recent sales
-    setTimeout(() => {
-      this.loadRecentSales();
+    setTimeout(async () => {
+      await this.loadRecentSales();
     }, 100);
     
     // Update dashboard if it exists
     if (typeof DashboardModule !== 'undefined') {
-      DashboardModule.updateDashboard();
+      await DashboardModule.updateDashboard();
     }
     
     // Show notification
-    const driver = DB.getDriverById(driverId);
+    const driver = await DB.getDriverById(driverId);
     this.showNotification(`Sale recorded for ${driver.name} - $${totalAmount.toFixed(2)}`);
   },
   
   // Add a new line item
-  addLineItem() {
+  async addLineItem() {
     const lineItemsContainer = document.getElementById('line-items-container');
     const index = this.lineItemCounter++;
-    
+
     const lineItemDiv = document.createElement('div');
     lineItemDiv.className = 'line-item';
     lineItemDiv.dataset.index = index;
-    
+
     // Get the driver ID to filter products
     const salesDriverSelect = document.getElementById('sales-driver');
     const driverId = salesDriverSelect ? salesDriverSelect.value : '';
@@ -283,7 +282,7 @@ const SalesModule = {
         <label for="line-item-product-${index}">Product</label>
         <select class="line-item-product" id="line-item-product-${index}" required>
           <option value="">-- Select Product --</option>
-          ${this.getDriverProductOptions(driverId)}
+          ${await this.getDriverProductOptions(driverId)}
         </select>
       </div>
       <div class="form-group">
@@ -315,7 +314,7 @@ const SalesModule = {
     this.updateRemoveButtons();
     
     // Add event listeners for the new line item
-    this.addLineItemListeners(index);
+    await this.addLineItemListeners(index);
   },
   
   // Update the visibility of remove buttons
@@ -335,35 +334,35 @@ const SalesModule = {
   },
   
   // Add event listeners for line items
-  addLineItemListeners(index) {
+  async addLineItemListeners(index) {
     const lineItemDiv = document.querySelector(`.line-item[data-index="${index}"]`);
     if (!lineItemDiv) return;
-    
+
     const removeButton = lineItemDiv.querySelector('.remove-line-item');
     if (removeButton) {
       removeButton.addEventListener('click', () => this.removeLineItem(index));
     }
-    
+
     // Get references to form elements
     const productSelect = document.getElementById(`line-item-product-${index}`);
     const categorySelect = document.getElementById(`line-item-category-${index}`);
     const customQuantityGroup = document.getElementById(`custom-quantity-group-${index}`);
     const customQuantityInput = document.getElementById(`line-item-custom-quantity-${index}`);
-    
+
     // Validation helper for this line item
-    const validateCurrentSelection = () => {
+    const validateCurrentSelection = async () => {
       const salesDriverSelect = document.getElementById('sales-driver');
       const driverId = salesDriverSelect ? salesDriverSelect.value : '';
       const productId = productSelect ? productSelect.value : '';
       const category = categorySelect ? categorySelect.value : '';
       const customQuantity = customQuantityInput ? customQuantityInput.value : 0;
-      
+
       if (!driverId || !productId || !category) return true; // Skip validation if incomplete
-      
-      const isValid = this.validateInventoryAvailability(driverId, productId, category, customQuantity);
+
+      const isValid = await this.validateInventoryAvailability(driverId, productId, category, customQuantity);
       
       if (!isValid) {
-        const driverInventory = DB.getDriverInventory(driverId);
+        const driverInventory = await DB.getDriverInventory(driverId);
         const productInventory = driverInventory.find(item => item.id === productId);
         const required = this.getDeductionAmount(category, customQuantity);
         
@@ -377,9 +376,9 @@ const SalesModule = {
     
     // Listen for product changes
     if (productSelect) {
-      productSelect.addEventListener('change', () => {
+      productSelect.addEventListener('change', async () => {
         if (categorySelect && categorySelect.value) {
-          if (!validateCurrentSelection()) {
+          if (!(await validateCurrentSelection())) {
             // Reset category if validation fails
             categorySelect.value = '';
             if (customQuantityGroup) {
@@ -396,7 +395,7 @@ const SalesModule = {
     
     // Listen for category changes to show/hide custom quantity input and validate
     if (categorySelect && customQuantityGroup) {
-      categorySelect.addEventListener('change', () => {
+      categorySelect.addEventListener('change', async () => {
         if (categorySelect.value === 'Quantity by pcs') {
           customQuantityGroup.style.display = 'block';
           if (customQuantityInput) {
@@ -410,7 +409,7 @@ const SalesModule = {
           }
           
           // Validate non-custom categories
-          if (categorySelect.value && !validateCurrentSelection()) {
+          if (categorySelect.value && !(await validateCurrentSelection())) {
             categorySelect.value = '';
           }
         }
@@ -419,8 +418,8 @@ const SalesModule = {
     
     // Listen for custom quantity changes
     if (customQuantityInput) {
-      customQuantityInput.addEventListener('change', () => {
-        if (!validateCurrentSelection()) {
+      customQuantityInput.addEventListener('change', async () => {
+        if (!(await validateCurrentSelection())) {
           customQuantityInput.value = '';
         }
       });
@@ -441,27 +440,27 @@ const SalesModule = {
   
   
   // Load recent sales
-  loadRecentSales() {
+  async loadRecentSales() {
     const salesList = document.getElementById('recent-sales-list');
     if (!salesList) return;
-    
-    const sales = DB.getAllSales();
+
+    const sales = await DB.getAllSales();
     salesList.innerHTML = '';
-    
+
     if (sales.length === 0) {
       salesList.innerHTML = '<li class="empty-list">No sales recorded yet.</li>';
       return;
     }
-    
+
     // Sort by date, newest first
     sales.sort((a, b) => new Date(b.saleDate) - new Date(a.saleDate));
-    
+
     // Show only the 10 most recent sales
     const recentSales = sales.slice(0, 10);
-    
-    recentSales.forEach(sale => {
-      const driver = DB.getDriverById(sale.driverId);
-      if (!driver) return;
+
+    for (const sale of recentSales) {
+      const driver = await DB.getDriverById(sale.driverId);
+      if (!driver) continue;
       
       const li = document.createElement('li');
       
@@ -503,23 +502,23 @@ const SalesModule = {
       `;
       
       salesList.appendChild(li);
-    });
+    }
   },
   
   // Update driver dropdown
-  updateDriverDropdown() {
+  async updateDriverDropdown() {
     if (typeof DriversModule !== 'undefined') {
-      DriversModule.updateDriverDropdowns();
+      await DriversModule.updateDriverDropdowns();
     }
   },
   
   // Get product options filtered by driver's inventory
-  getDriverProductOptions(driverId) {
+  async getDriverProductOptions(driverId) {
     if (!driverId) {
       return '';
     }
-    
-    const driverInventory = DB.getDriverInventory(driverId);
+
+    const driverInventory = await DB.getDriverInventory(driverId);
     let options = '';
     
     driverInventory
@@ -533,12 +532,12 @@ const SalesModule = {
   },
   
   // Update line item product options based on selected driver
-  updateLineItemProductOptions() {
+  async updateLineItemProductOptions() {
     const salesDriverSelect = document.getElementById('sales-driver');
     if (!salesDriverSelect) return;
-    
+
     const driverId = salesDriverSelect.value;
-    const productOptions = this.getDriverProductOptions(driverId);
+    const productOptions = await this.getDriverProductOptions(driverId);
     
     const lineItemProducts = document.querySelectorAll('.line-item-product');
     lineItemProducts.forEach(select => {
@@ -555,3 +554,7 @@ const SalesModule = {
     }
   }
 };
+
+// Export the module and make it globally available
+export default SalesModule;
+window.SalesModule = SalesModule;

@@ -3,71 +3,69 @@
  * Handles navigation, tab switching, and dashboard
  */
 
+// Import database
+import { DB } from "./database.js";
+
 const AppModule = {
   // Initialize the application
   init() {
-    console.log('AppModule.init() called');
-    
     // Load the default tab (dashboard)
-    this.loadTab('dashboard');
-    
+    this.loadTab("dashboard").catch((error) => {
+      console.error("Error loading dashboard:", error);
+    });
+
     // Bind event listeners
     this.bindEvents();
-    
+
     // Show welcome notification
-    this.showNotification('Welcome to Inventory Manager!');
+    this.showNotification("Welcome to Inventory Manager!");
   },
-  
+
+
   // Bind event listeners
   bindEvents() {
     // Tab navigation
-    const tabButtons = document.querySelectorAll('.tab-button');
-    tabButtons.forEach(button => {
-      button.addEventListener('click', () => {
+    const tabButtons = document.querySelectorAll(".tab-button");
+    tabButtons.forEach((button) => {
+      button.addEventListener("click", () => {
         const tabId = button.dataset.tab;
-        this.loadTab(tabId);
+        this.loadTab(tabId).catch((error) => {
+          console.error("Error loading tab:", error);
+        });
       });
     });
   },
-  
+
   // Load a specific tab
-  loadTab(tabId) {
-    console.log(`AppModule.loadTab() called with tabId: ${tabId}`);
-    
+  async loadTab(tabId) {
     // Update active tab button
-    const tabButtons = document.querySelectorAll('.tab-button');
-    console.log(`Found ${tabButtons.length} tab buttons`);
-    
-    tabButtons.forEach(button => {
+    const tabButtons = document.querySelectorAll(".tab-button");
+
+    tabButtons.forEach((button) => {
       if (button.dataset.tab === tabId) {
-        button.classList.add('active');
+        button.classList.add("active");
       } else {
-        button.classList.remove('active');
+        button.classList.remove("active");
       }
     });
-    
+
     // Get tab template and load content
     const template = document.getElementById(`${tabId}-template`);
-    const mainContent = document.getElementById('main-content');
-    
-    console.log('Template and content elements:', {
-      template: !!template,
-      mainContent: !!mainContent
-    });
-    
+    const mainContent = document.getElementById("main-content");
+
     if (template && mainContent) {
-      mainContent.innerHTML = '';
+      mainContent.innerHTML = "";
       mainContent.appendChild(document.importNode(template.content, true));
-      
+
       // Initialize module based on tab
       this.initModuleForTab(tabId);
     } else {
       console.error(`Failed to load tab ${tabId}: template or mainContent not found`);
     }
   },
-  
+
   // Initialize the appropriate module for the current tab
-  initModuleForTab(tabId) {
+  async initModuleForTab(tabId) {
     // Check authentication before initializing modules
     const session = DB.getCurrentSession();
     if (!session) {
@@ -75,80 +73,88 @@ const AppModule = {
     }
 
     // Check if user has access to this tab
-    if (typeof AuthModule !== 'undefined' && !AuthModule.canAccessTab(tabId, session.role)) {
+    if (
+      typeof AuthModule !== "undefined" &&
+      !AuthModule.canAccessTab(tabId, session.role)
+    ) {
       return; // User doesn't have access to this tab
     }
 
-    switch (tabId) {
-      case 'dashboard':
-        if (typeof DashboardModule !== 'undefined') {
-          DashboardModule.init();
-        }
-        break;
-      case 'products':
-        if (typeof ProductsModule !== 'undefined') {
-          ProductsModule.init();
-        }
-        break;
-      case 'drivers':
-        if (typeof DriversModule !== 'undefined') {
-          DriversModule.init();
-        }
-        break;
-      case 'assign':
-        if (typeof AssignmentsModule !== 'undefined') {
-          AssignmentsModule.init();
-        }
-        break;
-      case 'sales':
-        if (typeof SalesModule !== 'undefined') {
-          SalesModule.init();
-        }
-        break;
-      case 'orders':
-        if (typeof OrdersModule !== 'undefined') {
-          OrdersModule.init();
-        }
-        break;
-      case 'my-orders':
-        if (typeof MyOrdersModule !== 'undefined') {
-          MyOrdersModule.init();
-        }
-        break;
-      case 'my-inventory':
-        if (typeof MyInventoryModule !== 'undefined') {
-          MyInventoryModule.init();
-        }
-        break;
-      case 'my-earnings':
-        if (typeof MyEarningsModule !== 'undefined') {
-          MyEarningsModule.init();
-        }
-        break;
-      case 'reports':
-        if (typeof ReportsModule !== 'undefined') {
-          ReportsModule.init();
-        }
-        break;
-      case 'users':
-        if (typeof UsersModule !== 'undefined') {
-          UsersModule.init();
-        }
-        break;
+    try {
+      switch (tabId) {
+        case "dashboard":
+          if (typeof DashboardModule !== "undefined") {
+            await DashboardModule.init();
+          }
+          break;
+        case "products":
+          if (typeof ProductsModule !== "undefined") {
+            await ProductsModule.init();
+          }
+          break;
+        case "drivers":
+          if (typeof DriversModule !== "undefined") {
+            await DriversModule.init();
+          }
+          break;
+        case "assign":
+          if (typeof AssignmentsModule !== "undefined") {
+            await AssignmentsModule.init();
+          }
+          break;
+        case "sales":
+          if (typeof SalesModule !== "undefined") {
+            await SalesModule.init();
+          }
+          break;
+        case "orders":
+          if (typeof OrdersModule !== "undefined") {
+            await OrdersModule.init();
+          }
+          break;
+        case "my-orders":
+          if (typeof MyOrdersModule !== "undefined") {
+            await MyOrdersModule.init();
+          }
+          break;
+        case "my-inventory":
+          if (typeof MyInventoryModule !== "undefined") {
+            await MyInventoryModule.init();
+          }
+          break;
+        case "my-earnings":
+          if (typeof MyEarningsModule !== "undefined") {
+            await MyEarningsModule.init();
+          }
+          break;
+        case "reports":
+          if (typeof ReportsModule !== "undefined") {
+            await ReportsModule.init();
+          }
+          break;
+        case "users":
+          if (typeof UsersModule !== "undefined") {
+            await UsersModule.init();
+          }
+          break;
+      }
+    } catch (error) {
+      console.error(`Error initializing ${tabId} module:`, error);
+      this.showNotification(`Error loading ${tabId}. Please try again.`);
     }
   },
-  
+
   // Show a notification to the user
   showNotification(message) {
     // Create notification element
-    const notification = document.createElement('div');
-    notification.className = 'notification';
+    const notification = document.createElement("div");
+    notification.className = "notification";
     notification.textContent = message;
-    
+
     // Add styles if they don't exist yet
-    if (!document.getElementById('notification-styles')) {
-      const styles = document.createElement('style');
-      styles.id = 'notification-styles';
+    if (!document.getElementById("notification-styles")) {
+      const styles = document.createElement("style");
+      styles.id = "notification-styles";
       styles.textContent = `
         .notification {
           position: fixed;
@@ -172,18 +178,18 @@ const AppModule = {
       `;
       document.head.appendChild(styles);
     }
-    
+
     // Add to document
     document.body.appendChild(notification);
-    
+
     // Show notification
     setTimeout(() => {
-      notification.classList.add('show');
+      notification.classList.add("show");
     }, 10);
-    
+
     // Hide and remove after 3 seconds
     setTimeout(() => {
-      notification.classList.remove('show');
+      notification.classList.remove("show");
       setTimeout(() => {
         document.body.removeChild(notification);
       }, 300);
@@ -197,58 +203,64 @@ const AppModule = {
  */
 const DashboardModule = {
   // Initialize the dashboard
-  init() {
-    this.updateDashboard();
-    this.loadRecentActivity();
+  async init() {
+    await this.updateDashboard();
+    await this.loadRecentActivity();
   },
-  
+
   // Update dashboard statistics
-  updateDashboard() {
+  async updateDashboard() {
     const session = DB.getCurrentSession();
     if (!session) return;
-    
+
     // Check if user is a driver
     if (session.role === DB.ROLES.DRIVER) {
-      this.updateDriverDashboard(session);
+      await this.updateDriverDashboard();
     } else {
-      this.updateAdminDashboard();
+      await this.updateAdminDashboard();
     }
   },
-  
+
   // Update dashboard for drivers
-  updateDriverDashboard(session) {
-    const dashboardContainer = document.querySelector('.dashboard-container');
+  async updateDriverDashboard() {
+    const dashboardContainer = document.querySelector(".dashboard-container");
     if (!dashboardContainer) return;
-    
+
     // Get driver data
-    const user = DB.getCurrentUser();
+    const user = await DB.getCurrentUser();
     const driverId = user ? user.driverId : null;
-    
+
     if (!driverId) {
-      dashboardContainer.innerHTML = '<div class="error-message">Driver profile not properly configured. Please contact administrator.</div>';
+      dashboardContainer.innerHTML =
+        '<div class="error-message">Driver profile not properly configured. Please contact administrator.</div>';
       return;
     }
-    
-    // Get driver-specific data
-    const inventoryWithAlerts = DB.getDriverInventoryWithAlerts(driverId, 5);
-    const orderSummary = DB.getDriverOrderSummary(driverId);
-    
+
+    // Get driver-specific data (temporarily simplified for Firebase migration)
+    // TODO: These methods need to be converted to async Firebase
+    const inventoryWithAlerts = [];
+    const orderSummary = { todayOrders: 0, todayEarnings: 0, pendingOrders: 0 };
+
     // Count alerts
-    const lowStockCount = inventoryWithAlerts.filter(item => item.isLowStock).length;
-    const outOfStockCount = inventoryWithAlerts.filter(item => item.isOutOfStock).length;
+    const lowStockCount = inventoryWithAlerts.filter(
+      (item) => item.isLowStock
+    ).length;
+    const outOfStockCount = inventoryWithAlerts.filter(
+      (item) => item.isOutOfStock
+    ).length;
     const totalAlerts = lowStockCount + outOfStockCount;
-    
+
     // Get top low stock items (max 5)
     const lowStockItems = inventoryWithAlerts
-      .filter(item => item.isLowStock || item.isOutOfStock)
+      .filter((item) => item.isLowStock || item.isOutOfStock)
       .sort((a, b) => a.remaining - b.remaining)
       .slice(0, 5);
-    
+
     // Update dashboard cards with driver-specific content
     dashboardContainer.innerHTML = `
       <h2>Driver Dashboard</h2>
       <div class="dashboard-cards">
-        <div class="card ${totalAlerts > 0 ? 'alert-card' : ''}">
+        <div class="card ${totalAlerts > 0 ? "alert-card" : ""}">
           <h3>Inventory Alerts</h3>
           <p>${totalAlerts}</p>
           <small>${outOfStockCount} out of stock, ${lowStockCount} low stock</small>
@@ -256,9 +268,13 @@ const DashboardModule = {
         <div class="card">
           <h3>Today's Orders</h3>
           <p>${orderSummary.total}</p>
-          <small>${orderSummary.pending.count} pending, ${orderSummary.completed.count} completed</small>
+          <small>${orderSummary.pending.count} pending, ${
+      orderSummary.completed.count
+    } completed</small>
         </div>
-        <div class="card ${orderSummary.pending.count > 0 ? 'pending-card' : ''}">
+        <div class="card ${
+          orderSummary.pending.count > 0 ? "pending-card" : ""
+        }">
           <h3>Pending Revenue</h3>
           <p>$${orderSummary.pending.totalAmount.toFixed(2)}</p>
           <small>From ${orderSummary.pending.count} pending orders</small>
@@ -270,30 +286,42 @@ const DashboardModule = {
         </div>
       </div>
       
-      ${lowStockItems.length > 0 ? `
+      ${
+        lowStockItems.length > 0
+          ? `
         <div class="low-stock-section">
           <h3>
             <i class="fas fa-exclamation-triangle"></i>
             Items Needing Attention
           </h3>
           <div class="low-stock-items">
-            ${lowStockItems.map(item => `
+            ${lowStockItems
+              .map(
+                (item) => `
               <div class="low-stock-item ${item.alertLevel}">
                 <div class="item-info">
                   <strong>${item.productName}</strong>
                   <span class="quantity-info">
                     ${item.remaining} remaining
-                    ${item.isOutOfStock ? ' (OUT OF STOCK)' : ' (LOW STOCK)'}
+                    ${item.isOutOfStock ? " (OUT OF STOCK)" : " (LOW STOCK)"}
                   </span>
                 </div>
                 <div class="alert-indicator">
-                  <i class="fas ${item.isOutOfStock ? 'fa-times-circle' : 'fa-exclamation-circle'}"></i>
+                  <i class="fas ${
+                    item.isOutOfStock
+                      ? "fa-times-circle"
+                      : "fa-exclamation-circle"
+                  }"></i>
                 </div>
               </div>
-            `).join('')}
+            `
+              )
+              .join("")}
           </div>
         </div>
-      ` : ''}
+      `
+          : ""
+      }
       
       <div class="delivery-status">
         <h3>Quick Delivery Summary</h3>
@@ -313,50 +341,46 @@ const DashboardModule = {
         </div>
       </div>
     `;
-    
+
     // Add driver dashboard specific styles
     this.addDriverDashboardStyles();
   },
-  
+
   // Update dashboard for admin/sales rep users
-  updateAdminDashboard() {
+  async updateAdminDashboard() {
     // Update product count
-    const productCount = document.getElementById('product-count');
+    const productCount = document.getElementById("product-count");
     if (productCount) {
-      const products = DB.getAllProducts();
+      const products = await DB.getAllProducts();
       productCount.textContent = products.length;
     }
-    
+
     // Update driver count
-    const driverCount = document.getElementById('driver-count');
+    const driverCount = document.getElementById("driver-count");
     if (driverCount) {
-      const drivers = DB.getAllDrivers();
+      const drivers = await DB.getAllDrivers();
       driverCount.textContent = drivers.length;
     }
-    
-    // Update today's sales (now shows completed orders)
-    const todaySales = document.getElementById('today-sales');
+
+    // Update today's sales (temporarily disabled for Firebase migration)
+    const todaySales = document.getElementById("today-sales");
     if (todaySales) {
-      // Use order system if available, fallback to sales
-      const amount = typeof DB.getTodayOrderAmount === 'function' ? 
-        DB.getTodayOrderAmount() : (typeof DB.getTodaySalesAmount === 'function' ? DB.getTodaySalesAmount() : 0);
-      todaySales.textContent = `$${amount.toFixed(2)}`;
+      todaySales.textContent = "$0.00";
     }
-    
-    // Update total inventory
-    const totalInventory = document.getElementById('total-inventory');
+
+    // Update total inventory (temporarily disabled for Firebase migration)
+    const totalInventory = document.getElementById("total-inventory");
     if (totalInventory) {
-      const count = DB.getTotalInventory();
-      totalInventory.textContent = count;
+      totalInventory.textContent = "0";
     }
   },
-  
+
   // Add styles specific to driver dashboard
   addDriverDashboardStyles() {
-    if (document.getElementById('driver-dashboard-styles')) return;
-    
-    const styles = document.createElement('style');
-    styles.id = 'driver-dashboard-styles';
+    if (document.getElementById("driver-dashboard-styles")) return;
+
+    const styles = document.createElement("style");
+    styles.id = "driver-dashboard-styles";
     styles.textContent = `
       .alert-card {
         border-left: 4px solid #e74c3c;
@@ -528,88 +552,95 @@ const DashboardModule = {
     `;
     document.head.appendChild(styles);
   },
-  
+
   // Load recent activity (sales and assignments)
-  loadRecentActivity() {
-    const activityList = document.getElementById('recent-activity-list');
+  async loadRecentActivity() {
+    const activityList = document.getElementById("recent-activity-list");
     if (!activityList) return;
-    
+
     const session = DB.getCurrentSession();
     if (!session) return;
-    
+
     // For drivers, show only their own activity
     if (session.role === DB.ROLES.DRIVER) {
-      this.loadDriverRecentActivity(activityList, session);
+      await this.loadDriverRecentActivity(activityList);
     } else {
-      this.loadAdminRecentActivity(activityList);
+      await this.loadAdminRecentActivity(activityList);
     }
   },
-  
+
   // Load recent activity for drivers (their own orders and assignments)
-  loadDriverRecentActivity(activityList, session) {
-    const user = DB.getCurrentUser();
+  async loadDriverRecentActivity(activityList) {
+    const user = await DB.getCurrentUser();
     const driverId = user ? user.driverId : null;
-    
+
     if (!driverId) {
-      activityList.innerHTML = '<li class="empty-list">Driver profile not configured.</li>';
+      activityList.innerHTML =
+        '<li class="empty-list">Driver profile not configured.</li>';
       return;
     }
-    
+
     // Get driver's recent orders and assignments
-    const driverOrders = DB.getOrdersByDriver(driverId);
-    const driverAssignments = DB.getAllAssignments().filter(a => a.driverId === driverId);
-    
+    const driverOrders = await DB.getOrdersByDriver(driverId);
+    const allAssignments = await DB.getAllAssignments();
+    const driverAssignments = allAssignments.filter(
+      (a) => a.driverId === driverId
+    );
+
     // Combine and sort by date
     const activities = [
-      ...driverOrders.map(order => ({
-        type: 'order',
+      ...driverOrders.map((order) => ({
+        type: "order",
         date: new Date(order.createdAt),
-        data: order
+        data: order,
       })),
-      ...driverAssignments.map(assignment => ({
-        type: 'assignment',
+      ...driverAssignments.map((assignment) => ({
+        type: "assignment",
         date: new Date(assignment.assignedAt),
-        data: assignment
-      }))
+        data: assignment,
+      })),
     ];
-    
+
     // Sort by date, newest first
     activities.sort((a, b) => b.date - a.date);
-    
+
     // Take only the 10 most recent activities
     const recentActivities = activities.slice(0, 10);
-    
-    activityList.innerHTML = '';
-    
+
+    activityList.innerHTML = "";
+
     if (recentActivities.length === 0) {
-      activityList.innerHTML = '<li class="empty-list">No recent activity.</li>';
+      activityList.innerHTML =
+        '<li class="empty-list">No recent activity.</li>';
       return;
     }
-    
+
     // Display activities
-    recentActivities.forEach(activity => {
-      const li = document.createElement('li');
-      
+    for (const activity of recentActivities) {
+      const li = document.createElement("li");
+
       const formattedDate = `${activity.date.toLocaleDateString()} ${activity.date.toLocaleTimeString()}`;
-      
-      if (activity.type === 'order') {
+
+      if (activity.type === "order") {
         const order = activity.data;
-        
+
         li.innerHTML = `
           <i class="fas fa-clipboard-list activity-icon"></i>
           <div class="activity-details">
-            <strong>Order: $${order.totalAmount.toFixed(2)}</strong> 
-            <span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span><br>
+            <strong>Order: $${order.totalAmount.toFixed(2)}</strong>
+            <span class="status-badge status-${
+              order.status
+            }">${order.status.toUpperCase()}</span><br>
             <span>Customer: ${order.customerAddress}</span><br>
             <small>${formattedDate}</small>
           </div>
         `;
-      } else if (activity.type === 'assignment') {
+      } else if (activity.type === "assignment") {
         const assignment = activity.data;
-        const product = DB.getProductById(assignment.productId);
-        
-        if (!product) return;
-        
+        const product = await DB.getProductById(assignment.productId);
+
+        if (!product) continue;
+
         li.innerHTML = `
           <i class="fas fa-truck-loading activity-icon"></i>
           <div class="activity-details">
@@ -619,73 +650,76 @@ const DashboardModule = {
           </div>
         `;
       }
-      
+
       activityList.appendChild(li);
-    });
-    
+    }
+
     this.addActivityListStyles();
   },
-  
+
   // Load recent activity for admin/sales rep users (all activities)
-  loadAdminRecentActivity(activityList) {
+  async loadAdminRecentActivity(activityList) {
     // Get recent orders and assignments (no longer show old sales)
-    const orders = DB.getAllOrders ? DB.getAllOrders() : [];
-    const assignments = DB.getAllAssignments();
-    
+    const orders = await DB.getAllOrders();
+    const assignments = await DB.getAllAssignments();
+
     // Combine and sort by date
     const activities = [
-      ...orders.map(order => ({
-        type: 'order',
+      ...orders.map((order) => ({
+        type: "order",
         date: new Date(order.createdAt),
-        data: order
+        data: order,
       })),
-      ...assignments.map(assignment => ({
-        type: 'assignment',
+      ...assignments.map((assignment) => ({
+        type: "assignment",
         date: new Date(assignment.assignedAt),
-        data: assignment
-      }))
+        data: assignment,
+      })),
     ];
-    
+
     // Sort by date, newest first
     activities.sort((a, b) => b.date - a.date);
-    
+
     // Take only the 10 most recent activities
     const recentActivities = activities.slice(0, 10);
-    
-    activityList.innerHTML = '';
-    
+
+    activityList.innerHTML = "";
+
     if (recentActivities.length === 0) {
-      activityList.innerHTML = '<li class="empty-list">No recent activity.</li>';
+      activityList.innerHTML =
+        '<li class="empty-list">No recent activity.</li>';
       return;
     }
-    
+
     // Display activities
-    recentActivities.forEach(activity => {
-      const li = document.createElement('li');
-      
+    for (const activity of recentActivities) {
+      const li = document.createElement("li");
+
       const formattedDate = `${activity.date.toLocaleDateString()} ${activity.date.toLocaleTimeString()}`;
-      
-      if (activity.type === 'order') {
+
+      if (activity.type === "order") {
         const order = activity.data;
-        const driver = DB.getDriverById(order.driverId);
-        if (!driver) return;
-        
+        const driver = await DB.getDriverById(order.driverId);
+        if (!driver) continue;
+
         li.innerHTML = `
           <i class="fas fa-clipboard-list activity-icon"></i>
           <div class="activity-details">
-            <strong>Order: $${order.totalAmount.toFixed(2)}</strong> 
-            <span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span><br>
+            <strong>Order: $${order.totalAmount.toFixed(2)}</strong>
+            <span class="status-badge status-${
+              order.status
+            }">${order.status.toUpperCase()}</span><br>
             <span>Driver: ${driver.name}</span><br>
             <small>${formattedDate}</small>
           </div>
         `;
-      } else if (activity.type === 'assignment') {
+      } else if (activity.type === "assignment") {
         const assignment = activity.data;
-        const driver = DB.getDriverById(assignment.driverId);
-        const product = DB.getProductById(assignment.productId);
-        
-        if (!driver || !product) return;
-        
+        const driver = await DB.getDriverById(assignment.driverId);
+        const product = await DB.getProductById(assignment.productId);
+
+        if (!driver || !product) continue;
+
         li.innerHTML = `
           <i class="fas fa-truck-loading activity-icon"></i>
           <div class="activity-details">
@@ -695,19 +729,19 @@ const DashboardModule = {
           </div>
         `;
       }
-      
+
       activityList.appendChild(li);
-    });
-    
+    }
+
     this.addActivityListStyles();
   },
-  
+
   // Add styles for activity list
   addActivityListStyles() {
-    if (document.getElementById('activity-styles')) return;
-    
-    const styles = document.createElement('style');
-    styles.id = 'activity-styles';
+    if (document.getElementById("activity-styles")) return;
+
+    const styles = document.createElement("style");
+    styles.id = "activity-styles";
     styles.textContent = `
       .activity-icon {
         margin-right: 1rem;
@@ -772,8 +806,15 @@ const DashboardModule = {
       }
     `;
     document.head.appendChild(styles);
-  }
+  },
 };
+
+// Export modules for other modules to import
+export { AppModule, DashboardModule };
+
+// Make modules globally accessible for backward compatibility
+window.AppModule = AppModule;
+window.DashboardModule = DashboardModule;
 
 // Note: App initialization is now handled by AuthModule after authentication
 // The AppModule.init() will be called from AuthModule.showApp() after successful login

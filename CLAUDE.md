@@ -106,3 +106,26 @@ The application uses a modular architecture with these main components:
 - Clear localStorage to reset all data: `localStorage.clear()`
 - Export data: Copy localStorage values from DevTools
 - All data operations go through `DB` object methods
+
+## Firebase Setup
+
+### Required Configuration
+1. **Firebase Project**: Create a Firebase project at https://firebase.google.com/
+2. **Firestore Database**: Enable Firestore in the Firebase console
+3. **Authentication**: Enable Authentication (currently using custom auth, not Firebase Auth)
+4. **Configuration**: Update `js/firebase-config.js` with your project credentials
+
+### Firebase Collections
+- `products` - Product catalog
+- `drivers` - Driver profiles
+- `users` - User accounts with authentication
+- `assignments` - Product assignments to drivers
+- `orders` - Order management
+- `sales` - Sales records
+- `stock_transfers` - Stock transfer history
+
+### Security Notes
+- Passwords are hashed using PBKDF2 with 100,000 iterations
+- Sessions are managed client-side with secure tokens
+- Firebase Security Rules should be configured to restrict data access
+- Default admin account: username `admin`, password `Admin123!`

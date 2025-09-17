@@ -10,9 +10,9 @@ const MyInventoryModule = {
   lowStockThreshold: 5,
   
   // Initialize the my inventory module
-  init() {
+  async init() {
     this.bindEvents();
-    this.loadInventory();
+    await this.loadInventory();
   },
 
   // Bind event listeners
@@ -37,41 +37,46 @@ const MyInventoryModule = {
   },
 
   // Get the current driver's ID from session
-  getCurrentDriverId() {
+  async getCurrentDriverId() {
     const session = DB.getCurrentSession();
     if (!session || session.role !== DB.ROLES.DRIVER) {
       return null;
     }
 
-    // Get the full user record to access driverId
-    const users = DB.getAll(DB.KEYS.USERS);
-    const user = users.find(u => u.id === session.userId);
-    if (!user) return null;
+    try {
+      // Get the current user from Firebase
+      const user = await DB.getCurrentUser();
+      if (!user) return null;
 
-    // If user has a driverId field, use it directly
-    if (user.driverId) {
-      return user.driverId;
+      // If user has a driverId field, use it directly
+      if (user.driverId) {
+        return user.driverId;
+      }
+
+      // Fallback: try to find driver by matching name
+      const drivers = await DB.getAllDrivers();
+      const matchingDriver = drivers.find(driver =>
+        driver.name.toLowerCase() === user.name.toLowerCase()
+      );
+
+      return matchingDriver ? matchingDriver.id : null;
+    } catch (error) {
+      console.error('Error getting current driver ID:', error);
+      return null;
     }
-
-    // Fallback: try to find driver by matching name
-    const drivers = DB.getAllDrivers();
-    const matchingDriver = drivers.find(driver => 
-      driver.name.toLowerCase() === user.name.toLowerCase()
-    );
-
-    return matchingDriver ? matchingDriver.id : null;
   },
 
   // Load and display driver's inventory
-  loadInventory() {
-    const driverId = this.getCurrentDriverId();
-    if (!driverId) {
-      this.showError('Unable to identify current driver');
-      return;
-    }
+  async loadInventory() {
+    try {
+      const driverId = await this.getCurrentDriverId();
+      if (!driverId) {
+        this.showError('Unable to identify current driver');
+        return;
+      }
 
-    // Get inventory with alerts
-    const inventoryWithAlerts = DB.getDriverInventoryWithAlerts(driverId, this.lowStockThreshold);
+      // Get inventory with alerts
+      const inventoryWithAlerts = await DB.getDriverInventoryWithAlerts(driverId, this.lowStockThreshold);
     
     // Filter inventory based on current filter
     let filteredInventory = this.filterInventory(inventoryWithAlerts);
@@ -79,11 +84,15 @@ const MyInventoryModule = {
     // Sort inventory based on current sort
     let sortedInventory = this.sortInventory(filteredInventory);
 
-    // Update summary cards
-    this.updateSummaryCards(inventoryWithAlerts);
-    
-    // Display inventory
-    this.displayInventory(sortedInventory);
+      // Update summary cards
+      this.updateSummaryCards(inventoryWithAlerts);
+
+      // Display inventory
+      this.displayInventory(sortedInventory);
+    } catch (error) {
+      this.showError('Error loading inventory');
+      console.error('Error loading inventory:', error);
+    }
   },
 
   // Filter inventory based on alert level
@@ -305,3 +314,7 @@ const MyInventoryModule = {
     this.loadInventory();
   }
 };
+
+// Export the module and make it globally available
+export default MyInventoryModule;
+window.MyInventoryModule = MyInventoryModule;

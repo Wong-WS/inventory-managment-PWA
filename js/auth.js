@@ -3,6 +3,10 @@
  * Handles login/logout functionality and UI management
  */
 
+// Import database and app modules
+import { DB } from './database.js';
+import { AppModule, DashboardModule } from './app.js';
+
 const AuthModule = {
   // Initialize authentication module
   init() {
@@ -107,36 +111,38 @@ const AuthModule = {
     this.updateUserInfo(session);
 
     // Setup role-based navigation - handle both session formats for compatibility
-    const userRole = session.user ? session.user.role : session.role;
+    const userRole = session.user?.role || session.role;
     console.log('Setting up navigation for user role:', userRole);
     
+    // Initialize the main app first to ensure DOM is ready
+    console.log('Initializing AppModule...');
+    AppModule.init();
+
     // Wait for DOM to be fully rendered before setting up navigation
     setTimeout(() => {
       this.setupRoleBasedNavigation(userRole);
-      
+
       // Verify tab visibility after setup
-      const visibleTabs = document.querySelectorAll('.tab-button[style*="flex"]');
+      const allTabs = document.querySelectorAll('.tab-button');
+      const visibleTabs = Array.from(allTabs).filter(tab => {
+        const computedStyle = window.getComputedStyle(tab);
+        return computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden';
+      });
+
       console.log(`${visibleTabs.length} tabs should be visible for role ${userRole}`);
-      
+
       if (visibleTabs.length === 0) {
         console.error('No tabs are visible after role setup!');
         // Force show all tabs for admin as fallback
         if (userRole === DB.ROLES.ADMIN) {
-          document.querySelectorAll('.tab-button').forEach(tab => {
+          console.warn('Forcing all tabs visible for admin');
+          allTabs.forEach(tab => {
             tab.style.display = 'flex';
+            tab.style.visibility = 'visible';
           });
         }
       }
-    }, 10);
-
-    // Initialize the main app - should now be available since script order is fixed
-    if (typeof AppModule !== 'undefined' && typeof DashboardModule !== 'undefined') {
-      console.log('Initializing AppModule...');
-      AppModule.init();
-    } else {
-      console.error('AppModule or DashboardModule not available');
-      alert('Application modules failed to load. Please refresh the page.');
-    }
+    }, 100); // Increased timeout to ensure DOM is ready
   },
 
   // Handle login form submission
@@ -245,20 +251,22 @@ const AuthModule = {
   setupRoleBasedNavigation(userRole) {
     const tabButtons = document.querySelectorAll('.tab-button');
     console.log('Found tab buttons:', tabButtons.length);
-    
+
     if (tabButtons.length === 0) {
-      console.error('No tab buttons found in DOM!');
+      console.error('No tab buttons found in DOM! Retrying in 200ms...');
+      // Retry once more with a longer delay
+      setTimeout(() => {
+        this.setupRoleBasedNavigation(userRole);
+      }, 200);
       return;
     }
-    
+
     let visibleTabCount = 0;
-    
+
     tabButtons.forEach(button => {
       const tabId = button.dataset.tab;
       const shouldShow = this.canAccessTab(tabId, userRole);
-      
-      console.log(`Tab ${tabId}: should show = ${shouldShow} for role ${userRole}`);
-      
+
       if (shouldShow) {
         button.style.display = 'flex';
         button.style.visibility = 'visible';
@@ -270,7 +278,7 @@ const AuthModule = {
     });
 
     console.log(`Total visible tabs after setup: ${visibleTabCount}`);
-    
+
     // Ensure admin can see all tabs as fallback
     if (userRole === DB.ROLES.ADMIN && visibleTabCount === 0) {
       console.warn('Admin has no visible tabs, enabling all tabs');
@@ -368,6 +376,10 @@ const AuthModule = {
     return DB.isAdmin();
   }
 };
+
+// Export the module and make it globally available
+export default AuthModule;
+window.AuthModule = AuthModule;
 
 // Initialize authentication when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
