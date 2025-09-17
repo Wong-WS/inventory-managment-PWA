@@ -1,19 +1,48 @@
 /**
- * Database manager using localStorage
+ * Database manager using Firebase Firestore
  * Handles CRUD operations for products, drivers, assignments and sales
  */
 
-const DB = {
-  // Storage keys
+// Import Firebase services
+import { db } from './firebase-config.js';
+import { 
+  collection, 
+  addDoc, 
+  getDocs, 
+  doc, 
+  getDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  orderBy, 
+  serverTimestamp,
+  writeBatch
+} from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js';
+
+export const DB = {
+  // Firestore collection names
+  COLLECTIONS: {
+    PRODUCTS: 'products',
+    DRIVERS: 'drivers',
+    ASSIGNMENTS: 'assignments',
+    SALES: 'sales', // Kept for backward compatibility
+    ORDERS: 'orders',
+    USERS: 'users',
+    SESSIONS: 'sessions',
+    STOCK_TRANSFERS: 'stock_transfers',
+  },
+
+  // Legacy keys for backwards compatibility
   KEYS: {
-    PRODUCTS: 'inventory_products',
-    DRIVERS: 'inventory_drivers',
-    ASSIGNMENTS: 'inventory_assignments',
-    SALES: 'inventory_sales', // Kept for backward compatibility
-    ORDERS: 'inventory_orders',
-    USERS: 'inventory_users',
-    SESSION: 'inventory_session',
-    STOCK_TRANSFERS: 'inventory_stock_transfers',
+    PRODUCTS: 'products',
+    DRIVERS: 'drivers',
+    ASSIGNMENTS: 'assignments',
+    SALES: 'sales',
+    ORDERS: 'orders',
+    USERS: 'users',
+    SESSION: 'sessions',
+    STOCK_TRANSFERS: 'stock_transfers',
   },
 
   // User roles enumeration
@@ -38,42 +67,18 @@ const DB = {
 
   // Initialize database
   async init() {
-    if (!localStorage.getItem(this.KEYS.PRODUCTS)) {
-      localStorage.setItem(this.KEYS.PRODUCTS, JSON.stringify([]));
+    try {
+      // Set up localStorage for sessions (Firebase doesn't handle client sessions)
+      if (!localStorage.getItem('inventory_session')) {
+        localStorage.setItem('inventory_session', JSON.stringify(null));
+      }
+
+      // Create default admin user if no users exist
+      await this.createDefaultAdmin();
+    } catch (error) {
+      console.error('Database initialization failed:', error);
+      throw error;
     }
-    if (!localStorage.getItem(this.KEYS.DRIVERS)) {
-      localStorage.setItem(this.KEYS.DRIVERS, JSON.stringify([]));
-    }
-    if (!localStorage.getItem(this.KEYS.ASSIGNMENTS)) {
-      localStorage.setItem(this.KEYS.ASSIGNMENTS, JSON.stringify([]));
-    }
-    if (!localStorage.getItem(this.KEYS.SALES)) {
-      localStorage.setItem(this.KEYS.SALES, JSON.stringify([]));
-    }
-    if (!localStorage.getItem(this.KEYS.ORDERS)) {
-      localStorage.setItem(this.KEYS.ORDERS, JSON.stringify([]));
-    }
-    if (!localStorage.getItem(this.KEYS.USERS)) {
-      localStorage.setItem(this.KEYS.USERS, JSON.stringify([]));
-    }
-    if (!localStorage.getItem(this.KEYS.SESSION)) {
-      localStorage.setItem(this.KEYS.SESSION, JSON.stringify(null));
-    }
-    if (!localStorage.getItem(this.KEYS.STOCK_TRANSFERS)) {
-      localStorage.setItem(this.KEYS.STOCK_TRANSFERS, JSON.stringify([]));
-    }
-    
-    // Create default admin user if no users exist
-    await this.createDefaultAdmin();
-    
-    // Migrate sales to orders if needed
-    await this.migrateSalesToOrders();
-    
-    // Migrate driver-user links if needed
-    await this.migrateDriverUserLinks();
-    
-    // Fix existing driver users with missing driverId
-    await this.fixDriverUserIds();
   },
 
   // Generate a unique ID
@@ -81,13 +86,25 @@ const DB = {
     return Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
   },
 
-  // Generic methods
-  getAll(key) {
-    return JSON.parse(localStorage.getItem(key)) || [];
+  // Generic methods (Firebase versions)
+  async getAll(collectionName) {
+    try {
+      const snapshot = await getDocs(collection(db, collectionName));
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error(`Error getting ${collectionName}:`, error);
+      return [];
+    }
   },
 
-  save(key, data) {
-    localStorage.setItem(key, JSON.stringify(data));
+  async save(collectionName, data) {
+    try {
+      // For backwards compatibility, this method is no longer used
+      // Individual add/update methods are preferred
+      console.warn('save() method is deprecated, use add/update methods instead');
+    } catch (error) {
+      console.error(`Error saving to ${collectionName}:`, error);
+    }
   },
 
   // ===============================
@@ -278,8 +295,8 @@ const DB = {
    * Get all users (without sensitive data)
    * @returns {Array} Array of user objects without passwords/salts
    */
-  getAllUsers() {
-    const users = this.getAll(this.KEYS.USERS);
+  async getAllUsers() {
+    const users = await this.getAll(this.COLLECTIONS.USERS);
     return users.map(user => ({
       id: user.id,
       username: user.username,
@@ -297,21 +314,27 @@ const DB = {
    * @param {string} id - User ID
    * @returns {Object|null} User object or null
    */
-  getUserById(id) {
-    const users = this.getAll(this.KEYS.USERS);
-    const user = users.find(u => u.id === id);
-    if (!user) return null;
-    
-    return {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-      driverId: user.driverId,
-      isActive: user.isActive,
-      createdAt: user.createdAt,
-      lastLoginAt: user.lastLoginAt
-    };
+  async getUserById(id) {
+    try {
+      const docRef = doc(db, this.COLLECTIONS.USERS, id);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) return null;
+      
+      const user = docSnap.data();
+      return {
+        id: docSnap.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        driverId: user.driverId,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+        lastLoginAt: user.lastLoginAt
+      };
+    } catch (error) {
+      console.error('Error getting user by ID:', error);
+      return null;
+    }
   },
 
   /**
@@ -319,9 +342,18 @@ const DB = {
    * @param {string} username - Username
    * @returns {Object|null} Full user object or null
    */
-  getUserByUsername(username) {
-    const users = this.getAll(this.KEYS.USERS);
-    return users.find(u => u.username === username) || null;
+  async getUserByUsername(username) {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.USERS),
+        where("username", "==", username)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.empty ? null : { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+    } catch (error) {
+      console.error('Error getting user by username:', error);
+      return null;
+    }
   },
 
   /**
@@ -337,7 +369,7 @@ const DB = {
     }
 
     // Check if username already exists
-    if (this.getUserByUsername(userData.username)) {
+    if (await this.getUserByUsername(userData.username)) {
       throw new Error('Username already exists');
     }
 
@@ -345,9 +377,8 @@ const DB = {
     const salt = await this.generateSalt();
     const passwordHash = await this.hashPassword(userData.password, salt);
 
-    const users = this.getAll(this.KEYS.USERS);
-    const newUser = {
-      id: this.generateId(),
+    // Create user in Firebase
+    const newUserData = {
       username: userData.username,
       name: userData.name || '',
       passwordHash: passwordHash,
@@ -355,12 +386,12 @@ const DB = {
       role: userData.role || this.ROLES.SALES_REP,
       driverId: userData.driverId || null,
       isActive: true,
-      createdAt: new Date().toISOString(),
+      createdAt: serverTimestamp(),
       lastLoginAt: null
     };
 
-    users.push(newUser);
-    this.save(this.KEYS.USERS, users);
+    const docRef = await addDoc(collection(db, this.COLLECTIONS.USERS), newUserData);
+    const newUser = { id: docRef.id, ...newUserData, createdAt: new Date().toISOString() };
 
     // Return user without sensitive data
     return {
@@ -382,7 +413,21 @@ const DB = {
    * @returns {Promise<Object|null>} Updated user object or null
    */
   async updateUser(id, updates) {
-    const users = this.getAll(this.KEYS.USERS);
+    try {
+      const docRef = doc(db, this.COLLECTIONS.USERS, id);
+      await updateDoc(docRef, updates);
+      
+      // Return updated user
+      const updatedDoc = await getDoc(docRef);
+      return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } : null;
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
+  },
+
+  async updateUserOld(id, updates) {
+    const users = await this.getAll(this.COLLECTIONS.USERS);
     const index = users.findIndex(u => u.id === id);
     
     if (index === -1) {
@@ -435,7 +480,7 @@ const DB = {
    * Create default admin user if no users exist
    */
   async createDefaultAdmin() {
-    const users = this.getAll(this.KEYS.USERS);
+    const users = await this.getAll(this.COLLECTIONS.USERS);
     
     if (users.length === 0) {
       try {
@@ -445,7 +490,6 @@ const DB = {
           name: 'System Administrator',
           role: this.ROLES.ADMIN
         });
-        console.log('Default admin user created. Username: admin, Password: Admin123!');
       } catch (error) {
         console.error('Failed to create default admin user:', error);
       }
@@ -464,7 +508,7 @@ const DB = {
    */
   async login(username, password) {
     try {
-      const user = this.getUserByUsername(username);
+      const user = await this.getUserByUsername(username);
       
       if (!user || !user.isActive) {
         return null;
@@ -490,15 +534,13 @@ const DB = {
         expiresAt: expiresAt.toISOString()
       };
 
-      this.save(this.KEYS.SESSION, sessionData);
+      // Save session to localStorage (sessions remain client-side)
+      localStorage.setItem('inventory_session', JSON.stringify(sessionData));
 
-      // Update last login time
-      const users = this.getAll(this.KEYS.USERS);
-      const userIndex = users.findIndex(u => u.id === user.id);
-      if (userIndex !== -1) {
-        users[userIndex].lastLoginAt = new Date().toISOString();
-        this.save(this.KEYS.USERS, users);
-      }
+      // Update last login time in Firebase
+      await this.updateUser(user.id, {
+        lastLoginAt: new Date().toISOString()
+      });
 
       return {
         token: sessionToken,
@@ -523,7 +565,7 @@ const DB = {
    * @returns {Object|null} Current session data or null
    */
   getCurrentSession() {
-    const session = JSON.parse(localStorage.getItem(this.KEYS.SESSION));
+    const session = JSON.parse(localStorage.getItem('inventory_session'));
     
     if (!session || !session.token) {
       return null;
@@ -544,7 +586,7 @@ const DB = {
       if (user) {
         session.user = user;
         // Update the session in storage to include the user object
-        this.save(this.KEYS.SESSION, session);
+        localStorage.setItem('inventory_session', JSON.stringify(session));
       }
     }
 
@@ -572,7 +614,7 @@ const DB = {
       expiresAt.setMinutes(expiresAt.getMinutes() + this.SESSION_CONFIG.TIMEOUT_MINUTES);
       
       session.expiresAt = expiresAt.toISOString();
-      this.save(this.KEYS.SESSION, session);
+      localStorage.setItem('inventory_session', JSON.stringify(session));
     }
   },
 
@@ -580,7 +622,7 @@ const DB = {
    * Logout and clear session
    */
   logout() {
-    this.save(this.KEYS.SESSION, null);
+    localStorage.setItem('inventory_session', JSON.stringify(null));
   },
 
   /**
@@ -611,216 +653,280 @@ const DB = {
    * Get current logged-in user
    * @returns {Object|null} Current user or null
    */
-  getCurrentUser() {
+  async getCurrentUser() {
     const session = this.getCurrentSession();
-    return session ? this.getUserById(session.userId) : null;
+    return session ? await this.getUserById(session.userId) : null;
   },
 
-  // Products
-  getAllProducts() {
-    return this.getAll(this.KEYS.PRODUCTS);
+  // Products (Firebase versions)
+  async getAllProducts() {
+    return await this.getAll(this.COLLECTIONS.PRODUCTS);
   },
 
-  getProductById(id) {
-    const products = this.getAllProducts();
-    return products.find(product => product.id === id);
-  },
-
-  addProduct(name, quantity) {
-    const products = this.getAllProducts();
-    const newProduct = {
-      id: this.generateId(),
-      name,
-      totalQuantity: parseInt(quantity),
-      createdAt: new Date().toISOString()
-    };
-    products.push(newProduct);
-    this.save(this.KEYS.PRODUCTS, products);
-    return newProduct;
-  },
-
-  updateProduct(id, updates) {
-    const products = this.getAllProducts();
-    const index = products.findIndex(product => product.id === id);
-    if (index !== -1) {
-      products[index] = { ...products[index], ...updates };
-      this.save(this.KEYS.PRODUCTS, products);
-      return products[index];
+  async getProductById(id) {
+    try {
+      const docRef = doc(db, this.COLLECTIONS.PRODUCTS, id);
+      const docSnap = await getDoc(docRef);
+      return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+    } catch (error) {
+      console.error('Error getting product:', error);
+      return null;
     }
-    return null;
   },
 
-  deleteProduct(id) {
-    const products = this.getAllProducts();
-    const filtered = products.filter(product => product.id !== id);
-    this.save(this.KEYS.PRODUCTS, filtered);
+  async addProduct(name, quantity) {
+    try {
+      const newProduct = {
+        name,
+        totalQuantity: parseInt(quantity),
+        createdAt: serverTimestamp()
+      };
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.PRODUCTS), newProduct);
+      return { id: docRef.id, ...newProduct, createdAt: new Date().toISOString() };
+    } catch (error) {
+      console.error('Error adding product:', error);
+      throw error;
+    }
   },
 
-  // Drivers
-  getAllDrivers() {
-    return this.getAll(this.KEYS.DRIVERS);
+  async updateProduct(id, updates) {
+    try {
+      const docRef = doc(db, this.COLLECTIONS.PRODUCTS, id);
+      await updateDoc(docRef, updates);
+      
+      // Return updated product
+      const updatedDoc = await getDoc(docRef);
+      return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } : null;
+    } catch (error) {
+      console.error('Error updating product:', error);
+      throw error;
+    }
   },
 
-  getDriverById(id) {
-    const drivers = this.getAllDrivers();
-    return drivers.find(driver => driver.id === id);
+  async deleteProduct(id) {
+    try {
+      const docRef = doc(db, this.COLLECTIONS.PRODUCTS, id);
+      
+      // Get the product before deleting
+      const docSnap = await getDoc(docRef);
+      const deletedProduct = docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+      
+      await deleteDoc(docRef);
+      return deletedProduct;
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      throw error;
+    }
+  },
+
+  // Drivers (Firebase versions)
+  async getAllDrivers() {
+    return await this.getAll(this.COLLECTIONS.DRIVERS);
+  },
+
+  async getDriverById(id) {
+    try {
+      const docRef = doc(db, this.COLLECTIONS.DRIVERS, id);
+      const docSnap = await getDoc(docRef);
+      return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+    } catch (error) {
+      console.error('Error getting driver:', error);
+      return null;
+    }
   },
 
   async addDriver(name, phone, options = {}) {
-    const drivers = this.getAllDrivers();
-    const newDriver = {
-      id: this.generateId(),
-      name,
-      phone,
-      linkedUserId: options.linkedUserId || null,
-      createdAt: new Date().toISOString()
-    };
-    drivers.push(newDriver);
-    this.save(this.KEYS.DRIVERS, drivers);
+    try {
+      const newDriver = {
+        name,
+        phone,
+        linkedUserId: options.linkedUserId || null,
+        createdAt: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.DRIVERS), newDriver);
+      const driverWithId = { id: docRef.id, ...newDriver, createdAt: new Date().toISOString() };
 
-    // If creating a driver and requesting user account creation
-    if (options.createUser && !options.linkedUserId) {
-      try {
-        // Generate a username based on the driver's name
-        const baseUsername = name.toLowerCase().replace(/\s+/g, '');
-        let username = baseUsername;
-        let counter = 1;
-        
-        // Ensure username is unique
-        while (this.getUserByUsername(username)) {
-          username = `${baseUsername}${counter}`;
-          counter++;
+      // If creating a driver and requesting user account creation
+      if (options.createUser && !options.linkedUserId) {
+        try {
+          // Generate a username based on the driver's name
+          const baseUsername = name.toLowerCase().replace(/\s+/g, '');
+          let username = baseUsername;
+          let counter = 1;
+          
+          // Ensure username is unique
+          while (await this.getUserByUsername(username)) {
+            username = `${baseUsername}${counter}`;
+            counter++;
+          }
+
+          // Create user account with a default password
+          const defaultPassword = 'Driver123!';
+          const newUser = await this.createUser({
+            username: username,
+            password: defaultPassword,
+            name: name,
+            role: this.ROLES.DRIVER,
+            driverId: driverWithId.id
+          });
+
+          // Update driver with linked user ID
+          await updateDoc(docRef, { linkedUserId: newUser.id });
+          driverWithId.linkedUserId = newUser.id;
+
+          return {
+            driver: driverWithId,
+            user: newUser,
+            credentials: { username, password: defaultPassword }
+          };
+        } catch (error) {
+          // If user creation fails, the driver profile is still created
+          console.error('Failed to create user account for driver:', error);
+          return driverWithId;
         }
-
-        // Create user account with a default password
-        const defaultPassword = 'Driver123!';
-        const newUser = await this.createUser({
-          username: username,
-          password: defaultPassword,
-          name: name,
-          role: this.ROLES.DRIVER,
-          driverId: newDriver.id
-        });
-
-        // Update driver with linked user ID
-        newDriver.linkedUserId = newUser.id;
-        this.save(this.KEYS.DRIVERS, drivers);
-
-        return {
-          driver: newDriver,
-          user: newUser,
-          credentials: { username, password: defaultPassword }
-        };
-      } catch (error) {
-        // If user creation fails, the driver profile is still created
-        console.error('Failed to create user account for driver:', error);
-        return newDriver;
       }
+
+      return driverWithId;
+    } catch (error) {
+      console.error('Error adding driver:', error);
+      throw error;
     }
-
-    return newDriver;
   },
 
-  updateDriver(id, updates) {
-    const drivers = this.getAllDrivers();
-    const index = drivers.findIndex(driver => driver.id === id);
-    if (index !== -1) {
-      drivers[index] = { ...drivers[index], ...updates };
-      this.save(this.KEYS.DRIVERS, drivers);
-      return drivers[index];
+  async updateDriver(id, updates) {
+    try {
+      const docRef = doc(db, this.COLLECTIONS.DRIVERS, id);
+      await updateDoc(docRef, updates);
+      
+      // Return updated driver
+      const updatedDoc = await getDoc(docRef);
+      return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } : null;
+    } catch (error) {
+      console.error('Error updating driver:', error);
+      throw error;
     }
-    return null;
   },
 
-  deleteDriver(id) {
-    const drivers = this.getAllDrivers();
-    const filtered = drivers.filter(driver => driver.id !== id);
-    this.save(this.KEYS.DRIVERS, filtered);
+  async deleteDriver(id) {
+    try {
+      const docRef = doc(db, this.COLLECTIONS.DRIVERS, id);
+      
+      // Get the driver before deleting
+      const docSnap = await getDoc(docRef);
+      const deletedDriver = docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+      
+      await deleteDoc(docRef);
+      return deletedDriver;
+    } catch (error) {
+      console.error('Error deleting driver:', error);
+      throw error;
+    }
   },
 
-  // Assignments
-  getAllAssignments() {
-    return this.getAll(this.KEYS.ASSIGNMENTS);
+  // Assignments (Firebase versions)
+  async getAllAssignments() {
+    return await this.getAll(this.COLLECTIONS.ASSIGNMENTS);
   },
 
-  getAssignmentsByDriver(driverId) {
-    const assignments = this.getAllAssignments();
-    return assignments.filter(assignment => assignment.driverId === driverId);
+  async getAssignmentsByDriver(driverId) {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.ASSIGNMENTS),
+        where("driverId", "==", driverId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('Error getting assignments by driver:', error);
+      return [];
+    }
   },
   
-  getAssignmentsByProduct(productId) {
-    const assignments = this.getAllAssignments();
-    return assignments.filter(assignment => assignment.productId === productId);
+  async getAssignmentsByProduct(productId) {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.ASSIGNMENTS),
+        where("productId", "==", productId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('Error getting assignments by product:', error);
+      return [];
+    }
   },
 
-  addAssignment(driverId, productId, quantity) {
-    const assignments = this.getAllAssignments();
-    const product = this.getProductById(productId);
-    const quantityToAssign = parseInt(quantity);
-    
-    // Validate that the product exists
-    if (!product) {
-      throw new Error(`Product not found`);
+  async addAssignment(driverId, productId, quantity) {
+    try {
+      const product = await this.getProductById(productId);
+      const quantityToAssign = parseInt(quantity);
+      
+      // Validate that the product exists
+      if (!product) {
+        throw new Error(`Product not found`);
+      }
+      
+      // Validate that we have enough quantity in main inventory
+      if (product.totalQuantity < quantityToAssign) {
+        throw new Error(`Not enough quantity in stock. Available: ${product.totalQuantity}`);
+      }
+      
+      // Deduct the assigned quantity from main product inventory
+      await this.updateProduct(productId, { 
+        totalQuantity: product.totalQuantity - quantityToAssign 
+      });
+      
+      const newAssignment = {
+        driverId,
+        productId,
+        quantity: quantityToAssign,
+        assignedAt: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.ASSIGNMENTS), newAssignment);
+      return { id: docRef.id, ...newAssignment, assignedAt: new Date().toISOString() };
+    } catch (error) {
+      console.error('Error adding assignment:', error);
+      throw error;
     }
-    
-    // Validate that we have enough quantity in main inventory
-    if (product.totalQuantity < quantityToAssign) {
-      throw new Error(`Not enough quantity in stock. Available: ${product.totalQuantity}`);
-    }
-    
-    // Deduct the assigned quantity from main product inventory
-    this.updateProduct(productId, { 
-      totalQuantity: product.totalQuantity - quantityToAssign 
-    });
-    
-    const newAssignment = {
-      id: this.generateId(),
-      driverId,
-      productId,
-      quantity: quantityToAssign,
-      assignedAt: new Date().toISOString()
-    };
-    
-    assignments.push(newAssignment);
-    this.save(this.KEYS.ASSIGNMENTS, assignments);
-    return newAssignment;
   },
 
   // Sales
-  getAllSales() {
-    return this.getAll(this.KEYS.SALES);
+  async getAllSales() {
+    return await this.getAll(this.COLLECTIONS.SALES);
   },
 
-  getSaleById(id) {
-    const sales = this.getAllSales();
+  async getSaleById(id) {
+    const sales = await this.getAllSales();
     return sales.find(sale => sale.id === id);
   },
   
-  getSalesByDriver(driverId) {
-    const sales = this.getAllSales();
+  async getSalesByDriver(driverId) {
+    const sales = await this.getAllSales();
     return sales.filter(sale => sale.driverId === driverId);
   },
   
-  addSale(saleData) {
-    const sales = this.getAllSales();
+  async addSale(saleData) {
+    const sales = await this.getAllSales();
     const newSale = {
       id: this.generateId(),
       ...saleData,
       saleDate: new Date().toISOString()
     };
-    
+
     sales.push(newSale);
-    this.save(this.KEYS.SALES, sales);
+    await this.save(this.COLLECTIONS.SALES, sales);
     return newSale;
   },
 
   // Inventory calculations
-  getDriverInventory(driverId) {
-    const assignments = this.getAssignmentsByDriver(driverId);
-    const sales = this.getSalesByDriver(driverId);
-    const products = this.getAllProducts();
+  async getDriverInventory(driverId) {
+    const assignments = await this.getAssignmentsByDriver(driverId);
+    const sales = await this.getSalesByDriver(driverId);
+    const products = await this.getAllProducts();
     const inventory = {};
-    
+
     // Initialize inventory with all products at 0
     products.forEach(product => {
       inventory[product.id] = {
@@ -831,14 +937,14 @@ const DB = {
         remaining: 0
       };
     });
-    
+
     // Add up all assignments
     assignments.forEach(assignment => {
       if (inventory[assignment.productId]) {
         inventory[assignment.productId].assigned += assignment.quantity;
       }
     });
-    
+
     // Subtract all sales
     sales.forEach(sale => {
       sale.lineItems.forEach(item => {
@@ -849,30 +955,30 @@ const DB = {
         }
       });
     });
-    
+
     // Calculate remaining
     Object.keys(inventory).forEach(productId => {
-      inventory[productId].remaining = 
+      inventory[productId].remaining =
         inventory[productId].assigned - inventory[productId].sold;
     });
-    
+
     return Object.values(inventory).filter(item => item.assigned > 0);
   },
   
-  getTotalInventory() {
-    const products = this.getAllProducts();
+  async getTotalInventory() {
+    const products = await this.getAllProducts();
     let total = 0;
-    
+
     products.forEach(product => {
       total += product.totalQuantity;
     });
-    
+
     return total;
   },
 
   // Sales reporting (kept for backward compatibility)
-  getSalesByPeriod(driverId, period, date) {
-    const sales = driverId ? this.getSalesByDriver(driverId) : this.getAllSales();
+  async getSalesByPeriod(driverId, period, date) {
+    const sales = driverId ? await this.getSalesByDriver(driverId) : await this.getAllSales();
     const targetDate = date ? new Date(date) : new Date();
     
     // Filter sales based on period and date
@@ -914,10 +1020,18 @@ const DB = {
    * @param {string} driverId - Driver ID
    * @returns {Object|null} User object or null
    */
-  getUserByDriverId(driverId) {
-    const users = this.getAll(this.KEYS.USERS);
-    const user = users.find(u => u.driverId === driverId);
-    return user ? this.getUserById(user.id) : null;
+  async getUserByDriverId(driverId) {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.USERS),
+        where("driverId", "==", driverId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.empty ? null : { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+    } catch (error) {
+      console.error('Error getting user by driver ID:', error);
+      return null;
+    }
   },
 
   /**
@@ -925,9 +1039,9 @@ const DB = {
    * @param {string} userId - User ID
    * @returns {Object|null} Driver object or null
    */
-  getDriverByUserId(userId) {
-    const user = this.getUserById(userId);
-    return user && user.driverId ? this.getDriverById(user.driverId) : null;
+  async getDriverByUserId(userId) {
+    const user = await this.getUserById(userId);
+    return user && user.driverId ? await this.getDriverById(user.driverId) : null;
   },
 
   /**
@@ -937,8 +1051,8 @@ const DB = {
    * @returns {boolean} Success status
    */
   async linkUserToDriver(userId, driverId) {
-    const user = this.getUserById(userId);
-    const driver = this.getDriverById(driverId);
+    const user = await this.getUserById(userId);
+    const driver = await this.getDriverById(driverId);
 
     if (!user || !driver) {
       throw new Error('User or driver not found');
@@ -949,7 +1063,7 @@ const DB = {
     }
 
     // Check if driver is already linked
-    const existingUser = this.getUserByDriverId(driverId);
+    const existingUser = await this.getUserByDriverId(driverId);
     if (existingUser && existingUser.id !== userId) {
       throw new Error('Driver is already linked to another user');
     }
@@ -963,7 +1077,7 @@ const DB = {
     await this.updateUser(userId, { driverId: driverId });
 
     // Update driver with user link
-    this.updateDriver(driverId, { linkedUserId: userId });
+    await this.updateDriver(driverId, { linkedUserId: userId });
 
     return true;
   },
@@ -974,7 +1088,7 @@ const DB = {
    * @returns {boolean} Success status
    */
   async unlinkUserFromDriver(userId) {
-    const user = this.getUserById(userId);
+    const user = await this.getUserById(userId);
     if (!user || !user.driverId) {
       return false;
     }
@@ -985,191 +1099,33 @@ const DB = {
     await this.updateUser(userId, { driverId: null });
 
     // Remove link from driver
-    this.updateDriver(driverId, { linkedUserId: null });
+    await this.updateDriver(driverId, { linkedUserId: null });
 
     return true;
   },
 
   // ===============================
-  // DATA MIGRATION METHODS
+  // DATA MIGRATION METHODS (LEGACY - DISABLED FOR FIREBASE)
   // ===============================
 
-  /**
-   * Migrate existing sales data to orders format
-   * This method converts legacy sales to completed orders
-   */
   async migrateSalesToOrders() {
-    const orders = this.getAll(this.KEYS.ORDERS);
-    const sales = this.getAll(this.KEYS.SALES);
-    
-    // Skip migration if orders already exist or no sales to migrate
-    if (orders.length > 0 || sales.length === 0) {
-      return;
-    }
-    
-    console.log(`Migrating ${sales.length} sales records to orders...`);
-    
-    const migratedOrders = sales.map(sale => ({
-      id: sale.id, // Keep original ID
-      driverId: sale.driverId,
-      salesRepId: sale.salesRepId || null, // If salesRepId exists in old data
-      customerAddress: sale.customerAddress,
-      customerDescription: sale.customerDescription || '',
-      deliveryMethod: sale.deliveryMethod || 'Paid',
-      totalAmount: sale.totalAmount,
-      status: this.ORDER_STATUS.COMPLETED, // All existing sales become completed orders
-      lineItems: sale.lineItems || [],
-      createdAt: sale.saleDate, // Use original sale date as creation date
-      updatedAt: sale.saleDate,
-      completedAt: sale.saleDate // Mark as completed at the same time
-    }));
-    
-    // Save migrated orders
-    this.save(this.KEYS.ORDERS, migratedOrders);
-    console.log(`Successfully migrated ${migratedOrders.length} orders`);
+    // Skip migration for Firebase - starting fresh
+    return;
   },
 
-  /**
-   * Migrate existing driver-user links
-   * This method adds driverId fields to existing users and linkedUserId to drivers
-   */
   async migrateDriverUserLinks() {
-    const users = this.getAll(this.KEYS.USERS);
-    const drivers = this.getAll(this.KEYS.DRIVERS);
-    
-    let migratedUsers = 0;
-    let migratedDrivers = 0;
-    
-    // Add driverId field to existing users if not present
-    users.forEach(user => {
-      if (user.driverId === undefined) {
-        user.driverId = null;
-        migratedUsers++;
-      }
-    });
-    
-    // Add linkedUserId field to existing drivers if not present
-    drivers.forEach(driver => {
-      if (driver.linkedUserId === undefined) {
-        driver.linkedUserId = null;
-        migratedDrivers++;
-      }
-    });
-    
-    // Save updated data if any migrations occurred
-    if (migratedUsers > 0) {
-      this.save(this.KEYS.USERS, users);
-      console.log(`Migrated ${migratedUsers} user records with driverId field`);
-    }
-    
-    if (migratedDrivers > 0) {
-      this.save(this.KEYS.DRIVERS, drivers);
-      console.log(`Migrated ${migratedDrivers} driver records with linkedUserId field`);
-    }
-    
-    // Auto-link users and drivers with matching names (best effort)
-    await this.autoLinkDriverUsers();
+    // Skip migration for Firebase - starting fresh
+    return;
   },
 
-  /**
-   * Attempt to automatically link users and drivers with matching names
-   */
   async autoLinkDriverUsers() {
-    const users = this.getAll(this.KEYS.USERS);
-    const drivers = this.getAll(this.KEYS.DRIVERS);
-    
-    const driverUsers = users.filter(user => 
-      user.role === this.ROLES.DRIVER && 
-      !user.driverId
-    );
-    
-    const unlinkedDrivers = drivers.filter(driver => !driver.linkedUserId);
-    
-    let linkedCount = 0;
-    
-    for (const user of driverUsers) {
-      // Try to find a driver with matching or similar name
-      const matchingDriver = unlinkedDrivers.find(driver => {
-        const userNameNormalized = user.name.toLowerCase().trim();
-        const driverNameNormalized = driver.name.toLowerCase().trim();
-        
-        // Exact match or user name contains driver name or vice versa
-        return userNameNormalized === driverNameNormalized ||
-               userNameNormalized.includes(driverNameNormalized) ||
-               driverNameNormalized.includes(userNameNormalized);
-      });
-      
-      if (matchingDriver) {
-        try {
-          await this.linkUserToDriver(user.id, matchingDriver.id);
-          linkedCount++;
-          
-          // Remove from unlinked list to prevent duplicate linking
-          const index = unlinkedDrivers.indexOf(matchingDriver);
-          if (index > -1) {
-            unlinkedDrivers.splice(index, 1);
-          }
-        } catch (error) {
-          console.warn(`Failed to auto-link user ${user.username} to driver ${matchingDriver.name}:`, error.message);
-        }
-      }
-    }
-    
-    if (linkedCount > 0) {
-      console.log(`Auto-linked ${linkedCount} driver users to driver profiles`);
-    }
+    // Skip for Firebase - starting fresh
+    return;
   },
 
-  /**
-   * Fix existing driver users that may have broken driverId fields
-   * This method ensures all driver role users have proper driverId links
-   */
   async fixDriverUserIds() {
-    const users = this.getAll(this.KEYS.USERS);
-    const drivers = this.getAll(this.KEYS.DRIVERS);
-    
-    let fixedCount = 0;
-    let updated = false;
-    
-    // Check each user with driver role
-    users.forEach(user => {
-      if (user.role === this.ROLES.DRIVER) {
-        // If user doesn't have driverId but a driver is linked to this user
-        if (!user.driverId) {
-          const linkedDriver = drivers.find(driver => driver.linkedUserId === user.id);
-          if (linkedDriver) {
-            user.driverId = linkedDriver.id;
-            fixedCount++;
-            updated = true;
-            console.log(`Fixed missing driverId for user ${user.username}, linked to driver ${linkedDriver.name}`);
-          }
-        }
-        
-        // If user has driverId but the driver doesn't exist or isn't properly linked back
-        if (user.driverId) {
-          const driver = drivers.find(driver => driver.id === user.driverId);
-          if (!driver) {
-            // Driver doesn't exist, clear the driverId
-            user.driverId = null;
-            fixedCount++;
-            updated = true;
-            console.log(`Cleared invalid driverId for user ${user.username}`);
-          } else if (driver.linkedUserId !== user.id) {
-            // Driver exists but isn't properly linked back, fix the link
-            driver.linkedUserId = user.id;
-            updated = true;
-            console.log(`Fixed driver link for driver ${driver.name} to user ${user.username}`);
-          }
-        }
-      }
-    });
-    
-    // Save if any updates were made
-    if (updated) {
-      this.save(this.KEYS.USERS, users);
-      this.save(this.KEYS.DRIVERS, drivers);
-      console.log(`Fixed ${fixedCount} driver user ID links`);
-    }
+    // Skip migration for Firebase - starting fresh
+    return;
   },
 
   // ===============================
@@ -1180,8 +1136,8 @@ const DB = {
    * Get all orders
    * @returns {Array} Array of order objects
    */
-  getAllOrders() {
-    return this.getAll(this.KEYS.ORDERS);
+  async getAllOrders() {
+    return await this.getAll(this.COLLECTIONS.ORDERS);
   },
 
   /**
@@ -1189,9 +1145,15 @@ const DB = {
    * @param {string} id - Order ID
    * @returns {Object|null} Order object or null
    */
-  getOrderById(id) {
-    const orders = this.getAllOrders();
-    return orders.find(order => order.id === id) || null;
+  async getOrderById(id) {
+    try {
+      const docRef = doc(db, this.COLLECTIONS.ORDERS, id);
+      const docSnap = await getDoc(docRef);
+      return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+    } catch (error) {
+      console.error('Error getting order:', error);
+      return null;
+    }
   },
 
   /**
@@ -1199,9 +1161,18 @@ const DB = {
    * @param {string} driverId - Driver ID
    * @returns {Array} Array of orders for the driver
    */
-  getOrdersByDriver(driverId) {
-    const orders = this.getAllOrders();
-    return orders.filter(order => order.driverId === driverId);
+  async getOrdersByDriver(driverId) {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.ORDERS),
+        where("driverId", "==", driverId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('Error getting orders by driver:', error);
+      return [];
+    }
   },
 
   /**
@@ -1234,8 +1205,8 @@ const DB = {
    * @param {Date} filters.endDate - Filter by end date
    * @returns {Array} Filtered orders
    */
-  getOrdersWithFilters(filters = {}) {
-    let orders = this.getAllOrders();
+  async getOrdersWithFilters(filters = {}) {
+    let orders = await this.getAllOrders();
     
     if (filters.salesRepId) {
       orders = orders.filter(order => order.salesRepId === filters.salesRepId);
@@ -1267,7 +1238,7 @@ const DB = {
    * @param {Object} orderData - Order data
    * @returns {Object} Created order object
    */
-  createOrder(orderData) {
+  async createOrder(orderData) {
     const session = this.getCurrentSession();
     if (!session) {
       throw new Error('No active session found');
@@ -1279,50 +1250,53 @@ const DB = {
     }
 
     // Validate inventory availability for all line items
-    orderData.lineItems.forEach(item => {
+    for (const item of orderData.lineItems) {
       if (!item.isFreeGift) {
-        const driverInventory = this.getDriverInventory(orderData.driverId);
+        const driverInventory = await this.getDriverInventory(orderData.driverId);
         const productInventory = driverInventory.find(inv => inv.id === item.productId);
-        
+
         if (!productInventory || productInventory.remaining < item.actualQuantity) {
-          const product = this.getProductById(item.productId);
+          const product = await this.getProductById(item.productId);
           throw new Error(`Insufficient inventory for ${product ? product.name : 'unknown product'}`);
         }
       }
-    });
+    }
 
-    const orders = this.getAllOrders();
-    const newOrder = {
-      id: this.generateId(),
-      driverId: orderData.driverId,
-      salesRepId: session.userId, // Track who created the order
-      customerAddress: orderData.customerAddress.trim(),
-      customerDescription: orderData.customerDescription ? orderData.customerDescription.trim() : '',
-      deliveryMethod: orderData.deliveryMethod || 'Paid',
-      totalAmount: parseFloat(orderData.totalAmount) || 0,
-      status: this.ORDER_STATUS.PENDING,
-      lineItems: orderData.lineItems || [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      completedAt: null
-    };
+    try {
+      const newOrderData = {
+        driverId: orderData.driverId,
+        salesRepId: session.userId, // Track who created the order
+        customerAddress: orderData.customerAddress.trim(),
+        customerDescription: orderData.customerDescription ? orderData.customerDescription.trim() : '',
+        deliveryMethod: orderData.deliveryMethod || 'Paid',
+        totalAmount: parseFloat(orderData.totalAmount) || 0,
+        status: this.ORDER_STATUS.PENDING,
+        lineItems: orderData.lineItems || [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        completedAt: null
+      };
 
-    orders.push(newOrder);
-    this.save(this.KEYS.ORDERS, orders);
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.ORDERS), newOrderData);
+      const newOrder = { id: docRef.id, ...newOrderData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
 
-    // Update inventory by creating temporary sales entry for inventory calculation
-    // This affects driver inventory immediately when order is created
-    this.addSale({
-      driverId: orderData.driverId,
-      customerAddress: orderData.customerAddress,
-      customerDescription: orderData.customerDescription,
-      deliveryMethod: orderData.deliveryMethod,
-      totalAmount: orderData.totalAmount,
-      lineItems: orderData.lineItems,
-      orderId: newOrder.id // Link to order for reference
-    });
+      // Update inventory by creating temporary sales entry for inventory calculation
+      // This affects driver inventory immediately when order is created
+      await this.addSale({
+        driverId: orderData.driverId,
+        customerAddress: orderData.customerAddress,
+        customerDescription: orderData.customerDescription,
+        deliveryMethod: orderData.deliveryMethod,
+        totalAmount: orderData.totalAmount,
+        lineItems: orderData.lineItems,
+        orderId: newOrder.id // Link to order for reference
+      });
 
-    return newOrder;
+      return newOrder;
+    } catch (error) {
+      console.error('Error creating order:', error);
+      throw error;
+    }
   },
 
   /**
@@ -1331,49 +1305,51 @@ const DB = {
    * @param {Object} updates - Update data
    * @returns {Object|null} Updated order or null
    */
-  updateOrder(id, updates) {
-    const orders = this.getAllOrders();
-    const index = orders.findIndex(order => order.id === id);
-    
-    if (index === -1) {
-      return null;
+  async updateOrder(id, updates) {
+    try {
+      const currentOrder = await this.getOrderById(id);
+      if (!currentOrder) {
+        return null;
+      }
+
+      // Prevent updating completed or cancelled orders unless changing status
+      if ((currentOrder.status === this.ORDER_STATUS.COMPLETED || currentOrder.status === this.ORDER_STATUS.CANCELLED)
+          && !updates.hasOwnProperty('status')) {
+        throw new Error('Cannot update completed or cancelled orders');
+      }
+
+      // Validate status transitions
+      if (updates.status && !this.isValidStatusTransition(currentOrder.status, updates.status)) {
+        throw new Error(`Invalid status transition from ${currentOrder.status} to ${updates.status}`);
+      }
+
+      // Handle inventory changes if line items are updated
+      if (updates.lineItems && currentOrder.status === this.ORDER_STATUS.PENDING) {
+        // This would require more complex inventory rollback logic
+        // For now, we'll prevent line item updates on existing orders
+        throw new Error('Line item updates not supported for existing orders. Cancel and create a new order instead.');
+      }
+
+      const updateData = {
+        ...updates,
+        updatedAt: serverTimestamp()
+      };
+
+      // Set completion timestamp when marking as completed
+      if (updates.status === this.ORDER_STATUS.COMPLETED && currentOrder.status !== this.ORDER_STATUS.COMPLETED) {
+        updateData.completedAt = serverTimestamp();
+      }
+
+      const docRef = doc(db, this.COLLECTIONS.ORDERS, id);
+      await updateDoc(docRef, updateData);
+
+      // Return updated order
+      const updatedDoc = await getDoc(docRef);
+      return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } : null;
+    } catch (error) {
+      console.error('Error updating order:', error);
+      throw error;
     }
-
-    const currentOrder = orders[index];
-    
-    // Prevent updating completed or cancelled orders unless changing status
-    if ((currentOrder.status === this.ORDER_STATUS.COMPLETED || currentOrder.status === this.ORDER_STATUS.CANCELLED) 
-        && !updates.hasOwnProperty('status')) {
-      throw new Error('Cannot update completed or cancelled orders');
-    }
-
-    // Validate status transitions
-    if (updates.status && !this.isValidStatusTransition(currentOrder.status, updates.status)) {
-      throw new Error(`Invalid status transition from ${currentOrder.status} to ${updates.status}`);
-    }
-
-    // Handle inventory changes if line items are updated
-    if (updates.lineItems && currentOrder.status === this.ORDER_STATUS.PENDING) {
-      // This would require more complex inventory rollback logic
-      // For now, we'll prevent line item updates on existing orders
-      throw new Error('Line item updates not supported for existing orders. Cancel and create a new order instead.');
-    }
-
-    const updatedOrder = {
-      ...currentOrder,
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
-
-    // Set completion timestamp when marking as completed
-    if (updates.status === this.ORDER_STATUS.COMPLETED && currentOrder.status !== this.ORDER_STATUS.COMPLETED) {
-      updatedOrder.completedAt = new Date().toISOString();
-    }
-
-    orders[index] = updatedOrder;
-    this.save(this.KEYS.ORDERS, orders);
-
-    return updatedOrder;
   },
 
   /**
@@ -1382,8 +1358,8 @@ const DB = {
    * @param {boolean} payDriver - Whether to pay the driver (default: false)
    * @returns {boolean} Success status
    */
-  cancelOrder(id, payDriver = false) {
-    const order = this.getOrderById(id);
+  async cancelOrder(id, payDriver = false) {
+    const order = await this.getOrderById(id);
     if (!order) {
       return false;
     }
@@ -1393,11 +1369,11 @@ const DB = {
     }
 
     // Remove the associated sale to restore inventory
-    const sales = this.getAllSales();
+    const sales = await this.getAllSales();
     const saleIndex = sales.findIndex(sale => sale.orderId === id);
     if (saleIndex !== -1) {
       sales.splice(saleIndex, 1);
-      this.save(this.KEYS.SALES, sales);
+      await this.save(this.COLLECTIONS.SALES, sales);
     }
 
     // Update order status and payment method based on driver payment choice
@@ -1411,7 +1387,7 @@ const DB = {
       updateData.deliveryMethod = 'Free';
     }
     
-    this.updateOrder(id, updateData);
+    await this.updateOrder(id, updateData);
 
     return true;
   },
@@ -1452,12 +1428,11 @@ const DB = {
   },
 
   /**
-   * Get orders with advanced filtering options
-   * @param {Object} filters - Filter options
-   * @returns {Array} Filtered orders
+   * Get orders with advanced filtering options (duplicate method - removed)
+   * This method was a duplicate and has been consolidated with the method above
    */
-  getOrdersWithFilters(filters = {}) {
-    let orders = this.getAllOrders();
+  async getOrdersWithAdvancedFilters(filters = {}) {
+    let orders = await this.getAllOrders();
     
     // Filter by driver
     if (filters.driverId) {
@@ -1546,15 +1521,15 @@ const DB = {
    * Get today's order amount (for dashboard compatibility)
    * @returns {number} Total amount of today's completed orders
    */
-  getTodayOrderAmount() {
+  async getTodayOrderAmount() {
     const today = new Date();
     const todayStr = today.toDateString();
-    
-    const todayOrders = this.getAllOrders().filter(order => {
+
+    const todayOrders = (await this.getAllOrders()).filter(order => {
       const orderDate = new Date(order.createdAt);
       return orderDate.toDateString() === todayStr && order.status === this.ORDER_STATUS.COMPLETED;
     });
-    
+
     return todayOrders.reduce((total, order) => total + order.totalAmount, 0);
   },
 
@@ -1578,14 +1553,14 @@ const DB = {
    * @param {number} threshold - Low stock threshold (default: 5)
    * @returns {Array} Driver inventory with alert flags
    */
-  getDriverInventoryWithAlerts(driverId, threshold = 5) {
-    const inventory = this.getDriverInventory(driverId);
-    
+  async getDriverInventoryWithAlerts(driverId, threshold = 5) {
+    const inventory = await this.getDriverInventory(driverId);
+
     return inventory.map(item => ({
       ...item,
       isLowStock: item.remaining <= threshold && item.remaining > 0,
       isOutOfStock: item.remaining <= 0,
-      alertLevel: item.remaining <= 0 ? 'critical' : 
+      alertLevel: item.remaining <= 0 ? 'critical' :
                   item.remaining <= threshold ? 'warning' : 'normal'
     }));
   },
@@ -1595,20 +1570,20 @@ const DB = {
    * @param {string} driverId - Driver ID
    * @returns {Object} Order summary with counts and totals
    */
-  getDriverOrderSummary(driverId) {
+  async getDriverOrderSummary(driverId) {
     const today = new Date();
     const todayStr = today.toDateString();
-    
-    const driverOrders = this.getOrdersByDriver(driverId);
+
+    const driverOrders = await this.getOrdersByDriver(driverId);
     const todayOrders = driverOrders.filter(order => {
       const orderDate = new Date(order.createdAt);
       return orderDate.toDateString() === todayStr;
     });
-    
+
     const pending = todayOrders.filter(order => order.status === this.ORDER_STATUS.PENDING);
     const completed = todayOrders.filter(order => order.status === this.ORDER_STATUS.COMPLETED);
     const cancelled = todayOrders.filter(order => order.status === this.ORDER_STATUS.CANCELLED);
-    
+
     return {
       total: todayOrders.length,
       pending: {
@@ -1625,6 +1600,38 @@ const DB = {
       },
       totalAmount: todayOrders.reduce((sum, order) => sum + order.totalAmount, 0),
       completedAmount: completed.reduce((sum, order) => sum + order.totalAmount, 0)
+    };
+  },
+
+  /**
+   * Get driver earnings from completed orders
+   * @param {string} driverId - Driver ID
+   * @returns {Object} Earnings summary
+   */
+  async getDriverEarnings(driverId) {
+    const orders = await this.getOrdersByDriver(driverId);
+    const completedOrders = orders.filter(order => order.status === this.ORDER_STATUS.COMPLETED);
+
+    const today = new Date();
+    const todayStr = today.toDateString();
+
+    const todayEarnings = completedOrders
+      .filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate.toDateString() === todayStr;
+      })
+      .reduce((total, order) => total + order.totalAmount, 0);
+
+    const totalEarnings = completedOrders.reduce((total, order) => total + order.totalAmount, 0);
+
+    return {
+      today: todayEarnings,
+      total: totalEarnings,
+      ordersCount: completedOrders.length,
+      todayOrdersCount: completedOrders.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate.toDateString() === todayStr;
+      }).length
     };
   },
 
@@ -1721,6 +1728,9 @@ const DB = {
     );
   }
 };
+
+// Make DB globally accessible for testing
+window.DB = DB;
 
 // Initialize the database when script loads
 DB.init().catch(error => {

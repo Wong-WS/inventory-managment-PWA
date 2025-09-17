@@ -5,9 +5,9 @@
 
 const ReportsModule = {
   // Initialize the reports module
-  init() {
+  async init() {
     this.bindEvents();
-    this.updateDriverDropdowns();
+    await this.updateDriverDropdowns();
     this.setDefaultDate();
   },
 
@@ -15,12 +15,12 @@ const ReportsModule = {
   bindEvents() {
     const salesReportBtn = document.getElementById('generate-sales-report');
     if (salesReportBtn) {
-      salesReportBtn.addEventListener('click', this.generateSalesReport.bind(this));
+      salesReportBtn.addEventListener('click', async () => await this.generateSalesReport());
     }
     
     const inventoryReportBtn = document.getElementById('generate-inventory-report');
     if (inventoryReportBtn) {
-      inventoryReportBtn.addEventListener('click', this.generateInventoryReport.bind(this));
+      inventoryReportBtn.addEventListener('click', async () => await this.generateInventoryReport());
     }
     
     const reportTabs = document.querySelectorAll('.report-tab');
@@ -65,42 +65,42 @@ const ReportsModule = {
   },
 
   // Generate sales report
-  generateSalesReport() {
+  async generateSalesReport() {
     const driverSelect = document.getElementById('report-driver');
     const periodSelect = document.getElementById('report-period');
     const dateInput = document.getElementById('report-date');
     const resultsDiv = document.getElementById('sales-report-results');
-    
+
     if (!resultsDiv) return;
-    
+
     const driverId = driverSelect.value;
     const period = periodSelect.value;
     const date = dateInput.value;
-    
+
     if (!period || !date) {
       alert('Please select a period and date.');
       return;
     }
-    
+
     // Get orders for the specified period and driver (use orders if available, fallback to sales)
-    const orders = typeof DB.getOrdersByPeriod === 'function' ? 
-      DB.getOrdersByPeriod(driverId, period, date) : 
-      (typeof DB.getSalesByPeriod === 'function' ? DB.getSalesByPeriod(driverId, period, date) : []);
-    
+    const orders = typeof DB.getOrdersByPeriod === 'function' ?
+      await DB.getOrdersByPeriod(driverId, period, date) :
+      (typeof DB.getSalesByPeriod === 'function' ? await DB.getSalesByPeriod(driverId, period, date) : []);
+
     if (orders.length === 0) {
       resultsDiv.innerHTML = '<p class="no-data">No order data found for the selected period.</p>';
       return;
     }
-    
+
     // Calculate totals and prepare report data
     let totalSales = 0;
     let totalItems = 0;
     const productTotals = {};
     const driverTotals = {};
-    
-    orders.forEach(order => {
-      const driver = DB.getDriverById(order.driverId);
-      if (!driver) return;
+
+    for (const order of orders) {
+      const driver = await DB.getDriverById(order.driverId);
+      if (!driver) continue;
       
       // Aggregate total order amount
       totalSales += order.totalAmount;
@@ -132,7 +132,7 @@ const ReportsModule = {
           productTotals[item.productId].quantity += deductionAmount;
         }
       });
-    });
+    }
     
     // Format date range for display
     const displayDate = new Date(date);
@@ -282,30 +282,30 @@ const ReportsModule = {
   },
 
   // Generate inventory report
-  generateInventoryReport() {
+  async generateInventoryReport() {
     const driverSelect = document.getElementById('inventory-driver');
     const resultsDiv = document.getElementById('inventory-report-results');
-    
+
     if (!resultsDiv) return;
-    
+
     const driverId = driverSelect.value;
-    
+
     let inventoryData = [];
-    
+
     if (driverId) {
       // Get inventory for a specific driver
-      inventoryData = DB.getDriverInventory(driverId);
-      
+      inventoryData = await DB.getDriverInventory(driverId);
+
       if (inventoryData.length === 0) {
         resultsDiv.innerHTML = '<p class="no-data">No inventory data found for the selected driver.</p>';
         return;
       }
-      
+
       // Sort by product name
       inventoryData.sort((a, b) => a.name.localeCompare(b.name));
-      
+
       // Build report HTML for a specific driver
-      const driver = DB.getDriverById(driverId);
+      const driver = await DB.getDriverById(driverId);
       
       let reportHTML = `
         <div class="report-summary">
@@ -336,22 +336,22 @@ const ReportsModule = {
       
     } else {
       // Get inventory for all drivers
-      const drivers = DB.getAllDrivers();
-      
+      const drivers = await DB.getAllDrivers();
+
       if (drivers.length === 0) {
         resultsDiv.innerHTML = '<p class="no-data">No drivers found.</p>';
         return;
       }
-      
+
       // Build report HTML for all drivers
       let reportHTML = `
         <div class="report-summary">
           <h4>Inventory Report for All Drivers</h4>
         </div>
       `;
-      
+
       // Overall inventory status
-      const products = DB.getAllProducts();
+      const products = await DB.getAllProducts();
       
       reportHTML += `
         <h4>Overall Inventory Status</h4>
@@ -374,8 +374,8 @@ const ReportsModule = {
       reportHTML += '</table>';
       
       // Per driver inventory
-      drivers.forEach(driver => {
-        const driverInventory = DB.getDriverInventory(driver.id);
+      for (const driver of drivers) {
+        const driverInventory = await DB.getDriverInventory(driver.id);
         
         if (driverInventory.length > 0) {
           reportHTML += `
@@ -407,7 +407,7 @@ const ReportsModule = {
             <p class="no-data">No inventory assigned to this driver.</p>
           `;
         }
-      });
+      }
       
       resultsDiv.innerHTML = reportHTML;
     }
@@ -448,9 +448,13 @@ const ReportsModule = {
   },
 
   // Update driver dropdowns
-  updateDriverDropdowns() {
+  async updateDriverDropdowns() {
     if (typeof DriversModule !== 'undefined') {
-      DriversModule.updateDriverDropdowns();
+      await DriversModule.updateDriverDropdowns();
     }
   }
 };
+
+// Export the module and make it globally available
+export default ReportsModule;
+window.ReportsModule = ReportsModule;

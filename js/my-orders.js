@@ -5,9 +5,9 @@
 
 const MyOrdersModule = {
   // Initialize the my orders module
-  init() {
+  async init() {
     this.bindEvents();
-    this.loadMyOrders();
+    await this.loadMyOrders();
   },
 
   // Bind event listeners
@@ -20,68 +20,73 @@ const MyOrdersModule = {
   },
 
   // Get the current driver's ID from session
-  getCurrentDriverId() {
+  async getCurrentDriverId() {
     const session = DB.getCurrentSession();
     if (!session || session.role !== DB.ROLES.DRIVER) {
       return null;
     }
 
-    // Get the full user record to access driverId
-    const users = DB.getAll(DB.KEYS.USERS);
-    const user = users.find(u => u.id === session.userId);
-    if (!user) return null;
+    try {
+      // Get the current user from Firebase
+      const user = await DB.getCurrentUser();
+      if (!user) return null;
 
-    // If user has a driverId field, use it directly
-    if (user.driverId) {
-      return user.driverId;
+      // If user has a driverId field, use it directly
+      if (user.driverId) {
+        return user.driverId;
+      }
+
+      // Fallback: try to find driver by matching name
+      const drivers = await DB.getAllDrivers();
+      const matchingDriver = drivers.find(driver =>
+        driver.name.toLowerCase() === user.name.toLowerCase()
+      );
+
+      return matchingDriver ? matchingDriver.id : null;
+    } catch (error) {
+      console.error('Error getting current driver ID:', error);
+      return null;
     }
-
-    // Fallback: try to find driver by matching name
-    const drivers = DB.getAllDrivers();
-    const matchingDriver = drivers.find(driver => 
-      driver.name.toLowerCase() === user.name.toLowerCase()
-    );
-
-    return matchingDriver ? matchingDriver.id : null;
   },
 
   // Load and display driver's orders
-  loadMyOrders() {
+  async loadMyOrders() {
     const ordersList = document.getElementById('my-orders-list');
     if (!ordersList) return;
 
-    const statusFilter = document.getElementById('my-order-status-filter');
-    const selectedStatus = statusFilter ? statusFilter.value : '';
+    try {
+      const statusFilter = document.getElementById('my-order-status-filter');
+      const selectedStatus = statusFilter ? statusFilter.value : '';
 
-    // Get current driver ID
-    const driverId = this.getCurrentDriverId();
-    if (!driverId) {
-      ordersList.innerHTML = '<li class="empty-list">No driver account linked to your user.</li>';
-      return;
-    }
+      // Get current driver ID
+      const driverId = await this.getCurrentDriverId();
+      if (!driverId) {
+        ordersList.innerHTML = '<li class="empty-list">No driver account linked to your user.</li>';
+        return;
+      }
 
-    // Get orders for this driver
-    let orders = DB.getOrdersByDriver(driverId);
+      // Get orders for this driver
+      let orders = await DB.getOrdersByDriver(driverId);
     
-    // Apply status filter
-    if (selectedStatus) {
-      orders = orders.filter(order => order.status === selectedStatus);
-    }
+      // Apply status filter
+      if (selectedStatus) {
+        orders = orders.filter(order => order.status === selectedStatus);
+      }
 
-    ordersList.innerHTML = '';
+      ordersList.innerHTML = '';
 
-    if (orders.length === 0) {
-      const emptyMessage = selectedStatus 
-        ? `No ${selectedStatus} orders found.` 
-        : 'No orders assigned to you yet.';
-      ordersList.innerHTML = `<li class="empty-list">${emptyMessage}</li>`;
-      return;
-    }
+      if (orders.length === 0) {
+        const emptyMessage = selectedStatus
+          ? `No ${selectedStatus} orders found.`
+          : 'No orders assigned to you yet.';
+        ordersList.innerHTML = `<li class="empty-list">${emptyMessage}</li>`;
+        return;
+      }
 
     // Sort by creation date, newest first
     orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    orders.forEach(order => {
+    for (const order of orders) {
       const li = document.createElement('li');
       li.className = `order-item status-${order.status}`;
 
@@ -112,9 +117,15 @@ const MyOrdersModule = {
       // Status badge with appropriate styling
       const statusBadge = `<span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span>`;
 
-      // Get sales rep info if available
-      const salesRep = order.salesRepId ? DB.getUserById(order.salesRepId) : null;
-      const salesRepInfo = salesRep ? `<br><small>Order by: ${salesRep.name}</small>` : '';
+      // Get sales rep info if available - handle async with fallback
+      let salesRepInfo = '';
+      try {
+        const salesRep = order.salesRepId ? await DB.getUserById(order.salesRepId) : null;
+        salesRepInfo = salesRep ? `<br><small>Order by: ${salesRep.name}</small>` : '';
+      } catch (error) {
+        // Fallback to show unknown if DB call fails
+        salesRepInfo = order.salesRepId ? `<br><small>Order by: Unknown</small>` : '';
+      }
 
       li.innerHTML = `
         <div class="order-details">
@@ -142,7 +153,11 @@ const MyOrdersModule = {
       `;
 
       ordersList.appendChild(li);
-    });
+    }
+    } catch (error) {
+      ordersList.innerHTML = '<li class="empty-list">Error loading orders.</li>';
+      console.error('Error loading my orders:', error);
+    }
   },
 
   // Show notification (utility method)
@@ -154,3 +169,7 @@ const MyOrdersModule = {
     }
   }
 };
+
+// Export the module and make it globally available
+export default MyOrdersModule;
+window.MyOrdersModule = MyOrdersModule;
