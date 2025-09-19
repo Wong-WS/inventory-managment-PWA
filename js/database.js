@@ -5,19 +5,20 @@
 
 // Import Firebase services
 import { db } from './firebase-config.js';
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  doc, 
-  getDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
-  orderBy, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
   serverTimestamp,
-  writeBatch
+  writeBatch,
+  onSnapshot
 } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js';
 
 export const DB = {
@@ -65,6 +66,9 @@ export const DB = {
     TOKEN_LENGTH: 32
   },
 
+  // Real-time listener management
+  listeners: new Map(), // Track active listeners
+
   // Initialize database
   async init() {
     try {
@@ -79,6 +83,282 @@ export const DB = {
       console.error('Database initialization failed:', error);
       throw error;
     }
+  },
+
+  // ===============================
+  // REAL-TIME LISTENER MANAGEMENT
+  // ===============================
+
+  /**
+   * Cleanup a specific listener
+   * @param {string} listenerId - Unique identifier for the listener
+   */
+  cleanupListener(listenerId) {
+    const unsubscribe = this.listeners.get(listenerId);
+    if (unsubscribe) {
+      unsubscribe();
+      this.listeners.delete(listenerId);
+    }
+  },
+
+  /**
+   * Cleanup all active listeners
+   */
+  cleanupAllListeners() {
+    this.listeners.forEach(unsubscribe => unsubscribe());
+    this.listeners.clear();
+  },
+
+  /**
+   * Listen to orders in real-time
+   * @param {Function} callback - Callback function to handle order updates
+   * @param {Object} filters - Optional filters for orders
+   * @param {string} filters.driverId - Filter by driver ID
+   * @param {string} filters.salesRepId - Filter by sales rep ID
+   * @param {string} filters.status - Filter by order status
+   * @returns {string} Listener ID for cleanup
+   */
+  listenToOrders(callback, filters = {}) {
+    const listenerId = 'orders' + (filters.driverId ? '_driver_' + filters.driverId : '') +
+                      (filters.salesRepId ? '_salesrep_' + filters.salesRepId : '') +
+                      (filters.status ? '_status_' + filters.status : '');
+
+    this.cleanupListener(listenerId);
+
+    let q = collection(db, this.COLLECTIONS.ORDERS);
+
+    // Apply filters
+    if (filters.driverId) {
+      q = query(q, where("driverId", "==", filters.driverId));
+    }
+    if (filters.salesRepId) {
+      q = query(q, where("salesRepId", "==", filters.salesRepId));
+    }
+    if (filters.status) {
+      q = query(q, where("status", "==", filters.status));
+    }
+
+    // Add ordering by creation date (newest first) - only if no other filters to avoid index issues
+    if (!filters.driverId && !filters.salesRepId && !filters.status) {
+      q = query(q, orderBy("createdAt", "desc"));
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Sort in memory if we couldn't sort in the query due to composite index requirements
+      if (filters.driverId || filters.salesRepId || filters.status) {
+        orders.sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+          return dateB - dateA;
+        });
+      }
+
+      callback(orders);
+    }, (error) => {
+      console.error('Error listening to orders:', error);
+      callback([]);
+    });
+
+    this.listeners.set(listenerId, unsubscribe);
+    return listenerId;
+  },
+
+  /**
+   * Listen to products in real-time
+   * @param {Function} callback - Callback function to handle product updates
+   * @returns {string} Listener ID for cleanup
+   */
+  listenToProducts(callback) {
+    const listenerId = 'products';
+    this.cleanupListener(listenerId);
+
+    // Simple collection query without orderBy to avoid index issues
+    const q = collection(db, this.COLLECTIONS.PRODUCTS);
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Sort in memory by creation date (newest first)
+      products.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return dateB - dateA;
+      });
+
+      callback(products);
+    }, (error) => {
+      console.error('Error listening to products:', error);
+      callback([]);
+    });
+
+    this.listeners.set(listenerId, unsubscribe);
+    return listenerId;
+  },
+
+  /**
+   * Listen to drivers in real-time
+   * @param {Function} callback - Callback function to handle driver updates
+   * @returns {string} Listener ID for cleanup
+   */
+  listenToDrivers(callback) {
+    const listenerId = 'drivers';
+    this.cleanupListener(listenerId);
+
+    // Simple collection query without orderBy to avoid index issues
+    const q = collection(db, this.COLLECTIONS.DRIVERS);
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const drivers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Sort in memory by creation date (newest first)
+      drivers.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return dateB - dateA;
+      });
+
+      callback(drivers);
+    }, (error) => {
+      console.error('Error listening to drivers:', error);
+      callback([]);
+    });
+
+    this.listeners.set(listenerId, unsubscribe);
+    return listenerId;
+  },
+
+  /**
+   * Listen to users in real-time
+   * @param {Function} callback - Callback function to handle user updates
+   * @returns {string} Listener ID for cleanup
+   */
+  listenToUsers(callback) {
+    const listenerId = 'users';
+    this.cleanupListener(listenerId);
+
+    // Simple collection query without orderBy to avoid index issues
+    const q = collection(db, this.COLLECTIONS.USERS);
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const users = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        // Remove sensitive data for real-time updates
+        passwordHash: undefined,
+        salt: undefined
+      }));
+
+      // Sort in memory by creation date (newest first)
+      users.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return dateB - dateA;
+      });
+
+      callback(users);
+    }, (error) => {
+      console.error('Error listening to users:', error);
+      callback([]);
+    });
+
+    this.listeners.set(listenerId, unsubscribe);
+    return listenerId;
+  },
+
+  /**
+   * Listen to assignments in real-time
+   * @param {Function} callback - Callback function to handle assignment updates
+   * @param {Object} filters - Optional filters
+   * @param {string} filters.driverId - Filter by driver ID
+   * @param {string} filters.productId - Filter by product ID
+   * @returns {string} Listener ID for cleanup
+   */
+  listenToAssignments(callback, filters = {}) {
+    const listenerId = 'assignments' + (filters.driverId ? '_driver_' + filters.driverId : '') +
+                      (filters.productId ? '_product_' + filters.productId : '');
+
+    this.cleanupListener(listenerId);
+
+    let q = collection(db, this.COLLECTIONS.ASSIGNMENTS);
+
+    if (filters.driverId) {
+      q = query(q, where("driverId", "==", filters.driverId));
+    }
+    if (filters.productId) {
+      q = query(q, where("productId", "==", filters.productId));
+    }
+
+    // Only add orderBy if no filters to avoid composite index issues
+    if (!filters.driverId && !filters.productId) {
+      q = query(q, orderBy("assignedAt", "desc"));
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let assignments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Sort in memory if we couldn't sort in the query
+      if (filters.driverId || filters.productId) {
+        assignments.sort((a, b) => {
+          const dateA = a.assignedAt?.toDate ? a.assignedAt.toDate() : new Date(a.assignedAt);
+          const dateB = b.assignedAt?.toDate ? b.assignedAt.toDate() : new Date(b.assignedAt);
+          return dateB - dateA;
+        });
+      }
+
+      callback(assignments);
+    }, (error) => {
+      console.error('Error listening to assignments:', error);
+      callback([]);
+    });
+
+    this.listeners.set(listenerId, unsubscribe);
+    return listenerId;
+  },
+
+  /**
+   * Listen to stock transfers in real-time
+   * @param {Function} callback - Callback function to handle transfer updates
+   * @param {Object} filters - Optional filters
+   * @param {string} filters.driverId - Filter by driver ID (from or to)
+   * @returns {string} Listener ID for cleanup
+   */
+  listenToStockTransfers(callback, filters = {}) {
+    const listenerId = 'stock_transfers' + (filters.driverId ? '_driver_' + filters.driverId : '');
+
+    this.cleanupListener(listenerId);
+
+    let q = collection(db, this.COLLECTIONS.STOCK_TRANSFERS);
+
+    // Simple collection query without orderBy to avoid index issues
+    // Note: For driver filters, we'll filter in-memory since Firestore doesn't support OR queries easily
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let transfers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Apply driver filter in-memory
+      if (filters.driverId) {
+        transfers = transfers.filter(transfer =>
+          transfer.fromDriverId === filters.driverId || transfer.toDriverId === filters.driverId
+        );
+      }
+
+      // Sort in memory by transfer date (newest first)
+      transfers.sort((a, b) => {
+        const dateA = a.transferredAt?.toDate ? a.transferredAt.toDate() : new Date(a.transferredAt);
+        const dateB = b.transferredAt?.toDate ? b.transferredAt.toDate() : new Date(b.transferredAt);
+        return dateB - dateA;
+      });
+
+      callback(transfers);
+    }, (error) => {
+      console.error('Error listening to stock transfers:', error);
+      callback([]);
+    });
+
+    this.listeners.set(listenerId, unsubscribe);
+    return listenerId;
   },
 
   // Generate a unique ID
@@ -706,15 +986,32 @@ export const DB = {
   async deleteProduct(id) {
     try {
       const docRef = doc(db, this.COLLECTIONS.PRODUCTS, id);
-      
+
       // Get the product before deleting
       const docSnap = await getDoc(docRef);
       const deletedProduct = docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
-      
+
       await deleteDoc(docRef);
       return deletedProduct;
     } catch (error) {
       console.error('Error deleting product:', error);
+      throw error;
+    }
+  },
+
+  async restockProduct(productId, additionalQuantity) {
+    try {
+      const product = await this.getProductById(productId);
+      if (!product) {
+        throw new Error('Product not found');
+      }
+
+      const newQuantity = product.totalQuantity + parseInt(additionalQuantity);
+      await this.updateProduct(productId, { totalQuantity: newQuantity });
+
+      return await this.getProductById(productId);
+    } catch (error) {
+      console.error('Error restocking product:', error);
       throw error;
     }
   },

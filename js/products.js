@@ -116,6 +116,16 @@ const ProductsModule = {
         editButton.setAttribute('aria-label', 'Edit product');
         editButton.addEventListener('click', () => this.editProduct(product.id));
 
+        const restockButton = document.createElement('button');
+        restockButton.textContent = 'Restock';
+        restockButton.className = 'primary-button';
+        restockButton.style.padding = '0.5rem 1rem';
+        restockButton.style.fontSize = '0.9rem';
+        restockButton.style.backgroundColor = '#28a745';
+        restockButton.style.borderColor = '#28a745';
+        restockButton.setAttribute('aria-label', 'Restock product');
+        restockButton.addEventListener('click', () => this.restockProduct(product.id));
+
         const deleteButton = document.createElement('button');
         deleteButton.textContent = 'Delete';
         deleteButton.className = 'danger-button';
@@ -125,6 +135,7 @@ const ProductsModule = {
         deleteButton.addEventListener('click', () => this.deleteProduct(product.id));
 
         itemActions.appendChild(editButton);
+        itemActions.appendChild(restockButton);
         itemActions.appendChild(deleteButton);
 
         li.appendChild(itemDetails);
@@ -215,6 +226,38 @@ const ProductsModule = {
       this.showNotification(`Product "${product.name}" deleted successfully`);
     } catch (error) {
       alert(`Error deleting product: ${error.message}`);
+    }
+  },
+
+  // Restock product
+  async restockProduct(productId) {
+    try {
+      const product = await DB.getProductById(productId);
+      if (!product) return;
+
+      const restockAmount = prompt(`How much do you want to restock for "${product.name}"?\nCurrent quantity: ${product.totalQuantity}`, '');
+      if (!restockAmount || restockAmount.trim() === '') return;
+
+      const quantity = parseInt(restockAmount);
+      if (isNaN(quantity) || quantity <= 0) {
+        alert('Please enter a valid positive number for restock amount.');
+        return;
+      }
+
+      await DB.restockProduct(productId, quantity);
+
+      // Refresh product list
+      await this.loadProductsList();
+
+      // Update dashboard if it exists
+      if (typeof DashboardModule !== 'undefined') {
+        await DashboardModule.updateDashboard();
+      }
+
+      // Show notification
+      this.showNotification(`Product "${product.name}" restocked with ${quantity} units`);
+    } catch (error) {
+      alert(`Error restocking product: ${error.message}`);
     }
   },
   
