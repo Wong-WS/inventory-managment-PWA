@@ -141,7 +141,9 @@ const MyEarningsModule = {
     
     return paidOrders.filter(order => {
       // Use completedAt for completed orders, cancelledAt for cancelled orders, or createdAt as fallback
-      const orderDate = new Date(order.completedAt || order.cancelledAt || order.createdAt);
+      const timestamp = order.completedAt || order.cancelledAt || order.createdAt;
+      // Handle Firebase Timestamp properly
+      const orderDate = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
       
       switch(period) {
         case 'day':
@@ -276,8 +278,10 @@ const MyEarningsModule = {
 
     // Sort orders by completion date, newest first
     ordersToShow.sort((a, b) => {
-      const aDate = new Date(a.completedAt || a.createdAt);
-      const bDate = new Date(b.completedAt || b.createdAt);
+      const aTimestamp = a.completedAt || a.createdAt;
+      const bTimestamp = b.completedAt || b.createdAt;
+      const aDate = aTimestamp?.toDate ? aTimestamp.toDate() : new Date(aTimestamp);
+      const bDate = bTimestamp?.toDate ? bTimestamp.toDate() : new Date(bTimestamp);
       return bDate - aDate;
     });
 
@@ -293,7 +297,8 @@ const MyEarningsModule = {
     const div = document.createElement('div');
     div.className = `earnings-item ${order.deliveryMethod.toLowerCase().replace(' ', '-')}`;
     
-    const completedDate = new Date(order.completedAt || order.cancelledAt || order.createdAt);
+    const timestamp = order.completedAt || order.cancelledAt || order.createdAt;
+    const completedDate = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
     const formattedDate = completedDate.toLocaleDateString();
     const formattedTime = completedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     

@@ -908,22 +908,26 @@ export const DB = {
   },
   
   async addSale(saleData) {
-    const sales = await this.getAllSales();
-    const newSale = {
-      id: this.generateId(),
-      ...saleData,
-      saleDate: new Date().toISOString()
-    };
+    try {
+      const newSale = {
+        ...saleData,
+        saleDate: new Date().toISOString(),
+        createdAt: serverTimestamp()
+      };
 
-    sales.push(newSale);
-    await this.save(this.COLLECTIONS.SALES, sales);
-    return newSale;
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.SALES), newSale);
+      return { id: docRef.id, ...newSale, saleDate: new Date().toISOString() };
+    } catch (error) {
+      console.error('Error adding sale:', error);
+      throw error;
+    }
   },
 
   // Inventory calculations
   async getDriverInventory(driverId) {
     const assignments = await this.getAssignmentsByDriver(driverId);
     const sales = await this.getSalesByDriver(driverId);
+    const transfers = await this.getTransfersByDriver(driverId);
     const products = await this.getAllProducts();
     const inventory = {};
 
@@ -934,6 +938,7 @@ export const DB = {
         name: product.name,
         assigned: 0,
         sold: 0,
+        transferred: 0,
         remaining: 0
       };
     });
@@ -956,10 +961,17 @@ export const DB = {
       });
     });
 
+    // Subtract transfers out (when this driver is the source)
+    transfers.forEach(transfer => {
+      if (transfer.fromDriverId === driverId && inventory[transfer.productId]) {
+        inventory[transfer.productId].transferred += transfer.quantity;
+      }
+    });
+
     // Calculate remaining
     Object.keys(inventory).forEach(productId => {
       inventory[productId].remaining =
-        inventory[productId].assigned - inventory[productId].sold;
+        inventory[productId].assigned - inventory[productId].sold - inventory[productId].transferred;
     });
 
     return Object.values(inventory).filter(item => item.assigned > 0);
@@ -1180,8 +1192,8 @@ export const DB = {
    * @param {string} salesRepId - Sales rep ID
    * @returns {Array} Array of orders created by the sales rep
    */
-  getOrdersBySalesRep(salesRepId) {
-    const orders = this.getAllOrders();
+  async getOrdersBySalesRep(salesRepId) {
+    const orders = await this.getAllOrders();
     return orders.filter(order => order.salesRepId === salesRepId);
   },
 
@@ -1190,8 +1202,8 @@ export const DB = {
    * @param {string} status - Order status
    * @returns {Array} Array of orders with the specified status
    */
-  getOrdersByStatus(status) {
-    const orders = this.getAllOrders();
+  async getOrdersByStatus(status) {
+    const orders = await this.getAllOrders();
     return orders.filter(order => order.status === status);
   },
 
@@ -1284,11 +1296,11 @@ export const DB = {
       // This affects driver inventory immediately when order is created
       await this.addSale({
         driverId: orderData.driverId,
-        customerAddress: orderData.customerAddress,
-        customerDescription: orderData.customerDescription,
-        deliveryMethod: orderData.deliveryMethod,
-        totalAmount: orderData.totalAmount,
-        lineItems: orderData.lineItems,
+        customerAddress: orderData.customerAddress.trim(),
+        customerDescription: orderData.customerDescription ? orderData.customerDescription.trim() : '',
+        deliveryMethod: orderData.deliveryMethod || 'Paid',
+        totalAmount: parseFloat(orderData.totalAmount) || 0,
+        lineItems: orderData.lineItems || [],
         orderId: newOrder.id // Link to order for reference
       });
 
@@ -1369,11 +1381,18 @@ export const DB = {
     }
 
     // Remove the associated sale to restore inventory
-    const sales = await this.getAllSales();
-    const saleIndex = sales.findIndex(sale => sale.orderId === id);
-    if (saleIndex !== -1) {
-      sales.splice(saleIndex, 1);
-      await this.save(this.COLLECTIONS.SALES, sales);
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.SALES),
+        where("orderId", "==", id)
+      );
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        await deleteDoc(snapshot.docs[0].ref);
+      }
+    } catch (error) {
+      console.error('Error removing sale record:', error);
     }
 
     // Update order status and payment method based on driver payment choice
@@ -1397,8 +1416,8 @@ export const DB = {
    * @param {string} id - Order ID
    * @returns {boolean} Success status
    */
-  completeOrder(id) {
-    const order = this.getOrderById(id);
+  async completeOrder(id) {
+    const order = await this.getOrderById(id);
     if (!order) {
       return false;
     }
@@ -1407,7 +1426,10 @@ export const DB = {
       throw new Error('Only pending orders can be completed');
     }
 
-    this.updateOrder(id, { status: this.ORDER_STATUS.COMPLETED });
+    await this.updateOrder(id, {
+      status: this.ORDER_STATUS.COMPLETED,
+      completedAt: new Date().toISOString()
+    });
     return true;
   },
 
@@ -1537,15 +1559,6 @@ export const DB = {
   // DRIVER-SPECIFIC HELPER METHODS
   // ===============================
 
-  /**
-   * Get all orders assigned to a specific driver
-   * @param {string} driverId - Driver ID to filter by
-   * @returns {Array} Array of orders for the specified driver
-   */
-  getOrdersByDriver(driverId) {
-    const orders = this.getAllOrders();
-    return orders.filter(order => order.driverId === driverId);
-  },
 
   /**
    * Get driver inventory with low stock alerts
@@ -1638,17 +1651,17 @@ export const DB = {
   // ============ STOCK TRANSFER METHODS ============
 
   // Transfer stock between drivers or collect back to main inventory
-  transferStock(fromDriverId, toDriverId, productId, quantity) {
+  async transferStock(fromDriverId, toDriverId, productId, quantity) {
     if (!fromDriverId || !productId || !quantity || quantity <= 0) {
       throw new Error('Invalid transfer parameters');
     }
 
     // Check if source driver has sufficient stock
-    const driverInventory = this.getDriverInventory(fromDriverId);
+    const driverInventory = await this.getDriverInventory(fromDriverId);
     const productInventory = driverInventory.find(item => item.id === productId);
-    
+
     if (!productInventory || productInventory.remaining < quantity) {
-      const product = this.getProductById(productId);
+      const product = await this.getProductById(productId);
       const availableQty = productInventory ? productInventory.remaining : 0;
       throw new Error(`Insufficient stock. ${product?.name || 'Product'} has only ${availableQty} units available.`);
     }
@@ -1665,65 +1678,75 @@ export const DB = {
       createdBy: this.getCurrentSession()?.userId || null
     };
 
-    // Record the transfer
-    const transfers = this.getStockTransfers();
-    transfers.push(transferData);
-    localStorage.setItem(this.KEYS.STOCK_TRANSFERS, JSON.stringify(transfers));
+    // Record the transfer in Firebase
+    try {
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.STOCK_TRANSFERS), transferData);
+      transferData.id = docRef.id;
+    } catch (error) {
+      console.error('Error recording stock transfer:', error);
+      throw error;
+    }
 
     // Handle the actual stock movement
     if (toDriverId === 'main-inventory') {
       // Collect stock back to main inventory
-      this.collectStockToMain(productId, quantity);
+      await this.collectStockToMain(productId, quantity);
     } else {
       // Transfer to another driver (create new assignment)
-      this.addAssignmentFromTransfer(toDriverId, productId, quantity);
+      await this.addAssignmentFromTransfer(toDriverId, productId, quantity);
     }
 
     return transferData;
   },
 
   // Collect stock back to main inventory
-  collectStockToMain(productId, quantity) {
-    const products = this.getAllProducts();
-    const productIndex = products.findIndex(p => p.id === productId);
-    
-    if (productIndex === -1) {
+  async collectStockToMain(productId, quantity) {
+    const product = await this.getProductById(productId);
+
+    if (!product) {
       throw new Error('Product not found');
     }
 
-    products[productIndex].totalQuantity += quantity;
-    localStorage.setItem(this.KEYS.PRODUCTS, JSON.stringify(products));
+    await this.updateProduct(productId, {
+      totalQuantity: product.totalQuantity + quantity
+    });
   },
 
   // Add assignment from transfer (doesn't deduct from main inventory)
-  addAssignmentFromTransfer(driverId, productId, quantity) {
-    const assignmentId = this.generateId();
+  async addAssignmentFromTransfer(driverId, productId, quantity) {
     const assignmentData = {
-      id: assignmentId,
       driverId,
       productId,
       quantity,
       assignedAt: new Date().toISOString(),
-      source: 'transfer' // Mark as transfer source
+      source: 'transfer', // Mark as transfer source
+      createdAt: serverTimestamp()
     };
 
-    const assignments = this.getAllAssignments();
-    assignments.push(assignmentData);
-    localStorage.setItem(this.KEYS.ASSIGNMENTS, JSON.stringify(assignments));
-
-    return assignmentData;
+    try {
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.ASSIGNMENTS), assignmentData);
+      return { id: docRef.id, ...assignmentData, assignedAt: new Date().toISOString() };
+    } catch (error) {
+      console.error('Error creating assignment from transfer:', error);
+      throw error;
+    }
   },
 
   // Get all stock transfers
-  getStockTransfers() {
-    const transfers = localStorage.getItem(this.KEYS.STOCK_TRANSFERS);
-    return transfers ? JSON.parse(transfers) : [];
+  async getStockTransfers() {
+    try {
+      const snapshot = await getDocs(collection(db, this.COLLECTIONS.STOCK_TRANSFERS));
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('Error getting stock transfers:', error);
+      return [];
+    }
   },
 
   // Get transfers filtered by driver (either from or to)
-  getTransfersByDriver(driverId) {
-    const transfers = this.getStockTransfers();
-    return transfers.filter(transfer => 
+  async getTransfersByDriver(driverId) {
+    const transfers = await this.getStockTransfers();
+    return transfers.filter(transfer =>
       transfer.fromDriverId === driverId || transfer.toDriverId === driverId
     );
   }

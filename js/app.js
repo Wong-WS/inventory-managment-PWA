@@ -223,12 +223,17 @@ const DashboardModule = {
 
   // Update dashboard for drivers
   async updateDriverDashboard() {
+    console.log('updateDriverDashboard called');
     const dashboardContainer = document.querySelector(".dashboard-container");
-    if (!dashboardContainer) return;
+    if (!dashboardContainer) {
+      console.log('Dashboard container not found');
+      return;
+    }
 
     // Get driver data
     const user = await DB.getCurrentUser();
     const driverId = user ? user.driverId : null;
+    console.log('Driver data:', { user, driverId });
 
     if (!driverId) {
       dashboardContainer.innerHTML =
@@ -236,10 +241,11 @@ const DashboardModule = {
       return;
     }
 
-    // Get driver-specific data (temporarily simplified for Firebase migration)
-    // TODO: These methods need to be converted to async Firebase
-    const inventoryWithAlerts = [];
-    const orderSummary = { todayOrders: 0, todayEarnings: 0, pendingOrders: 0 };
+    // Get driver-specific data
+    console.log('Getting driver inventory and order summary...');
+    const inventoryWithAlerts = await this.getDriverInventoryWithAlerts(driverId);
+    const orderSummary = await this.getDriverOrderSummary(driverId);
+    console.log('Got data:', { inventoryWithAlerts, orderSummary });
 
     // Count alerts
     const lowStockCount = inventoryWithAlerts.filter(
@@ -300,7 +306,7 @@ const DashboardModule = {
                 (item) => `
               <div class="low-stock-item ${item.alertLevel}">
                 <div class="item-info">
-                  <strong>${item.productName}</strong>
+                  <strong>${item.name}</strong>
                   <span class="quantity-info">
                     ${item.remaining} remaining
                     ${item.isOutOfStock ? " (OUT OF STOCK)" : " (LOW STOCK)"}
@@ -372,6 +378,97 @@ const DashboardModule = {
     const totalInventory = document.getElementById("total-inventory");
     if (totalInventory) {
       totalInventory.textContent = "0";
+    }
+  },
+
+  // Get driver inventory with low stock alerts
+  async getDriverInventoryWithAlerts(driverId) {
+    try {
+      const inventory = await DB.getDriverInventory(driverId);
+
+      return inventory.map(item => {
+        const isOutOfStock = item.remaining <= 0;
+        const isLowStock = item.remaining > 0 && item.remaining <= 5; // Consider low stock if 5 or fewer
+
+        return {
+          ...item,
+          isOutOfStock,
+          isLowStock,
+          alertLevel: isOutOfStock ? 'critical' : (isLowStock ? 'warning' : 'normal')
+        };
+      });
+    } catch (error) {
+      console.error('Error getting driver inventory with alerts:', error);
+      return [];
+    }
+  },
+
+  // Get driver order summary for today
+  async getDriverOrderSummary(driverId) {
+    try {
+      console.log('Dashboard - Getting orders for driver:', driverId);
+      const orders = await DB.getOrdersByDriver(driverId);
+      console.log('Dashboard - Found orders:', orders);
+
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+      // Filter orders for today
+      const todayOrders = orders.filter(order => {
+        // Handle Firebase Timestamp properly
+        const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+        const isToday = orderDate >= todayStart && orderDate < todayEnd;
+        console.log('Dashboard - Order date check:', {
+          orderId: order.id,
+          orderDate: orderDate,
+          isToday: isToday
+        });
+        return isToday;
+      });
+
+      console.log('Dashboard - Today orders:', todayOrders);
+
+      // Calculate summary
+      const pending = todayOrders.filter(order => order.status === DB.ORDER_STATUS.PENDING);
+      const completed = todayOrders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
+      const cancelled = todayOrders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
+
+      console.log('Dashboard - Order status counts:', {
+        total: todayOrders.length,
+        pending: pending.length,
+        completed: completed.length,
+        cancelled: cancelled.length
+      });
+
+      const pendingAmount = pending.reduce((sum, order) => sum + order.totalAmount, 0);
+      const completedAmount = completed.reduce((sum, order) => sum + order.totalAmount, 0);
+
+      const summary = {
+        total: todayOrders.length,
+        pending: {
+          count: pending.length,
+          totalAmount: pendingAmount
+        },
+        completed: {
+          count: completed.length,
+          totalAmount: completedAmount
+        },
+        cancelled: {
+          count: cancelled.length
+        }
+      };
+
+      console.log('Dashboard - Final summary:', summary);
+      return summary;
+    } catch (error) {
+      console.error('Error getting driver order summary:', error);
+      return {
+        total: 0,
+        pending: { count: 0, totalAmount: 0 },
+        completed: { count: 0, totalAmount: 0 },
+        cancelled: { count: 0 }
+      };
     }
   },
 
@@ -591,12 +688,12 @@ const DashboardModule = {
     const activities = [
       ...driverOrders.map((order) => ({
         type: "order",
-        date: new Date(order.createdAt),
+        date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
         data: order,
       })),
       ...driverAssignments.map((assignment) => ({
         type: "assignment",
-        date: new Date(assignment.assignedAt),
+        date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
         data: assignment,
       })),
     ];
@@ -667,12 +764,12 @@ const DashboardModule = {
     const activities = [
       ...orders.map((order) => ({
         type: "order",
-        date: new Date(order.createdAt),
+        date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
         data: order,
       })),
       ...assignments.map((assignment) => ({
         type: "assignment",
-        date: new Date(assignment.assignedAt),
+        date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
         data: assignment,
       })),
     ];

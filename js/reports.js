@@ -314,7 +314,6 @@ const ReportsModule = {
         <table class="report-table">
           <tr>
             <th>Product</th>
-            <th>Assigned</th>
             <th>Sold</th>
             <th>Remaining</th>
           </tr>
@@ -324,7 +323,6 @@ const ReportsModule = {
         reportHTML += `
           <tr>
             <td>${item.name}</td>
-            <td>${item.assigned}</td>
             <td>${item.sold}</td>
             <td>${item.remaining}</td>
           </tr>
@@ -383,7 +381,6 @@ const ReportsModule = {
             <table class="report-table">
               <tr>
                 <th>Product</th>
-                <th>Assigned</th>
                 <th>Sold</th>
                 <th>Remaining</th>
               </tr>
@@ -393,7 +390,6 @@ const ReportsModule = {
             reportHTML += `
               <tr>
                 <td>${item.name}</td>
-                <td>${item.assigned}</td>
                 <td>${item.sold}</td>
                 <td>${item.remaining}</td>
               </tr>

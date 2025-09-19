@@ -115,7 +115,7 @@ const DriversModule = {
         itemDetails.innerHTML = `
           <strong>${driver.name}</strong> <span style="color: #666;">(${driver.phone})</span>
           ${userInfo}
-          <br><small>Created: ${new Date(driver.createdAt).toLocaleDateString()}</small>
+          <br><small>Created: ${driver.createdAt?.toDate ? driver.createdAt.toDate().toLocaleDateString() : new Date(driver.createdAt).toLocaleDateString()}</small>
         `;
 
         const itemActions = document.createElement('div');

@@ -170,8 +170,8 @@ const UsersModule = {
         <div class="item-details">
           <strong>${user.name}</strong> (@${user.username})<br>
           <span>Role: ${roleDisplayName}${driverInfo}</span><br>
-          <small>Created: ${new Date(user.createdAt).toLocaleDateString()}</small>
-          ${user.lastLoginAt ? `<br><small>Last Login: ${new Date(user.lastLoginAt).toLocaleDateString()}</small>` : ''}
+          <small>Created: ${user.createdAt?.toDate ? user.createdAt.toDate().toLocaleDateString() : new Date(user.createdAt).toLocaleDateString()}</small>
+          ${user.lastLoginAt ? `<br><small>Last Login: ${user.lastLoginAt?.toDate ? user.lastLoginAt.toDate().toLocaleDateString() : new Date(user.lastLoginAt).toLocaleDateString()}</small>` : ''}
           <br>${statusBadge}
         </div>
         <div class="item-actions">

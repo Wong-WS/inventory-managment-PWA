@@ -293,8 +293,8 @@ const AuthModule = {
   canAccessTab(tabId, userRole) {
     switch (userRole) {
       case DB.ROLES.ADMIN:
-        // Admin can access all tabs
-        return true;
+        // Admin can access all tabs except driver-specific ones
+        return !['my-orders', 'my-inventory', 'my-earnings'].includes(tabId);
         
       case DB.ROLES.SALES_REP:
         // Sales rep can only access dashboard and orders
