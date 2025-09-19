@@ -206,6 +206,7 @@ const DashboardModule = {
   async init() {
     await this.updateDashboard();
     await this.loadRecentActivity();
+    await this.setupDashboardListeners();
   },
 
   // Update dashboard statistics
@@ -883,7 +884,7 @@ const DashboardModule = {
         color: #721c24;
         border: 1px solid #f5c6cb;
       }
-      
+
       /* Mobile optimizations */
       @media (max-width: 768px) {
         #recent-activity-list li {
@@ -903,6 +904,332 @@ const DashboardModule = {
       }
     `;
     document.head.appendChild(styles);
+  },
+
+  // Setup real-time dashboard listeners
+  async setupDashboardListeners() {
+    const session = DB.getCurrentSession();
+    if (!session) return;
+
+    // Listen to orders for dashboard stats and recent activity
+    DB.listenToOrders(async (orders) => {
+      // Update dashboard stats when orders change
+      await this.updateDashboardFromOrders(orders);
+
+      // Update recent activity with new orders
+      this.updateRecentActivityFromOrders(orders);
+    });
+
+    // Listen to assignments for recent activity
+    DB.listenToAssignments(async (assignments) => {
+      this.updateRecentActivityFromAssignments(assignments);
+    });
+
+    // For admin/sales rep dashboards, also listen to products and drivers
+    if (session.role !== DB.ROLES.DRIVER) {
+      DB.listenToProducts(async (products) => {
+        this.updateProductCountFromProducts(products);
+      });
+
+      DB.listenToDrivers(async (drivers) => {
+        this.updateDriverCountFromDrivers(drivers);
+      });
+    }
+  },
+
+  // Update dashboard statistics from real-time orders data
+  async updateDashboardFromOrders(orders) {
+    const session = DB.getCurrentSession();
+    if (!session) return;
+
+    if (session.role === DB.ROLES.DRIVER) {
+      // For drivers, recalculate and update their dashboard
+      const user = await DB.getCurrentUser();
+      const driverId = user ? user.driverId : null;
+
+      if (driverId) {
+        const driverOrders = orders.filter(order => order.driverId === driverId);
+        const orderSummary = this.calculateDriverOrderSummary(driverOrders);
+        this.updateDriverDashboardCards(orderSummary);
+      }
+    } else {
+      // For admin/sales rep, update order-related stats
+      this.updateAdminOrderStats(orders);
+    }
+  },
+
+  // Calculate driver order summary from orders array
+  calculateDriverOrderSummary(orders) {
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    // Filter orders for today
+    const todayOrders = orders.filter(order => {
+      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+      return orderDate >= todayStart && orderDate < todayEnd;
+    });
+
+    // Calculate summary
+    const pending = todayOrders.filter(order => order.status === DB.ORDER_STATUS.PENDING);
+    const completed = todayOrders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
+    const cancelled = todayOrders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
+
+    return {
+      total: todayOrders.length,
+      pending: {
+        count: pending.length,
+        totalAmount: pending.reduce((sum, order) => sum + order.totalAmount, 0)
+      },
+      completed: {
+        count: completed.length,
+        totalAmount: completed.reduce((sum, order) => sum + order.totalAmount, 0)
+      },
+      cancelled: {
+        count: cancelled.length
+      }
+    };
+  },
+
+  // Update driver dashboard cards with new order summary
+  updateDriverDashboardCards(orderSummary) {
+    // Update today's orders card
+    const orderCards = document.querySelectorAll('.dashboard-cards .card');
+    if (orderCards.length >= 2) {
+      const todayOrdersCard = orderCards[1];
+      const orderCountElement = todayOrdersCard.querySelector('p');
+      const orderDetailsElement = todayOrdersCard.querySelector('small');
+
+      if (orderCountElement) orderCountElement.textContent = orderSummary.total;
+      if (orderDetailsElement) {
+        orderDetailsElement.textContent = `${orderSummary.pending.count} pending, ${orderSummary.completed.count} completed`;
+      }
+    }
+
+    // Update pending revenue card
+    if (orderCards.length >= 3) {
+      const pendingCard = orderCards[2];
+      const pendingAmountElement = pendingCard.querySelector('p');
+      const pendingDetailsElement = pendingCard.querySelector('small');
+
+      if (pendingAmountElement) pendingAmountElement.textContent = `$${orderSummary.pending.totalAmount.toFixed(2)}`;
+      if (pendingDetailsElement) {
+        pendingDetailsElement.textContent = `From ${orderSummary.pending.count} pending orders`;
+      }
+
+      // Update card styling based on pending count
+      pendingCard.className = `card ${orderSummary.pending.count > 0 ? 'pending-card' : ''}`;
+    }
+
+    // Update completed today card
+    if (orderCards.length >= 4) {
+      const completedCard = orderCards[3];
+      const completedAmountElement = completedCard.querySelector('p');
+      const completedDetailsElement = completedCard.querySelector('small');
+
+      if (completedAmountElement) completedAmountElement.textContent = `$${orderSummary.completed.totalAmount.toFixed(2)}`;
+      if (completedDetailsElement) {
+        completedDetailsElement.textContent = `From ${orderSummary.completed.count} orders`;
+      }
+    }
+
+    // Update delivery status section
+    const statusGrid = document.querySelector('.status-grid');
+    if (statusGrid) {
+      const statusItems = statusGrid.querySelectorAll('.status-item span');
+      if (statusItems.length >= 3) {
+        statusItems[0].textContent = `Pending: ${orderSummary.pending.count}`;
+        statusItems[1].textContent = `Completed: ${orderSummary.completed.count}`;
+        statusItems[2].textContent = `Cancelled: ${orderSummary.cancelled.count}`;
+      }
+    }
+  },
+
+  // Update admin dashboard order stats
+  updateAdminOrderStats(orders) {
+    // Calculate today's completed order total
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    const todayCompletedOrders = orders.filter(order => {
+      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+      return orderDate >= todayStart && orderDate < todayEnd && order.status === DB.ORDER_STATUS.COMPLETED;
+    });
+
+    const todayTotal = todayCompletedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+
+    // Update today's sales display
+    const todaySalesElement = document.getElementById("today-sales");
+    if (todaySalesElement) {
+      todaySalesElement.textContent = `$${todayTotal.toFixed(2)}`;
+    }
+  },
+
+  // Update product count from real-time products data
+  updateProductCountFromProducts(products) {
+    const productCount = document.getElementById("product-count");
+    if (productCount) {
+      productCount.textContent = products.length;
+    }
+  },
+
+  // Update driver count from real-time drivers data
+  updateDriverCountFromDrivers(drivers) {
+    const driverCount = document.getElementById("driver-count");
+    if (driverCount) {
+      driverCount.textContent = drivers.length;
+    }
+  },
+
+  // Update recent activity from real-time orders data
+  updateRecentActivityFromOrders(orders) {
+    // Store orders for later use in recent activity updates
+    this.realtimeOrders = orders;
+    // Use setTimeout to ensure async execution doesn't block
+    setTimeout(() => this.updateRecentActivityDisplay(), 0);
+  },
+
+  // Update recent activity from real-time assignments data
+  updateRecentActivityFromAssignments(assignments) {
+    // Store assignments for later use in recent activity updates
+    this.realtimeAssignments = assignments;
+    // Use setTimeout to ensure async execution doesn't block
+    setTimeout(() => this.updateRecentActivityDisplay(), 0);
+  },
+
+  // Update recent activity display with real-time data
+  async updateRecentActivityDisplay() {
+    // Only update if we have both orders and assignments data
+    if (!this.realtimeOrders || !this.realtimeAssignments) return;
+
+    const activityList = document.getElementById("recent-activity-list");
+    if (!activityList) return;
+
+    const session = DB.getCurrentSession();
+    if (!session) return;
+
+    // Build activities from real-time data
+    let activities = [];
+
+    if (session.role === DB.ROLES.DRIVER) {
+      const user = await DB.getCurrentUser();
+      const driverId = user ? user.driverId : null;
+
+      if (driverId) {
+        const driverOrders = this.realtimeOrders.filter(order => order.driverId === driverId);
+        const driverAssignments = this.realtimeAssignments.filter(assignment => assignment.driverId === driverId);
+
+        activities = [
+          ...driverOrders.map((order) => ({
+            type: "order",
+            date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
+            data: order,
+          })),
+          ...driverAssignments.map((assignment) => ({
+            type: "assignment",
+            date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
+            data: assignment,
+          })),
+        ];
+      }
+    } else {
+      // Admin/sales rep sees all activities
+      activities = [
+        ...this.realtimeOrders.map((order) => ({
+          type: "order",
+          date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
+          data: order,
+        })),
+        ...this.realtimeAssignments.map((assignment) => ({
+          type: "assignment",
+          date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
+          data: assignment,
+        })),
+      ];
+    }
+
+    // Sort by date, newest first
+    activities.sort((a, b) => b.date - a.date);
+
+    // Take only the 10 most recent activities
+    const recentActivities = activities.slice(0, 10);
+
+    activityList.innerHTML = "";
+
+    if (recentActivities.length === 0) {
+      activityList.innerHTML = '<li class="empty-list">No recent activity.</li>';
+      return;
+    }
+
+    // Display activities (reuse existing display logic)
+    for (const activity of recentActivities) {
+      const li = document.createElement("li");
+      const formattedDate = `${activity.date.toLocaleDateString()} ${activity.date.toLocaleTimeString()}`;
+
+      if (activity.type === "order") {
+        const order = activity.data;
+
+        if (session.role === DB.ROLES.DRIVER) {
+          li.innerHTML = `
+            <i class="fas fa-clipboard-list activity-icon"></i>
+            <div class="activity-details">
+              <strong>Order: $${order.totalAmount.toFixed(2)}</strong>
+              <span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span><br>
+              <span>Customer: ${order.customerAddress}</span><br>
+              <small>${formattedDate}</small>
+            </div>
+          `;
+        } else {
+          const driver = await DB.getDriverById(order.driverId);
+          if (driver) {
+            li.innerHTML = `
+              <i class="fas fa-clipboard-list activity-icon"></i>
+              <div class="activity-details">
+                <strong>Order: $${order.totalAmount.toFixed(2)}</strong>
+                <span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span><br>
+                <span>Driver: ${driver.name}</span><br>
+                <small>${formattedDate}</small>
+              </div>
+            `;
+          }
+        }
+      } else if (activity.type === "assignment") {
+        const assignment = activity.data;
+        const product = await DB.getProductById(assignment.productId);
+
+        if (product) {
+          if (session.role === DB.ROLES.DRIVER) {
+            li.innerHTML = `
+              <i class="fas fa-truck-loading activity-icon"></i>
+              <div class="activity-details">
+                <strong>Received: ${product.name} (${assignment.quantity})</strong><br>
+                <span>Added to your inventory</span><br>
+                <small>${formattedDate}</small>
+              </div>
+            `;
+          } else {
+            const driver = await DB.getDriverById(assignment.driverId);
+            if (driver) {
+              li.innerHTML = `
+                <i class="fas fa-truck-loading activity-icon"></i>
+                <div class="activity-details">
+                  <strong>Assignment: ${product.name} (${assignment.quantity})</strong><br>
+                  <span>Driver: ${driver.name}</span><br>
+                  <small>${formattedDate}</small>
+                </div>
+              `;
+            }
+          }
+        }
+      }
+
+      if (li.innerHTML.trim()) {
+        activityList.appendChild(li);
+      }
+    }
+
+    this.addActivityListStyles();
   },
 };
 

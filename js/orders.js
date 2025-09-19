@@ -4,6 +4,29 @@
  */
 
 const OrdersModule = {
+  // Parse Firebase date safely
+  parseFirebaseDate(date) {
+    if (!date) return new Date();
+
+    // Handle Firebase Timestamp
+    if (date.toDate && typeof date.toDate === 'function') {
+      return date.toDate();
+    }
+
+    // Handle ISO string
+    if (typeof date === 'string') {
+      return new Date(date);
+    }
+
+    // Handle regular Date object
+    if (date instanceof Date) {
+      return date;
+    }
+
+    // Fallback
+    return new Date();
+  },
+
   // Calculate deduction amount based on category
   getDeductionAmount(category, customQuantity = 0) {
     switch(category) {
@@ -81,7 +104,7 @@ const OrdersModule = {
     this.lineItemCounter = 0;
     this.currentView = 'create'; // 'create' or 'manage'
     this.bindEvents();
-    await this.loadOrders();
+    this.setupOrdersListener();
     await this.updateDriverDropdown();
     await this.updateLineItemProductOptions();
     this.showCreateOrderView(); // Default to create view
@@ -129,8 +152,8 @@ const OrdersModule = {
     // Order status filter
     const statusFilter = document.getElementById('order-status-filter');
     if (statusFilter) {
-      statusFilter.addEventListener('change', async () => {
-        await this.loadOrders();
+      statusFilter.addEventListener('change', () => {
+        this.setupOrdersListener();
       });
     }
 
@@ -151,7 +174,7 @@ const OrdersModule = {
   },
 
   // Show manage orders view
-  async showManageOrdersView() {
+  showManageOrdersView() {
     this.currentView = 'manage';
     const createSection = document.getElementById('create-order-section');
     const manageSection = document.getElementById('manage-orders-section');
@@ -163,7 +186,7 @@ const OrdersModule = {
     if (createBtn) createBtn.classList.remove('active');
     if (manageBtn) manageBtn.classList.add('active');
 
-    await this.loadOrders();
+    // Real-time listener will automatically update the orders
   },
 
   // Handle creating a new order
@@ -481,53 +504,70 @@ const OrdersModule = {
     this.updateRemoveButtons();
   },
 
-  // Load and display orders
-  async loadOrders() {
-    const ordersList = document.getElementById('orders-list');
-    if (!ordersList) return;
-
-    const statusFilter = document.getElementById('order-status-filter');
-    const selectedStatus = statusFilter ? statusFilter.value : '';
-    
+  // Setup real-time orders listener
+  setupOrdersListener() {
     const session = DB.getCurrentSession();
     if (!session) return;
 
-    // Get orders based on user role
-    let orders;
-    if (session.role === DB.ROLES.ADMIN) {
-      // Admins see all orders
-      orders = selectedStatus ? await DB.getOrdersByStatus(selectedStatus) : await DB.getAllOrders();
-    } else {
+    const statusFilter = document.getElementById('order-status-filter');
+    const selectedStatus = statusFilter ? statusFilter.value : '';
+
+    // Determine filters based on user role
+    const filters = {};
+
+    if (session.role === DB.ROLES.SALES_REP) {
       // Sales reps see only their own orders
-      const userOrders = await DB.getOrdersBySalesRep(session.userId);
-      orders = selectedStatus ? userOrders.filter(order => order.status === selectedStatus) : userOrders;
+      filters.salesRepId = session.userId;
     }
-    
+    // Admins see all orders (no additional filters)
+
+    if (selectedStatus) {
+      filters.status = selectedStatus;
+    }
+
+    // Setup real-time listener
+    DB.listenToOrders(async (orders) => {
+      await this.displayOrders(orders);
+    }, filters);
+  },
+
+  // Display orders (used by real-time listener)
+  async displayOrders(orders) {
+    const ordersList = document.getElementById('orders-list');
+    if (!ordersList) return;
+
+    const session = DB.getCurrentSession();
+    if (!session) return;
+
     ordersList.innerHTML = '';
-    
+
     if (orders.length === 0) {
       ordersList.innerHTML = '<li class="empty-list">No orders found.</li>';
       return;
     }
-    
-    // Sort by creation date, newest first
-    orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    
+
+    // Sort by creation date, newest first (Firebase timestamp handling)
+    orders.sort((a, b) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+      return dateB - dateA;
+    });
+
     for (const order of orders) {
       const driver = await DB.getDriverById(order.driverId);
       const salesRep = await DB.getUserById(order.salesRepId);
       if (!driver) continue;
-      
+
       const li = document.createElement('li');
       li.className = `order-item status-${order.status}`;
-      
-      const date = new Date(order.createdAt);
+
+      const date = this.parseFirebaseDate(order.createdAt);
       const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
-      
+
       let lineItemsHtml = '';
       order.lineItems.forEach(item => {
         const giftBadge = item.isFreeGift ? '<span class="badge">Free Gift</span>' : '';
-        
+
         // Determine what to display for quantity
         let displayQuantity;
         if (item.category) {
@@ -535,7 +575,7 @@ const OrdersModule = {
         } else {
           displayQuantity = item.quantity || item.actualQuantity;
         }
-        
+
         const displayText = `${item.productName} x ${displayQuantity}`;
         lineItemsHtml += `
           <div class="order-line-item">
@@ -546,7 +586,7 @@ const OrdersModule = {
 
       // Status badge
       const statusBadge = `<span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span>`;
-      
+
       // Action buttons based on status
       let actionButtons = '';
       if (order.status === DB.ORDER_STATUS.PENDING) {
@@ -569,7 +609,7 @@ const OrdersModule = {
           </div>
         `;
       }
-      
+
       li.innerHTML = `
         <div class="order-details">
           <div class="order-header">
@@ -580,7 +620,7 @@ const OrdersModule = {
             <span>${order.customerAddress}</span>${order.deliveryMethod ? ` • <span class="delivery-method">${order.deliveryMethod}</span>` : ''}
             ${order.customerDescription ? `<br><small>${order.customerDescription}</small>` : ''}
             <br><small>Created: ${formattedDate}</small>
-            ${order.completedAt ? `<br><small>Completed: ${new Date(order.completedAt).toLocaleDateString()} ${new Date(order.completedAt).toLocaleTimeString()}</small>` : ''}
+            ${order.completedAt ? `<br><small>Completed: ${this.parseFirebaseDate(order.completedAt).toLocaleDateString()} ${this.parseFirebaseDate(order.completedAt).toLocaleTimeString()}</small>` : ''}
           </div>
           <div class="order-line-items">
             ${lineItemsHtml}
@@ -588,7 +628,7 @@ const OrdersModule = {
           ${actionButtons}
         </div>
       `;
-      
+
       ordersList.appendChild(li);
     }
 
@@ -637,7 +677,6 @@ const OrdersModule = {
 
     try {
       await DB.completeOrder(orderId);
-      await this.loadOrders();
       this.showNotification('Order marked as completed');
 
       // Update dashboard if it exists
@@ -661,7 +700,6 @@ const OrdersModule = {
     try {
       await DB.cancelOrder(orderId, payDriver);
       const paymentMessage = payDriver ? 'Order cancelled, inventory restored, and driver will be paid $30' : 'Order cancelled, inventory restored, and driver will not be paid';
-      await this.loadOrders();
       this.showNotification(paymentMessage);
 
       // Update dashboard if it exists
