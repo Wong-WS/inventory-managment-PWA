@@ -14,7 +14,7 @@ This is a vanilla JavaScript PWA that runs without build tools:
 
 ### Core Structure
 - **Frontend**: Vanilla HTML/CSS/JavaScript with no framework dependencies
-- **Storage**: All data persisted in browser localStorage via `DB` module
+- **Storage**: All data persisted in Firebase Firestore via `DB` module
 - **Navigation**: Single-page app with tab-based navigation using templates
 - **PWA Features**: Service worker for offline capability, manifest for app installation
 
@@ -36,7 +36,7 @@ The application uses a modular architecture with these main components:
 ### Data Flow
 1. All modules interact through the global `DB` object
 2. Each module follows the pattern: `init()` → `bindEvents()` → `load/update` methods
-3. Data is immediately persisted to localStorage on changes
+3. Data is immediately persisted to Firebase Firestore with real-time sync
 4. Cross-module communication happens via direct method calls (e.g., `DashboardModule.updateDashboard()`)
 
 ### Key Data Structures
@@ -66,7 +66,7 @@ The application uses a modular architecture with these main components:
 ├── css/
 │   └── styles.css          # All application styles
 ├── js/
-│   ├── database.js         # localStorage data layer with user/order management
+│   ├── database.js         # Firebase Firestore data layer with real-time sync
 │   ├── app.js              # Main app controller & role-based dashboard
 │   ├── auth.js             # Authentication & session management
 │   ├── products.js         # Product management
@@ -84,7 +84,7 @@ The application uses a modular architecture with these main components:
 ## Development Notes
 
 - **No Build Process**: Direct file editing, refresh browser to see changes
-- **State Management**: All state in localStorage, no complex state management needed
+- **State Management**: All state in Firebase with real-time listeners, no complex state management needed
 - **Error Handling**: Basic validation with `alert()` for user feedback
 - **Mobile-First**: Responsive design optimized for mobile devices
 - **Dependencies**: Only Font Awesome CDN for icons
@@ -99,13 +99,15 @@ The application uses a modular architecture with these main components:
 
 ### Debugging
 - Check browser console for JavaScript errors
-- Inspect localStorage in DevTools to see data
+- Inspect Firebase Firestore in Firebase Console to see data
 - Use browser's PWA debugging tools for service worker issues
+- Check Network tab for Firebase API calls
 
 ### Data Management
-- Clear localStorage to reset all data: `localStorage.clear()`
-- Export data: Copy localStorage values from DevTools
+- All data stored in Firebase Firestore (real-time sync)
+- View/edit data in Firebase Console
 - All data operations go through `DB` object methods
+- Real-time listeners automatically sync changes across all users
 
 ## Firebase Setup
 

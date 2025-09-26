@@ -205,7 +205,7 @@ const DashboardModule = {
   // Initialize the dashboard
   async init() {
     await this.updateDashboard();
-    await this.loadRecentActivity();
+    // Don't load recent activity manually - let real-time listeners handle it
     await this.setupDashboardListeners();
   },
 
@@ -1084,32 +1084,30 @@ const DashboardModule = {
 
   // Update recent activity from real-time orders data
   updateRecentActivityFromOrders(orders) {
-    // Store orders for later use in recent activity updates
-    this.realtimeOrders = orders;
-    // Use setTimeout to ensure async execution doesn't block
-    setTimeout(() => this.updateRecentActivityDisplay(), 0);
+    // Debounce the update to avoid too many calls
+    clearTimeout(this.updateRecentActivityTimeout);
+    this.updateRecentActivityTimeout = setTimeout(() => this.updateRecentActivityDisplay(), 500);
   },
 
   // Update recent activity from real-time assignments data
   updateRecentActivityFromAssignments(assignments) {
-    // Store assignments for later use in recent activity updates
-    this.realtimeAssignments = assignments;
-    // Use setTimeout to ensure async execution doesn't block
-    setTimeout(() => this.updateRecentActivityDisplay(), 0);
+    // Debounce the update to avoid too many calls
+    clearTimeout(this.updateRecentActivityTimeout);
+    this.updateRecentActivityTimeout = setTimeout(() => this.updateRecentActivityDisplay(), 500);
   },
 
   // Update recent activity display with real-time data
   async updateRecentActivityDisplay() {
-    // Only update if we have both orders and assignments data
-    if (!this.realtimeOrders || !this.realtimeAssignments) return;
-
     const activityList = document.getElementById("recent-activity-list");
     if (!activityList) return;
 
     const session = DB.getCurrentSession();
     if (!session) return;
 
-    // Build activities from real-time data
+    // Always clear the list first to prevent duplicates
+    activityList.innerHTML = "";
+
+    // Get fresh data from Firebase (don't rely on cached realtimeOrders/realtimeAssignments)
     let activities = [];
 
     if (session.role === DB.ROLES.DRIVER) {
@@ -1117,8 +1115,8 @@ const DashboardModule = {
       const driverId = user ? user.driverId : null;
 
       if (driverId) {
-        const driverOrders = this.realtimeOrders.filter(order => order.driverId === driverId);
-        const driverAssignments = this.realtimeAssignments.filter(assignment => assignment.driverId === driverId);
+        const driverOrders = await DB.getOrdersByDriver(driverId);
+        const driverAssignments = await DB.getAssignmentsByDriver(driverId);
 
         activities = [
           ...driverOrders.map((order) => ({
@@ -1135,13 +1133,16 @@ const DashboardModule = {
       }
     } else {
       // Admin/sales rep sees all activities
+      const allOrders = await DB.getAllOrders();
+      const allAssignments = await DB.getAllAssignments();
+
       activities = [
-        ...this.realtimeOrders.map((order) => ({
+        ...allOrders.map((order) => ({
           type: "order",
           date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
           data: order,
         })),
-        ...this.realtimeAssignments.map((assignment) => ({
+        ...allAssignments.map((assignment) => ({
           type: "assignment",
           date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
           data: assignment,
@@ -1155,14 +1156,12 @@ const DashboardModule = {
     // Take only the 10 most recent activities
     const recentActivities = activities.slice(0, 10);
 
-    activityList.innerHTML = "";
-
     if (recentActivities.length === 0) {
       activityList.innerHTML = '<li class="empty-list">No recent activity.</li>';
       return;
     }
 
-    // Display activities (reuse existing display logic)
+    // Display activities
     for (const activity of recentActivities) {
       const li = document.createElement("li");
       const formattedDate = `${activity.date.toLocaleDateString()} ${activity.date.toLocaleTimeString()}`;

@@ -2,17 +2,12 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+import { firebaseConfig, validateConfig } from "./config.js";
 
-// Your Firebase configuration object
-// Replace these with your actual Firebase project values
-const firebaseConfig = {
-  apiKey: "AIzaSyAFcbgTrdkC6HEw6cYrYnJwOSFuXmeGITY",
-  authDomain: "chong-918f9.firebaseapp.com",
-  projectId: "chong-918f9",
-  storageBucket: "chong-918f9.firebasestorage.app",
-  messagingSenderId: "90026447698",
-  appId: "1:90026447698:web:616336add43a855d8f608b",
-};
+// Validate configuration before initializing
+if (!validateConfig()) {
+  throw new Error('Invalid Firebase configuration. Please check your environment variables.');
+}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

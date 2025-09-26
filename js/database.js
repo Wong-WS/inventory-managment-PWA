@@ -3,8 +3,9 @@
  * Handles CRUD operations for products, drivers, assignments and sales
  */
 
-// Import Firebase services
+// Import Firebase services and configuration
 import { db } from './firebase-config.js';
+import { appConfig } from './config.js';
 import {
   collection,
   addDoc,
@@ -34,17 +35,6 @@ export const DB = {
     STOCK_TRANSFERS: 'stock_transfers',
   },
 
-  // Legacy keys for backwards compatibility
-  KEYS: {
-    PRODUCTS: 'products',
-    DRIVERS: 'drivers',
-    ASSIGNMENTS: 'assignments',
-    SALES: 'sales',
-    ORDERS: 'orders',
-    USERS: 'users',
-    SESSION: 'sessions',
-    STOCK_TRANSFERS: 'stock_transfers',
-  },
 
   // User roles enumeration
   ROLES: {
@@ -60,10 +50,10 @@ export const DB = {
     CANCELLED: 'cancelled'
   },
 
-  // Session configuration
+  // Session configuration (from app config)
   SESSION_CONFIG: {
-    TIMEOUT_MINUTES: 480, // 8 hours
-    TOKEN_LENGTH: 32
+    TIMEOUT_MINUTES: appConfig.session.timeoutMinutes,
+    TOKEN_LENGTH: appConfig.session.tokenLength
   },
 
   // Real-time listener management
@@ -116,7 +106,7 @@ export const DB = {
    * @param {string} filters.driverId - Filter by driver ID
    * @param {string} filters.salesRepId - Filter by sales rep ID
    * @param {string} filters.status - Filter by order status
-   * @returns {string} Listener ID for cleanup
+   * @returns {Function} Unsubscribe function to cleanup the listener
    */
   listenToOrders(callback, filters = {}) {
     const listenerId = 'orders' + (filters.driverId ? '_driver_' + filters.driverId : '') +
@@ -162,7 +152,11 @@ export const DB = {
     });
 
     this.listeners.set(listenerId, unsubscribe);
-    return listenerId;
+
+    // Return a cleanup function that removes the listener from both Firebase and internal tracking
+    return () => {
+      this.cleanupListener(listenerId);
+    };
   },
 
   /**
@@ -377,15 +371,6 @@ export const DB = {
     }
   },
 
-  async save(collectionName, data) {
-    try {
-      // For backwards compatibility, this method is no longer used
-      // Individual add/update methods are preferred
-      console.warn('save() method is deprecated, use add/update methods instead');
-    } catch (error) {
-      console.error(`Error saving to ${collectionName}:`, error);
-    }
-  },
 
   // ===============================
   // SECURITY & CRYPTOGRAPHIC FUNCTIONS
@@ -462,7 +447,62 @@ export const DB = {
   generateSecureToken() {
     const array = new Uint8Array(this.SESSION_CONFIG.TOKEN_LENGTH);
     crypto.getRandomValues(array);
-    return btoa(String.fromCharCode.apply(null, array));
+    return btoa(String.fromCharCode.apply(null, array))
+      .replace(/[+/]/g, c => c == '+' ? '-' : '_')
+      .replace(/=/g, ''); // URL-safe base64
+  },
+
+  /**
+   * Generate secure session ID
+   * @returns {string} Unique session identifier
+   */
+  generateSessionId() {
+    return this.generateSecureToken() + '-' + Date.now().toString(36);
+  },
+
+  /**
+   * Get client IP address (best effort)
+   * @returns {string} Client IP or unknown
+   */
+  getClientIP() {
+    // This is limited in browsers due to privacy, but we can try
+    return 'client-side'; // Browsers don't expose real IP
+  },
+
+  /**
+   * Simple session data obfuscation (not true encryption)
+   * @param {Object} sessionData - Session data to obfuscate
+   * @returns {string} Obfuscated session string
+   */
+  encryptSessionData(sessionData) {
+    try {
+      const jsonStr = JSON.stringify(sessionData);
+      // Simple obfuscation - not cryptographically secure but better than plain text
+      const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
+      return 'enc_' + encoded;
+    } catch (error) {
+      throw new Error('Failed to obfuscate session data');
+    }
+  },
+
+  /**
+   * Decode obfuscated session data
+   * @param {string} encryptedData - Obfuscated session string
+   * @returns {Object} Session data
+   */
+  decryptSessionData(encryptedData) {
+    try {
+      if (encryptedData.startsWith('enc_')) {
+        const encoded = encryptedData.substring(4);
+        const jsonStr = decodeURIComponent(escape(atob(encoded)));
+        return JSON.parse(jsonStr);
+      } else {
+        // Fallback for non-obfuscated data
+        return JSON.parse(encryptedData);
+      }
+    } catch (error) {
+      throw new Error('Failed to decode session data');
+    }
   },
 
   /**
@@ -706,55 +746,6 @@ export const DB = {
     }
   },
 
-  async updateUserOld(id, updates) {
-    const users = await this.getAll(this.COLLECTIONS.USERS);
-    const index = users.findIndex(u => u.id === id);
-    
-    if (index === -1) {
-      return null;
-    }
-
-    // Validate updates (use partial validation for updates)
-    const validation = this.validateUserUpdates(updates);
-    if (!validation.isValid) {
-      throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
-    }
-
-    // If updating password, hash it
-    if (updates.password) {
-      const salt = await this.generateSalt();
-      const passwordHash = await this.hashPassword(updates.password, salt);
-      updates.passwordHash = passwordHash;
-      updates.salt = salt;
-      delete updates.password;
-    }
-
-    // Prevent username conflicts
-    if (updates.username && updates.username !== users[index].username) {
-      if (this.getUserByUsername(updates.username)) {
-        throw new Error('Username already exists');
-      }
-    }
-
-    users[index] = { ...users[index], ...updates };
-    this.save(this.KEYS.USERS, users);
-
-    return this.getUserById(id);
-  },
-
-  /**
-   * Deactivate user (soft delete)
-   * @param {string} id - User ID
-   */
-  deactivateUser(id) {
-    const users = this.getAll(this.KEYS.USERS);
-    const index = users.findIndex(u => u.id === id);
-    
-    if (index !== -1) {
-      users[index].isActive = false;
-      this.save(this.KEYS.USERS, users);
-    }
-  },
 
   /**
    * Create default admin user if no users exist
@@ -800,22 +791,38 @@ export const DB = {
         return null;
       }
 
-      // Create session
+      // Create secure session
       const sessionToken = this.generateSecureToken();
-      const expiresAt = new Date();
-      expiresAt.setMinutes(expiresAt.getMinutes() + this.SESSION_CONFIG.TIMEOUT_MINUTES);
+      const sessionId = this.generateSessionId();
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + (this.SESSION_CONFIG.TIMEOUT_MINUTES * 60 * 1000));
 
       const sessionData = {
+        sessionId: sessionId,
         token: sessionToken,
         userId: user.id,
         username: user.username,
         role: user.role,
-        createdAt: new Date().toISOString(),
-        expiresAt: expiresAt.toISOString()
+        driverId: user.driverId,
+        createdAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        lastActivity: now.toISOString(),
+        ipAddress: this.getClientIP(), // For security logging
+        userAgent: navigator.userAgent.substring(0, 200) // Truncated for storage
       };
 
-      // Save session to localStorage (sessions remain client-side)
-      localStorage.setItem('inventory_session', JSON.stringify(sessionData));
+      // Save session to localStorage with additional security
+      try {
+        const encryptedSession = this.encryptSessionData(sessionData);
+        localStorage.setItem('inventory_session', encryptedSession);
+
+        // Also set a session flag for quick checks
+        localStorage.setItem('inventory_session_active', 'true');
+      } catch (error) {
+        console.error('Failed to save session securely:', error);
+        // Fallback to basic storage
+        localStorage.setItem('inventory_session', JSON.stringify(sessionData));
+      }
 
       // Update last login time in Firebase
       await this.updateUser(user.id, {
@@ -845,32 +852,60 @@ export const DB = {
    * @returns {Object|null} Current session data or null
    */
   getCurrentSession() {
-    const session = JSON.parse(localStorage.getItem('inventory_session'));
-    
-    if (!session || !session.token) {
-      return null;
-    }
-
-    // Check if session has expired
-    const now = new Date();
-    const expiresAt = new Date(session.expiresAt);
-    
-    if (now >= expiresAt) {
-      this.logout();
-      return null;
-    }
-
-    // Ensure we have user object for compatibility
-    if (!session.user && session.userId) {
-      const user = this.getUserById(session.userId);
-      if (user) {
-        session.user = user;
-        // Update the session in storage to include the user object
-        localStorage.setItem('inventory_session', JSON.stringify(session));
+    try {
+      // Quick check if session exists
+      if (!localStorage.getItem('inventory_session_active')) {
+        return null;
       }
-    }
 
-    return session;
+      const sessionData = localStorage.getItem('inventory_session');
+      if (!sessionData) {
+        return null;
+      }
+
+      // Decrypt/decode session data
+      const session = this.decryptSessionData(sessionData);
+
+      if (!session || !session.token || !session.sessionId) {
+        this.logout();
+        return null;
+      }
+
+      // Check if session has expired
+      const now = new Date();
+      const expiresAt = new Date(session.expiresAt);
+
+      if (now >= expiresAt) {
+        console.log('Session expired, logging out');
+        this.logout();
+        return null;
+      }
+
+      // Update last activity for session tracking
+      if (now.getTime() - new Date(session.lastActivity).getTime() > 5 * 60 * 1000) { // 5 minutes
+        session.lastActivity = now.toISOString();
+        try {
+          const encryptedSession = this.encryptSessionData(session);
+          localStorage.setItem('inventory_session', encryptedSession);
+        } catch (error) {
+          console.error('Failed to update session activity:', error);
+        }
+      }
+
+      // Ensure we have user object for compatibility
+      if (!session.user && session.userId) {
+        const user = this.getUserById(session.userId);
+        if (user) {
+          session.user = user;
+        }
+      }
+
+      return session;
+    } catch (error) {
+      console.error('Error retrieving session:', error);
+      this.logout(); // Clear corrupted session
+      return null;
+    }
   },
 
   /**
@@ -902,7 +937,22 @@ export const DB = {
    * Logout and clear session
    */
   logout() {
-    localStorage.setItem('inventory_session', JSON.stringify(null));
+    // Clear all session-related data
+    localStorage.removeItem('inventory_session');
+    localStorage.removeItem('inventory_session_active');
+
+    // Clear any other potentially sensitive cached data
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('inventory_') || key.includes('session'))) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+
+    console.log('Session cleared securely');
   },
 
   /**
@@ -1413,29 +1463,6 @@ export const DB = {
     return true;
   },
 
-  // ===============================
-  // DATA MIGRATION METHODS (LEGACY - DISABLED FOR FIREBASE)
-  // ===============================
-
-  async migrateSalesToOrders() {
-    // Skip migration for Firebase - starting fresh
-    return;
-  },
-
-  async migrateDriverUserLinks() {
-    // Skip migration for Firebase - starting fresh
-    return;
-  },
-
-  async autoLinkDriverUsers() {
-    // Skip for Firebase - starting fresh
-    return;
-  },
-
-  async fixDriverUserIds() {
-    // Skip migration for Firebase - starting fresh
-    return;
-  },
 
   // ===============================
   // ORDER MANAGEMENT METHODS
@@ -1724,8 +1751,8 @@ export const DB = {
     }
 
     await this.updateOrder(id, {
-      status: this.ORDER_STATUS.COMPLETED,
-      completedAt: new Date().toISOString()
+      status: this.ORDER_STATUS.COMPLETED
+      // completedAt timestamp is automatically handled by updateOrder method
     });
     return true;
   },

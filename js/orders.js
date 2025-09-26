@@ -103,8 +103,9 @@ const OrdersModule = {
   async init() {
     this.lineItemCounter = 0;
     this.currentView = 'create'; // 'create' or 'manage'
+    this.ordersListenerUnsubscribe = null; // Track listener for cleanup
     this.bindEvents();
-    this.setupOrdersListener();
+    // Don't setup listener immediately - only when manage view is shown
     await this.updateDriverDropdown();
     await this.updateLineItemProductOptions();
     this.showCreateOrderView(); // Default to create view
@@ -166,11 +167,17 @@ const OrdersModule = {
     const manageSection = document.getElementById('manage-orders-section');
     const createBtn = document.getElementById('show-create-order');
     const manageBtn = document.getElementById('show-manage-orders');
-    
+
     if (createSection) createSection.style.display = 'block';
     if (manageSection) manageSection.style.display = 'none';
     if (createBtn) createBtn.classList.add('active');
     if (manageBtn) manageBtn.classList.remove('active');
+
+    // Clean up orders listener when not in manage view
+    if (this.ordersListenerUnsubscribe) {
+      this.ordersListenerUnsubscribe();
+      this.ordersListenerUnsubscribe = null;
+    }
   },
 
   // Show manage orders view
@@ -186,7 +193,8 @@ const OrdersModule = {
     if (createBtn) createBtn.classList.remove('active');
     if (manageBtn) manageBtn.classList.add('active');
 
-    // Real-time listener will automatically update the orders
+    // Setup real-time listener only when showing manage view
+    this.setupOrdersListener();
   },
 
   // Handle creating a new order
@@ -306,8 +314,8 @@ const OrdersModule = {
       const driver = await DB.getDriverById(driverId);
       this.showNotification(`Order created for ${driver.name} - $${totalAmount.toFixed(2)} (Status: Pending)`);
       
-      // Switch to manage view to show the new order
-      await this.showManageOrdersView();
+      // Real-time listener will automatically show the new order
+      // No need to manually switch views
       
     } catch (error) {
       alert(`Failed to create order: ${error.message}`);
@@ -509,6 +517,12 @@ const OrdersModule = {
     const session = DB.getCurrentSession();
     if (!session) return;
 
+    // Clean up existing listener first
+    if (this.ordersListenerUnsubscribe) {
+      this.ordersListenerUnsubscribe();
+      this.ordersListenerUnsubscribe = null;
+    }
+
     const statusFilter = document.getElementById('order-status-filter');
     const selectedStatus = statusFilter ? statusFilter.value : '';
 
@@ -525,8 +539,8 @@ const OrdersModule = {
       filters.status = selectedStatus;
     }
 
-    // Setup real-time listener
-    DB.listenToOrders(async (orders) => {
+    // Setup real-time listener and store unsubscribe function
+    this.ordersListenerUnsubscribe = DB.listenToOrders(async (orders) => {
       await this.displayOrders(orders);
     }, filters);
   },
@@ -539,8 +553,6 @@ const OrdersModule = {
     const session = DB.getCurrentSession();
     if (!session) return;
 
-    ordersList.innerHTML = '';
-
     if (orders.length === 0) {
       ordersList.innerHTML = '<li class="empty-list">No orders found.</li>';
       return;
@@ -552,6 +564,9 @@ const OrdersModule = {
       const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
       return dateB - dateA;
     });
+
+    // Build all DOM elements BEFORE manipulating the actual DOM to prevent race conditions
+    const orderElements = [];
 
     for (const order of orders) {
       const driver = await DB.getDriverById(order.driverId);
@@ -629,8 +644,12 @@ const OrdersModule = {
         </div>
       `;
 
-      ordersList.appendChild(li);
+      orderElements.push(li);
     }
+
+    // ATOMIC DOM UPDATE: Clear and rebuild in one operation
+    ordersList.innerHTML = '';
+    orderElements.forEach(li => ordersList.appendChild(li));
 
     // Add event listeners for action buttons
     this.bindOrderActionListeners();
@@ -679,10 +698,7 @@ const OrdersModule = {
       await DB.completeOrder(orderId);
       this.showNotification('Order marked as completed');
 
-      // Update dashboard if it exists
-      if (typeof DashboardModule !== 'undefined') {
-        await DashboardModule.updateDashboard();
-      }
+      // Real-time listeners will automatically update dashboard
     } catch (error) {
       alert(`Failed to complete order: ${error.message}`);
     }
@@ -702,10 +718,7 @@ const OrdersModule = {
       const paymentMessage = payDriver ? 'Order cancelled, inventory restored, and driver will be paid $30' : 'Order cancelled, inventory restored, and driver will not be paid';
       this.showNotification(paymentMessage);
 
-      // Update dashboard if it exists
-      if (typeof DashboardModule !== 'undefined') {
-        await DashboardModule.updateDashboard();
-      }
+      // Real-time listeners will automatically update dashboard
     } catch (error) {
       alert(`Failed to cancel order: ${error.message}`);
     }
