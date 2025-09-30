@@ -360,6 +360,101 @@ export const DB = {
     return Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
   },
 
+  /**
+   * Calculate date range for period filtering
+   * @param {string} period - Period type (day, week, month, year)
+   * @param {string|Date} date - Target date
+   * @returns {Object} {startDate, endDate} for filtering
+   */
+  calculateDateRange(period, date) {
+    if (!period || !date) {
+      return null;
+    }
+
+    let targetDate;
+    try {
+      targetDate = typeof date === 'string' ? new Date(date) : new Date(date);
+      if (isNaN(targetDate.getTime())) {
+        throw new Error('Invalid date');
+      }
+    } catch (error) {
+      console.error('Invalid date provided to calculateDateRange:', date);
+      return null;
+    }
+
+    const startDate = new Date(targetDate);
+    const endDate = new Date(targetDate);
+
+    switch(period) {
+      case 'day':
+        // Start of day: 00:00:00.000
+        startDate.setHours(0, 0, 0, 0);
+        // End of day: 23:59:59.999
+        endDate.setHours(23, 59, 59, 999);
+        break;
+
+      case 'week':
+        // Start of week (Sunday)
+        startDate.setDate(targetDate.getDate() - targetDate.getDay());
+        startDate.setHours(0, 0, 0, 0);
+        // End of week (Saturday)
+        endDate.setDate(startDate.getDate() + 6);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+
+      case 'month':
+        // First day of month
+        startDate.setDate(1);
+        startDate.setHours(0, 0, 0, 0);
+        // Last day of month
+        endDate.setMonth(targetDate.getMonth() + 1, 0);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+
+      case 'year':
+        // January 1st
+        startDate.setMonth(0, 1);
+        startDate.setHours(0, 0, 0, 0);
+        // December 31st
+        endDate.setMonth(11, 31);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+
+      default:
+        console.warn('Unknown period type:', period);
+        return null;
+    }
+
+    return { startDate, endDate };
+  },
+
+  /**
+   * Convert Firebase Timestamp or date string to Date object
+   * @param {*} timestamp - Firebase Timestamp, Date object, or ISO string
+   * @returns {Date} Date object
+   */
+  toDate(timestamp) {
+    if (!timestamp) return null;
+
+    // Firebase Timestamp object
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+
+    // Already a Date object
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+
+    // String representation
+    if (typeof timestamp === 'string') {
+      return new Date(timestamp);
+    }
+
+    // Fallback
+    return new Date(timestamp);
+  },
+
   // Generic methods (Firebase versions)
   async getAll(collectionName) {
     try {
@@ -1539,33 +1634,59 @@ export const DB = {
    * @param {string} filters.status - Filter by status
    * @param {Date} filters.startDate - Filter by start date
    * @param {Date} filters.endDate - Filter by end date
+   * @param {string} filters.period - Filter by period (day, week, month, year)
+   * @param {string|Date} filters.date - Target date for period filtering
    * @returns {Array} Filtered orders
    */
   async getOrdersWithFilters(filters = {}) {
     let orders = await this.getAllOrders();
-    
+
+    // Filter by sales rep
     if (filters.salesRepId) {
       orders = orders.filter(order => order.salesRepId === filters.salesRepId);
     }
-    
+
+    // Filter by driver
     if (filters.driverId) {
       orders = orders.filter(order => order.driverId === filters.driverId);
     }
-    
+
+    // Filter by status
     if (filters.status) {
       orders = orders.filter(order => order.status === filters.status);
     }
-    
-    if (filters.startDate) {
-      const startDate = new Date(filters.startDate);
-      orders = orders.filter(order => new Date(order.createdAt) >= startDate);
+
+    // Handle period and date filtering (takes precedence over startDate/endDate)
+    if (filters.period && filters.date) {
+      const dateRange = this.calculateDateRange(filters.period, filters.date);
+
+      if (dateRange) {
+        orders = orders.filter(order => {
+          const orderDate = this.toDate(order.createdAt);
+          if (!orderDate) return false;
+
+          return orderDate >= dateRange.startDate && orderDate <= dateRange.endDate;
+        });
+      }
+    } else {
+      // Fallback to individual startDate/endDate filtering if no period specified
+      if (filters.startDate) {
+        const startDate = new Date(filters.startDate);
+        orders = orders.filter(order => {
+          const orderDate = this.toDate(order.createdAt);
+          return orderDate && orderDate >= startDate;
+        });
+      }
+
+      if (filters.endDate) {
+        const endDate = new Date(filters.endDate);
+        orders = orders.filter(order => {
+          const orderDate = this.toDate(order.createdAt);
+          return orderDate && orderDate <= endDate;
+        });
+      }
     }
-    
-    if (filters.endDate) {
-      const endDate = new Date(filters.endDate);
-      orders = orders.filter(order => new Date(order.createdAt) <= endDate);
-    }
-    
+
     return orders;
   },
 
@@ -1774,55 +1895,13 @@ export const DB = {
   },
 
   /**
-   * Get orders with advanced filtering options (duplicate method - removed)
-   * This method was a duplicate and has been consolidated with the method above
+   * Get orders with advanced filtering options (now uses enhanced getOrdersWithFilters)
+   * @param {Object} filters - Filter options (same as getOrdersWithFilters)
+   * @returns {Array} Filtered orders
    */
   async getOrdersWithAdvancedFilters(filters = {}) {
-    let orders = await this.getAllOrders();
-    
-    // Filter by driver
-    if (filters.driverId) {
-      orders = orders.filter(order => order.driverId === filters.driverId);
-    }
-    
-    // Filter by sales rep
-    if (filters.salesRepId) {
-      orders = orders.filter(order => order.salesRepId === filters.salesRepId);
-    }
-    
-    // Filter by status
-    if (filters.status) {
-      orders = orders.filter(order => order.status === filters.status);
-    }
-    
-    // Filter by period
-    if (filters.period && filters.date) {
-      const targetDate = new Date(filters.date);
-      
-      orders = orders.filter(order => {
-        const orderDate = new Date(order.createdAt);
-        
-        switch(filters.period) {
-          case 'day':
-            return orderDate.toDateString() === targetDate.toDateString();
-          case 'week':
-            const weekStart = new Date(targetDate);
-            weekStart.setDate(targetDate.getDate() - targetDate.getDay());
-            const weekEnd = new Date(weekStart);
-            weekEnd.setDate(weekStart.getDate() + 6);
-            return orderDate >= weekStart && orderDate <= weekEnd;
-          case 'month':
-            return orderDate.getMonth() === targetDate.getMonth() && 
-                   orderDate.getFullYear() === targetDate.getFullYear();
-          case 'year':
-            return orderDate.getFullYear() === targetDate.getFullYear();
-          default:
-            return true;
-        }
-      });
-    }
-    
-    return orders;
+    // Use the enhanced getOrdersWithFilters method which now handles all filtering logic
+    return await this.getOrdersWithFilters(filters);
   },
 
   /**
@@ -1844,11 +1923,11 @@ export const DB = {
   /**
    * Get order statistics
    * @param {Object} filters - Optional filters (same as getOrdersWithFilters)
-   * @returns {Object} Order statistics
+   * @returns {Promise<Object>} Order statistics
    */
-  getOrderStats(filters = {}) {
-    const orders = this.getOrdersWithFilters(filters);
-    
+  async getOrderStats(filters = {}) {
+    const orders = await this.getOrdersWithFilters(filters);
+
     const stats = {
       total: orders.length,
       pending: orders.filter(order => order.status === this.ORDER_STATUS.PENDING).length,
