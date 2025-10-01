@@ -226,7 +226,7 @@ const UsersModule = {
   async deactivateUser(userId) {
     if (confirm('Are you sure you want to deactivate this user?')) {
       try {
-        await DB.deactivateUser(userId);
+        await DB.updateUser(userId, { isActive: false });
         await this.loadUsers();
         this.showNotification('User deactivated successfully');
       } catch (error) {
@@ -249,10 +249,18 @@ const UsersModule = {
   // Reset user password
   async resetPassword(userId) {
     const newPassword = prompt('Enter new password for this user:');
-    
+
     if (newPassword && newPassword.length >= 8) {
       try {
-        await DB.updateUser(userId, { password: newPassword });
+        // Hash the password before storing
+        const salt = await DB.generateSalt();
+        const passwordHash = await DB.hashPassword(newPassword, salt);
+
+        await DB.updateUser(userId, {
+          passwordHash: passwordHash,
+          salt: salt
+        });
+
         this.showNotification('Password reset successfully');
         alert(`Password has been reset to: ${newPassword}\nPlease inform the user to change it on next login.`);
       } catch (error) {

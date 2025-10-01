@@ -119,10 +119,10 @@ const ReportsModule = {
       order.lineItems.forEach(item => {
         if (!item.isFreeGift) {
           // Use actualQuantity if available (new format), otherwise fall back to quantity (old format)
-          const deductionAmount = item.actualQuantity !== undefined ? item.actualQuantity : item.quantity;
+          const deductionAmount = item.actualQuantity != null ? item.actualQuantity : item.quantity;
           totalItems += deductionAmount;
           driverTotals[order.driverId].items += deductionAmount;
-          
+
           if (!productTotals[item.productId]) {
             productTotals[item.productId] = {
               name: item.productName,

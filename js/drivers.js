@@ -68,7 +68,7 @@ const DriversModule = {
       // Show appropriate notification
       let message = `Driver "${name}" added successfully`;
       if (result.user && result.credentials) {
-        message += `\\n\\nUser account created:\\nUsername: ${result.credentials.username}\\nPassword: ${result.credentials.password}\\n\\nPlease inform the driver to change their password on first login.`;
+        message += `\n\nUser account created:\nUsername: ${result.credentials.username}\nPassword: ${result.credentials.password}\n\nPlease inform the driver to change their password on first login.`;
         alert(message);
       } else {
         this.showNotification(message);

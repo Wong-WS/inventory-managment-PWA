@@ -987,14 +987,6 @@ export const DB = {
         }
       }
 
-      // Ensure we have user object for compatibility
-      if (!session.user && session.userId) {
-        const user = this.getUserById(session.userId);
-        if (user) {
-          session.user = user;
-        }
-      }
-
       return session;
     } catch (error) {
       console.error('Error retrieving session:', error);
@@ -1368,7 +1360,7 @@ export const DB = {
   // Inventory calculations
   async getDriverInventory(driverId) {
     const assignments = await this.getAssignmentsByDriver(driverId);
-    const sales = await this.getSalesByDriver(driverId);
+    const orders = await this.getOrdersByDriver(driverId);
     const transfers = await this.getTransfersByDriver(driverId);
     const products = await this.getAllProducts();
     const inventory = {};
@@ -1392,9 +1384,15 @@ export const DB = {
       }
     });
 
-    // Subtract all sales
-    sales.forEach(sale => {
-      sale.lineItems.forEach(item => {
+    // Subtract inventory from pending and completed orders only
+    // All cancelled orders should have inventory restored regardless of payment status
+    orders.forEach(order => {
+      // Skip ALL cancelled orders - inventory only deducted for pending/completed
+      if (order.status === this.ORDER_STATUS.CANCELLED) {
+        return; // Inventory not deducted for cancelled orders
+      }
+
+      order.lineItems.forEach(item => {
         if (!item.isFreeGift && inventory[item.productId]) {
           // Use actualQuantity if available (new format), otherwise fall back to quantity (old format)
           const deductionAmount = item.actualQuantity !== undefined ? item.actualQuantity : item.quantity;
@@ -1737,17 +1735,9 @@ export const DB = {
       const docRef = await addDoc(collection(db, this.COLLECTIONS.ORDERS), newOrderData);
       const newOrder = { id: docRef.id, ...newOrderData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
 
-      // Update inventory by creating temporary sales entry for inventory calculation
-      // This affects driver inventory immediately when order is created
-      await this.addSale({
-        driverId: orderData.driverId,
-        customerAddress: orderData.customerAddress.trim(),
-        customerDescription: orderData.customerDescription ? orderData.customerDescription.trim() : '',
-        deliveryMethod: orderData.deliveryMethod || 'Paid',
-        totalAmount: parseFloat(orderData.totalAmount) || 0,
-        lineItems: orderData.lineItems || [],
-        orderId: newOrder.id // Link to order for reference
-      });
+      // NOTE: Inventory is automatically tracked via orders.
+      // The getDriverInventory method now uses orders instead of the legacy 'sales' collection
+      // to prevent double inventory deduction.
 
       return newOrder;
     } catch (error) {
@@ -1825,32 +1815,18 @@ export const DB = {
       throw new Error('Only pending orders can be cancelled');
     }
 
-    // Remove the associated sale to restore inventory
-    try {
-      const q = query(
-        collection(db, this.COLLECTIONS.SALES),
-        where("orderId", "==", id)
-      );
-      const snapshot = await getDocs(q);
-
-      if (!snapshot.empty) {
-        await deleteDoc(snapshot.docs[0].ref);
-      }
-    } catch (error) {
-      console.error('Error removing sale record:', error);
-    }
-
     // Update order status and payment method based on driver payment choice
-    const updateData = { 
+    const updateData = {
       status: this.ORDER_STATUS.CANCELLED,
       cancelledAt: new Date().toISOString()
     };
-    
-    // If not paying driver, change delivery method to 'Free' for earnings calculation
+
+    // If not paying driver, change delivery method to 'Free' for earnings/reporting
+    // Note: Inventory is automatically restored for ALL cancelled orders regardless of payment
     if (!payDriver) {
       updateData.deliveryMethod = 'Free';
     }
-    
+
     await this.updateOrder(id, updateData);
 
     return true;
