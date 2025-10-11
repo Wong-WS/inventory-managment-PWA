@@ -101,7 +101,7 @@ const OrdersModule = {
 
   // Initialize the orders module
   async init() {
-    this.lineItemCounter = 0;
+    this.lineItemCounter = 1; // Start at 1 because HTML already has line-item with data-index="0"
     this.currentView = 'create'; // 'create' or 'manage'
     this.ordersListenerUnsubscribe = null; // Track listener for cleanup
     this.bindEvents();
@@ -808,8 +808,8 @@ const OrdersModule = {
 
   // Format order details as text
   formatOrderDetails(order, driver) {
-    const date = new Date(order.createdAt);
-    const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const createdDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+    const formattedDate = `${createdDate.toLocaleDateString()} ${createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     
     // Format line items
     let itemsText = '';

@@ -1,4 +1,5 @@
 # Comprehensive Manual Testing Guide
+
 ## Inventory Management PWA - Role-Based Testing
 
 This guide provides detailed, step-by-step testing scenarios for each user role. Follow these tests in order to ensure all functionality works correctly after the bug fixes.
@@ -8,6 +9,7 @@ This guide provides detailed, step-by-step testing scenarios for each user role.
 ## Pre-Testing Setup
 
 ### Initial Setup (Do Once)
+
 1. Open your application in a browser (Chrome recommended)
 2. Open DevTools (F12) → Console tab (keep it open to catch any errors)
 3. **Clear all data** to start fresh:
@@ -17,7 +19,9 @@ This guide provides detailed, step-by-step testing scenarios for each user role.
 4. You should see the login screen
 
 ### Test Data Preparation
+
 Before starting the role-specific tests, you'll need some baseline data. Use the default admin account to create:
+
 - **Products**: At least 3 products (e.g., "Product A", "Product B", "Product C")
 - **Drivers**: At least 2 drivers with user accounts
 - **Sales Reps**: At least 1 sales rep user account
@@ -25,6 +29,7 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 ---
 
 # TEST SUITE 1: ADMIN ROLE
+
 **Duration: ~30-45 minutes**
 
 ---
@@ -32,13 +37,16 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 ## 1.1 Authentication & Authorization
 
 ### Test 1.1.1: Admin Login
+
 **Steps:**
+
 1. Go to login page
 2. Enter username: `admin`
 3. Enter password: `Admin123!`
 4. Click "Login"
 
 **Expected Results:**
+
 - ✅ Login successful
 - ✅ Dashboard displayed
 - ✅ Tabs visible: Dashboard, Products, Drivers, Assignments, Orders, Users, Reports
@@ -46,34 +54,40 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 - ✅ User name displayed in header
 - ✅ Logout button visible
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.1.2: Session Persistence
+
 **Steps:**
+
 1. While logged in, refresh the page (F5)
 
 **Expected Results:**
+
 - ✅ Still logged in after refresh
 - ✅ No redirect to login page
 - ✅ Same tabs still visible
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.1.3: Admin Logout
+
 **Steps:**
+
 1. Click "Logout" button
 2. Confirm logout in dialog
 
 **Expected Results:**
+
 - ✅ Redirect to login page
 - ✅ Dashboard no longer visible
 - ✅ Session cleared
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
@@ -82,78 +96,93 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Login as admin, go to "Products" tab
 
 ### Test 1.2.1: Add New Product
+
 **Steps:**
+
 1. Click "Add Product" button
 2. Enter product name: "Test Product Alpha"
 3. Leave quantity as 0 (default)
 4. Click "Save"
 
 **Expected Results:**
+
 - ✅ Success notification appears
 - ✅ Product appears in product list
 - ✅ Product shows "Quantity: 0"
 - ✅ Product has Edit and Delete buttons
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.2.2: Edit Product
+
 **Steps:**
+
 1. Find "Test Product Alpha" in list
 2. Click "Edit" button
 3. Change name to "Test Product Alpha - Updated"
 4. Click "Save"
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Product name updated in list
 - ✅ No duplicate entries
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.2.3: Restock Product
+
 **Steps:**
+
 1. Find "Test Product Alpha - Updated"
 2. Click "Restock" button
 3. Enter quantity: `100`
 4. Click "Restock"
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Product now shows "Quantity: 100"
 - ✅ Quantity updated immediately without refresh
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.2.4: Search Products
+
 **Steps:**
+
 1. In search box, type "Alpha"
 2. Observe filtered list
 
 **Expected Results:**
+
 - ✅ Only products with "Alpha" in name are shown
 - ✅ Other products are hidden
 - ✅ Clearing search shows all products again
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.2.5: Delete Product (Should Fail If Used)
+
 **Steps:**
+
 1. Create a new product "Delete Test Product"
 2. Try to delete it immediately
 3. Confirm deletion
 
 **Expected Results:**
+
 - ✅ Product deleted successfully (since it has no dependencies)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
@@ -162,7 +191,9 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "Drivers" tab
 
 ### Test 1.3.1: Add Driver WITH User Account
+
 **Steps:**
+
 1. Click "Add Driver" button
 2. Enter name: "Test Driver One"
 3. Enter phone: "555-1001"
@@ -170,6 +201,7 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Click "Save"
 
 **Expected Results:**
+
 - ✅ Success alert showing:
   - Driver added successfully
   - User account created
@@ -178,16 +210,19 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 - ✅ Driver appears in list
 - ✅ Driver shows status as "Active" (green)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 **Record credentials for later:**
-- Username: `________________`
+
+- Username: `testdriverone`
 - Password: `Driver123!`
 
 ---
 
 ### Test 1.3.2: Add Driver WITHOUT User Account
+
 **Steps:**
+
 1. Click "Add Driver" button
 2. Enter name: "Test Driver Two"
 3. Enter phone: "555-1002"
@@ -195,40 +230,47 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Click "Save"
 
 **Expected Results:**
+
 - ✅ Simple success notification (no credentials shown)
 - ✅ Driver appears in list
 - ✅ Driver shows "No user account linked" in RED
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.3.3: Edit Driver
+
 **Steps:**
+
 1. Find "Test Driver One"
 2. Click "Edit" button
 3. Change phone to "555-1001-UPDATED"
 4. Click "Save"
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Phone number updated in list
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.3.4: Search Drivers
+
 **Steps:**
+
 1. In search box, type "One"
 2. Observe results
 
 **Expected Results:**
+
 - ✅ Only "Test Driver One" shown
 - ✅ Other drivers hidden
 - ✅ Clear search shows all drivers
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
@@ -237,7 +279,9 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "Assignments" tab
 
 ### Test 1.4.1: Assign Stock to Driver
+
 **Steps:**
+
 1. In "Assign Products" section
 2. Select Product: "Test Product Alpha - Updated" (should show 100 available)
 3. Select Driver: "Test Driver One"
@@ -245,45 +289,54 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Click "Assign"
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Assignment appears in "Assignment History" below
 - ✅ Main product quantity reduced to 70
 - ✅ Go to Products tab → verify "Test Product Alpha - Updated" now shows 70
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass (but assignment history show invalid date - Fixed)
 
 ---
 
 ### Test 1.4.2: Assign More Stock to Same Driver
+
 **Steps:**
+
 1. Assign another 20 units of same product to same driver
 2. Check assignment history
 
 **Expected Results:**
+
 - ✅ Two separate assignment entries visible
 - ✅ Main product quantity now 50
 - ✅ Driver has total 50 units assigned (cumulative)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.4.3: Assign Exceeding Available Stock (Should Fail)
+
 **Steps:**
+
 1. Try to assign 100 units (more than available 50)
 2. Click "Assign"
 
 **Expected Results:**
+
 - ✅ Error message: insufficient stock
 - ✅ Assignment NOT created
 - ✅ Main quantity still 50
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.4.4: Transfer Stock Between Drivers
+
 **Steps:**
+
 1. In "Transfer Products" section
 2. Select Product: "Test Product Alpha - Updated"
 3. From Driver: "Test Driver One"
@@ -292,17 +345,20 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 6. Click "Transfer"
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Transfer appears in "Transfer History"
 - ✅ Driver One now has 40 units (50 - 10)
 - ✅ Driver Two now has 10 units
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.4.5: Collect Stock Back to Main Inventory
+
 **Steps:**
+
 1. In "Transfer Products" section
 2. Select Product: "Test Product Alpha - Updated"
 3. From Driver: "Test Driver One"
@@ -311,39 +367,46 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 6. Click "Transfer"
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Driver One now has 25 units (40 - 15)
 - ✅ Go to Products tab → Main inventory increased to 65 (50 + 15)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.4.6: Filter Assignment History
+
 **Steps:**
+
 1. In "Assignment History" section
 2. Select "Test Driver One" from dropdown
 3. Click "Load Assignments"
 
 **Expected Results:**
+
 - ✅ Only assignments for Driver One shown
 - ✅ Should see 2 assignment records (30 + 20)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.4.7: Filter Transfer History
+
 **Steps:**
+
 1. In "Transfer History" section
 2. Select "Test Driver One" from dropdown
 3. Click "Load Transfers"
 
 **Expected Results:**
+
 - ✅ Shows transfers involving Driver One
 - ✅ Should see 2 records (transfer to Driver Two + collect to main)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
@@ -352,10 +415,13 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "Users" tab
 
 ### Test 1.5.1: View All Users
+
 **Steps:**
+
 1. Observe user list
 
 **Expected Results:**
+
 - ✅ Admin user visible (yourself)
 - ✅ Test Driver One's user account visible
 - ✅ Each user shows: username, name, role, status (Active/Inactive)
@@ -365,7 +431,9 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 ---
 
 ### Test 1.5.2: Create Sales Rep User
+
 **Steps:**
+
 1. Click "Add User" button
 2. Enter username: "salesrep1"
 3. Enter password: "SalesRep123!" (at least 8 characters)
@@ -374,20 +442,24 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 6. Click "Save"
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ User appears in list with role "Sales Rep"
 - ✅ User status is "Active"
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 **Record credentials:**
+
 - Username: `salesrep1`
 - Password: `SalesRep123!`
 
 ---
 
 ### Test 1.5.3: Create Driver User Linked to Existing Driver
+
 **Steps:**
+
 1. Click "Add User" button
 2. Enter username: "driver2"
 3. Enter password: "Driver2Pass!"
@@ -397,87 +469,104 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 7. Click "Save"
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ User appears with role "Driver"
 - ✅ Go to Drivers tab → "Test Driver Two" now shows "Active" instead of "No user account linked"
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.5.4: Deactivate User
+
 **Steps:**
+
 1. Find "driver2" user in list
 2. Click "Deactivate" button
 3. Confirm deactivation
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ User status changes to "Inactive" (red)
 - ✅ User should not be able to login (test in incognito window if needed)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 1.5.5: Activate User
+
 **Steps:**
+
 1. Find "driver2" user
 2. Click "Activate" button
 3. Confirm activation
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ User status changes to "Active" (green)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 1.5.6: Reset User Password
+
 **Steps:**
+
 1. Find "salesrep1" user
 2. Click "Reset Password" button
 3. Enter new password: "NewPassword123!"
 4. Confirm
 
 **Expected Results:**
+
 - ✅ Success alert showing new password
 - ✅ User can login with new password (test later)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 **Update credentials:**
+
 - Username: `salesrep1`
 - New Password: `NewPassword123!`
 
 ---
 
 ### Test 1.5.7: Edit User Role
+
 **Steps:**
+
 1. Find "salesrep1" user
 2. Click "Edit" button
 3. Change role from "Sales Rep" to "Admin"
 4. Click "Save"
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Role updated in list to "Admin"
 
-**Pass/Fail:** ☐
+**Pass/Fail:** No edit button to change roles. which is correct
 
 ---
 
 ### Test 1.5.8: Search Users
+
 **Steps:**
+
 1. In search box, type "driver"
 2. Observe filtered results
 
 **Expected Results:**
+
 - ✅ Only users with "driver" in username/name shown
 - ✅ Clear search shows all users
 
-**Pass/Fail:** ☐
+**Pass/Fail:** NO search box in users module (unnecessary)
 
 ---
 
@@ -486,33 +575,41 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "Orders" tab
 
 ### Test 1.6.1: View All Orders
+
 **Steps:**
+
 1. Observe order list
 
 **Expected Results:**
+
 - ✅ All orders from all sales reps visible
 - ✅ Each order shows: driver, customer, status, amount, date
 - ✅ Status filter dropdown available (All, Pending, Completed, Cancelled)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 1.6.2: Filter Orders by Status
+
 **Steps:**
+
 1. Select "Pending" from status filter
 2. Observe list
 
 **Expected Results:**
+
 - ✅ Only pending orders shown
 - ✅ Completed/cancelled orders hidden
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 1.6.3: Real-Time Order Updates
+
 **Steps:**
+
 1. Keep Orders tab open
 2. Open another browser window/incognito
 3. Login as sales rep (you'll create orders in next test suite)
@@ -520,10 +617,11 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Switch back to admin window
 
 **Expected Results:**
+
 - ✅ New order appears automatically without manual refresh
 - ✅ No duplicate entries
 
-**Pass/Fail:** ☐ (Test later with Sales Rep suite)
+**Pass/Fail:** Pass (Test later with Sales Rep suite)
 
 ---
 
@@ -532,7 +630,9 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "Reports" tab
 
 ### Test 1.7.1: Sales Report - Daily
+
 **Steps:**
+
 1. In "Sales Report" section
 2. Select Period: "Day"
 3. Select Date: Today's date
@@ -540,83 +640,99 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Click "Generate Report"
 
 **Expected Results:**
+
 - ✅ Report displays (may show "No data" if no completed orders)
 - ✅ Shows: Total Revenue, Total Items, Total Orders
 - ✅ If orders exist: product breakdown table visible
 - ✅ If multiple drivers: driver breakdown table visible
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass (tested it when there's no order, should come back again to test when there's complete orders)
 
 ---
 
 ### Test 1.7.2: Sales Report - Weekly
+
 **Steps:**
+
 1. Select Period: "Week"
 2. Select Date: Today's date
 3. Click "Generate Report"
 
 **Expected Results:**
+
 - ✅ Report shows date range (Sunday to Saturday of current week)
 - ✅ Includes all completed orders in that week
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass (same as above, needed more test)
 
 ---
 
 ### Test 1.7.3: Sales Report - Monthly
+
 **Steps:**
+
 1. Select Period: "Month"
 2. Select Date: Today's date
 3. Click "Generate Report"
 
 **Expected Results:**
+
 - ✅ Report shows date range (1st to last day of month)
 - ✅ Month boundary calculation correct
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass (same as above, needed more test)
 
 ---
 
 ### Test 1.7.4: Sales Report - Specific Driver
+
 **Steps:**
+
 1. Select Period: "Month"
 2. Select Driver: "Test Driver One"
 3. Click "Generate Report"
 
 **Expected Results:**
+
 - ✅ Report shows only orders for selected driver
 - ✅ Driver breakdown section NOT shown (single driver)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass (needed more test later)
 
 ---
 
 ### Test 1.7.5: Inventory Report - All Drivers
+
 **Steps:**
+
 1. In "Inventory Report" section
 2. Select Driver: "All Drivers"
 3. Click "Generate Report"
 
 **Expected Results:**
+
 - ✅ Overview table shows total assigned, sold, remaining across all products
 - ✅ Breakdown by driver shows each driver's inventory
 - ✅ Numbers are accurate based on assignments and orders
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass (works but not responsive for mobile)
 
 ---
 
 ### Test 1.7.6: Inventory Report - Specific Driver
+
 **Steps:**
+
 1. Select Driver: "Test Driver One"
 2. Click "Generate Report"
 
 **Expected Results:**
+
 - ✅ Table shows products, sold quantity, remaining quantity
 - ✅ Only products assigned to this driver are shown
 - ✅ Quantities match expected values (assigned - sold)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
@@ -625,19 +741,23 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "Dashboard" tab
 
 ### Test 1.8.1: Admin Dashboard Display
+
 **Steps:**
+
 1. Observe dashboard
 
 **Expected Results:**
+
 - ✅ Shows "System Overview" or "Admin Dashboard"
 - ✅ Displays key metrics (products, drivers, users, orders, etc.)
 - ✅ Real-time updates when data changes
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 # TEST SUITE 2: SALES REP ROLE
+
 **Duration: ~25-35 minutes**
 
 ---
@@ -645,7 +765,9 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 ## 2.1 Authentication & Authorization
 
 ### Test 2.1.1: Sales Rep Login
+
 **Steps:**
+
 1. **Logout as admin first**
 2. Go to login page
 3. Enter username: `salesrep1` (or the one you created, with updated password)
@@ -653,6 +775,7 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Click "Login"
 
 **Expected Results:**
+
 - ✅ Login successful
 - ✅ Dashboard displayed
 - ✅ Tabs visible: **Dashboard, Orders** ONLY
@@ -660,20 +783,23 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 - ✅ "My Orders", "My Inventory", "My Earnings" tabs are HIDDEN (driver-only)
 - ✅ Logout button visible
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 2.1.2: Sales Rep Session Persistence
+
 **Steps:**
+
 1. Refresh page (F5)
 
 **Expected Results:**
+
 - ✅ Still logged in
 - ✅ Same limited tabs visible
 - ✅ No access to admin features
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
@@ -682,16 +808,19 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "Dashboard" tab
 
 ### Test 2.2.1: Sales Rep Dashboard Display
+
 **Steps:**
+
 1. Observe dashboard content
 
 **Expected Results:**
+
 - ✅ Shows sales-specific metrics
 - ✅ May show: Today's orders, pending orders, completed orders
 - ✅ Does NOT show admin-level system metrics
 - ✅ Real-time updates
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
@@ -700,7 +829,9 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "Orders" tab
 
 ### Test 2.3.1: Create Simple Order
+
 **Steps:**
+
 1. Click "Create Order" or "New Order" button
 2. Select Driver: "Test Driver One"
 3. Customer Address: "123 Test Street"
@@ -715,19 +846,22 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 8. Click "Create Order"
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Order appears in order list with status "Pending"
 - ✅ Order shows all entered details correctly
 - ✅ **CRITICAL**: Check inventory (admin login required) - Driver One should have 1 less unit (24 remaining instead of 25)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 **Notes:** This tests that inventory is deducted ONCE, not twice (Bug Fix #1)
 
 ---
 
 ### Test 2.3.2: Create Order with Multiple Line Items
+
 **Steps:**
+
 1. Click "Create Order"
 2. Select Driver: "Test Driver One"
 3. Customer Address: "456 Test Avenue"
@@ -742,16 +876,19 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 8. Click "Create Order"
 
 **Expected Results:**
+
 - ✅ Order created successfully
 - ✅ Order shows 2 line items
 - ✅ Inventory deducted correctly for both items (total 3 units from Driver One)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Kinda works but have to make sure I press add line item first before picking products and quantity - Fixed
 
 ---
 
 ### Test 2.3.3: Create Order with Free Gift (No Inventory Deduction)
+
 **Steps:**
+
 1. Click "Create Order"
 2. Select Driver: "Test Driver One"
 3. Customer Address: "789 Test Boulevard"
@@ -763,62 +900,75 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 6. Click "Create Order"
 
 **Expected Results:**
+
 - ✅ Order created
 - ✅ **CRITICAL**: Inventory NOT deducted (check admin inventory report)
 - ✅ Free gift indicated in order details
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 2.3.4: Create Order with Category Deductions
+
 **Steps:**
+
 1. Create 4 separate orders with same product, different categories:
 
 **Order A:**
+
 - Category: "Q" → should deduct 1 unit
 - Total: $10
 
 **Order B:**
+
 - Category: "H" → should deduct 2 units
 - Total: $20
 
 **Order C:**
+
 - Category: "Oz" → should deduct 4 units
 - Total: $40
 
 **Order D:**
+
 - Category: "Quantity by pcs"
 - Enter actual quantity: 5 → should deduct 5 units
 - Total: $50
 
 **Expected Results:**
+
 - ✅ All 4 orders created
 - ✅ Total inventory deducted: 1 + 2 + 4 + 5 = 12 units
 - ✅ Verify in admin inventory report
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 2.3.5: Create Order Exceeding Driver Inventory (Should Fail)
+
 **Steps:**
+
 1. Click "Create Order"
 2. Select driver with limited inventory
 3. Try to add more units than driver has
 4. Try to create order
 
 **Expected Results:**
+
 - ✅ Error message: insufficient inventory
 - ✅ Order NOT created
 - ✅ Inventory unchanged
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 2.3.6: Driver Change Validation
+
 **Steps:**
+
 1. Start creating an order
 2. Select Driver: "Test Driver One"
 3. Add a product line item
@@ -826,11 +976,12 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Observe line items
 
 **Expected Results:**
+
 - ✅ Line items are revalidated
 - ✅ If Driver Two doesn't have the product, line item is cleared/flagged
 - ✅ Can only select products that new driver has
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
@@ -839,18 +990,21 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Have at least 2 pending orders from previous tests
 
 ### Test 2.4.1: Complete Order
+
 **Steps:**
+
 1. Find a pending order in list
 2. Click "Complete" button
 3. Confirm completion
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Order status changes to "Completed"
 - ✅ Order moves to completed section (if filtered)
 - ✅ Inventory remains deducted (already deducted on creation)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
@@ -859,7 +1013,9 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Have at least 2 pending orders
 
 ### Test 2.5.1: Cancel Order WITHOUT Paying Driver
+
 **Steps:**
+
 1. Note current driver inventory (login as admin if needed: Driver One should have X units remaining)
 2. Find a pending order (e.g., the one with 1 unit deducted)
 3. Click "Cancel" button
@@ -867,20 +1023,23 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Confirm cancellation
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Order status changes to "Cancelled"
 - ✅ Order shows delivery method as "Free"
 - ✅ **CRITICAL**: Check inventory - 1 unit should be RESTORED to driver
 - ✅ Check inventory report (admin) - cancelled order should NOT count as "sold"
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 **Notes:** This was already working correctly before fixes.
 
 ---
 
 ### Test 2.5.2: Cancel Order WITH Paying Driver (CRITICAL BUG FIX)
+
 **Steps:**
+
 1. Note current driver inventory
 2. Find another pending order (e.g., the one with 2 units deducted for "H" category)
 3. Click "Cancel" button
@@ -888,6 +1047,7 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Confirm cancellation
 
 **Expected Results:**
+
 - ✅ Success notification
 - ✅ Order status changes to "Cancelled"
 - ✅ Order delivery method stays as "Paid"
@@ -895,53 +1055,61 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 - ✅ Check inventory report (admin) - cancelled order should NOT count as "sold"
 - ✅ Cancelled order should NOT appear in sales reports
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 **Notes:** 🔥 This is the main bug that was fixed! Before the fix, inventory was NOT restored when cancelling with driver payment.
 
 ---
 
 ### Test 2.5.3: Verify Sales Report Excludes Cancelled Orders
+
 **Steps:**
+
 1. Login as admin
 2. Go to Reports tab
 3. Generate sales report for today
 4. Check if cancelled orders appear
 
 **Expected Results:**
+
 - ✅ Cancelled orders (both types) do NOT appear in sales report
 - ✅ Only completed orders appear
 - ✅ Total revenue only includes completed orders
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 2.5.4: Verify Inventory Report Accuracy After Cancellations
+
 **Steps:**
+
 1. Login as admin
 2. Go to Reports → Inventory Report
 3. Select "Test Driver One"
 4. Generate report
 5. Calculate expected inventory:
    - Started with: 25 units assigned
-   - Deducted for completed orders: ___ units
-   - Deducted for pending orders: ___ units
+   - Deducted for completed orders: \_\_\_ units
+   - Deducted for pending orders: \_\_\_ units
    - Cancelled orders: 0 units (should be restored)
    - Remaining = 25 - (completed + pending)
 
 **Expected Results:**
+
 - ✅ Remaining inventory matches calculation
 - ✅ Cancelled orders are NOT counted in "sold"
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ## 2.6 Order List Management
 
 ### Test 2.6.1: Filter Orders by Status
+
 **Steps:**
+
 1. Use status filter dropdown
 2. Select "Pending"
 3. Select "Completed"
@@ -949,16 +1117,19 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Select "All"
 
 **Expected Results:**
+
 - ✅ List filters correctly for each status
 - ✅ Count matches visible orders
 - ✅ Switching filters works smoothly
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 2.6.2: Real-Time Order Updates
+
 **Steps:**
+
 1. Keep Orders tab open
 2. Open another browser window/incognito
 3. Login as admin
@@ -966,72 +1137,86 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Switch back to sales rep window
 
 **Expected Results:**
+
 - ✅ Order status updates automatically
 - ✅ No page refresh needed
 - ✅ No duplicate entries
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 2.6.3: Copy Order Details to Clipboard
+
 **Steps:**
+
 1. Find any order
 2. Click "Copy" button (if available)
 
 **Expected Results:**
+
 - ✅ Order details copied to clipboard
 - ✅ Can paste into notepad/text editor
 - ✅ Format is readable
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 2.6.4: View Order Details
+
 **Steps:**
+
 1. Click on an order to expand/view details
 
 **Expected Results:**
+
 - ✅ All order information displayed
 - ✅ Line items with categories and quantities visible
 - ✅ Customer information shown
 - ✅ Order date/time shown
 - ✅ Status clearly indicated
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ## 2.7 Sales Rep Limitations (Security Test)
 
 ### Test 2.7.1: Attempt to Access Admin Features
+
 **Steps:**
+
 1. Try to manually navigate to admin-only pages (if URLs are exposed)
 2. Or try typing admin-only URLs in address bar
 
 **Expected Results:**
+
 - ✅ Access denied or redirected
 - ✅ Error message if applicable
 - ✅ Cannot view/modify products, drivers, users
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 2.7.2: Cannot View Other Sales Reps' Orders
+
 **Steps:**
+
 1. Check if order list shows orders from other sales reps
 
 **Expected Results:**
+
 - ✅ Only own orders visible
 - ✅ Cannot see other sales reps' orders
 
-**Pass/Fail:** ☐ (Verify implementation)
+**Pass/Fail:** Pass (Verify implementation) (but might change to everyone can see each other sales)
 
 ---
 
 # TEST SUITE 3: DRIVER ROLE
+
 **Duration: ~20-30 minutes**
 
 ---
@@ -1039,7 +1224,9 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 ## 3.1 Authentication & Authorization
 
 ### Test 3.1.1: Driver Login
+
 **Steps:**
+
 1. **Logout as sales rep**
 2. Go to login page
 3. Enter username: (the driver account you created, e.g., `testdriverone`)
@@ -1047,6 +1234,7 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Click "Login"
 
 **Expected Results:**
+
 - ✅ Login successful
 - ✅ Dashboard displayed
 - ✅ Tabs visible: **Dashboard, My Orders, My Inventory, My Earnings** ONLY
@@ -1054,20 +1242,23 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 - ✅ Logout button visible
 - ✅ Driver-specific interface shown
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.1.2: Driver Session Persistence
+
 **Steps:**
+
 1. Refresh page (F5)
 
 **Expected Results:**
+
 - ✅ Still logged in
 - ✅ Same driver-specific tabs visible
 - ✅ No access to admin/sales features
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
@@ -1076,30 +1267,36 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "Dashboard" tab
 
 ### Test 3.2.1: Driver Dashboard Display
+
 **Steps:**
+
 1. Observe dashboard content
 
 **Expected Results:**
+
 - ✅ Shows driver-specific metrics
 - ✅ May show: Assigned inventory, pending orders, completed orders, today's earnings
 - ✅ Quick summary of inventory status
 - ✅ Low stock alerts (if any products are low)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.2.2: Low Stock Alerts
+
 **Steps:**
+
 1. Check if any products are marked as low stock
 2. Note which products have low inventory
 
 **Expected Results:**
+
 - ✅ Products with low quantity highlighted (e.g., red/yellow indicator)
 - ✅ Alert message displayed if stock is low
 - ✅ Accurate threshold (e.g., < 10 units = low)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass (didnt test but most likely work. not too important too)
 
 ---
 
@@ -1108,40 +1305,49 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "My Orders" tab
 
 ### Test 3.3.1: View Assigned Orders
+
 **Steps:**
+
 1. Observe order list
 
 **Expected Results:**
+
 - ✅ Only orders assigned to THIS driver are visible
 - ✅ Orders from other drivers are HIDDEN
 - ✅ Each order shows: customer address, delivery method, amount, status, date
 - ✅ Orders are sorted by date (newest first or oldest first)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 3.3.2: Filter Orders by Status
+
 **Steps:**
+
 1. Use status filter (if available)
 2. Filter by "Pending"
 3. Filter by "Completed"
 4. Filter by "All"
 
 **Expected Results:**
+
 - ✅ List filters correctly
 - ✅ Status changes reflected immediately
 - ✅ Count accurate
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 3.3.3: View Order Details
+
 **Steps:**
+
 1. Click on an order to view details
 
 **Expected Results:**
+
 - ✅ Customer address displayed
 - ✅ Customer description shown (if provided)
 - ✅ Line items with product names and quantities
@@ -1150,25 +1356,30 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 - ✅ Order status
 - ✅ Created date/time
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.3.4: Verify Cannot Modify Orders
+
 **Steps:**
+
 1. Try to find Edit/Delete/Complete/Cancel buttons on orders
 
 **Expected Results:**
+
 - ✅ NO buttons to modify order status
 - ✅ Read-only view only
 - ✅ Driver cannot complete/cancel orders (sales rep function only)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.3.5: Real-Time Order Updates
+
 **Steps:**
+
 1. Keep "My Orders" tab open
 2. Open another browser window
 3. Login as sales rep
@@ -1176,26 +1387,30 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Switch back to driver window
 
 **Expected Results:**
+
 - ✅ New order appears automatically
 - ✅ No manual refresh needed
 - ✅ No duplicate entries
 - ✅ Notification/indicator for new order (if implemented)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.3.6: Search/Filter Orders
+
 **Steps:**
+
 1. If search box is available, search by customer address or description
 2. Observe filtered results
 
 **Expected Results:**
+
 - ✅ Matching orders shown
 - ✅ Non-matching orders hidden
 - ✅ Clear search shows all orders
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
@@ -1204,10 +1419,13 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "My Inventory" tab
 
 ### Test 3.4.1: View Current Inventory
+
 **Steps:**
+
 1. Observe inventory list
 
 **Expected Results:**
+
 - ✅ All products assigned to this driver are shown
 - ✅ Each product shows:
   - Product name
@@ -1217,44 +1435,52 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 - ✅ Products with 0 remaining may be hidden or grayed out
 - ✅ Quantities are accurate based on orders
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.4.2: Verify Inventory Accuracy After Order Creation
+
 **Steps:**
+
 1. Note current "Remaining" quantity for a product
 2. Open another window, login as sales rep
 3. Create a new pending order for this driver with that product
 4. Switch back to driver window
 
 **Expected Results:**
+
 - ✅ "Sold" quantity increased by order amount
 - ✅ "Remaining" quantity decreased by order amount
 - ✅ Update happens in real-time or after refresh
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 3.4.3: Verify Inventory Accuracy After Order Completion
+
 **Steps:**
+
 1. Note current inventory
 2. Login as sales rep in another window
 3. Complete a pending order
 4. Check driver inventory again
 
 **Expected Results:**
+
 - ✅ Inventory unchanged (already deducted when order was created)
 - ✅ "Sold" count includes completed orders
 - ✅ Remaining quantity stays the same
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 3.4.4: Verify Inventory Restoration After Order Cancellation (CRITICAL)
+
 **Steps:**
+
 1. **Initial State**: Note driver inventory
    - Example: Product Alpha - Assigned: 25, Sold: 10, Remaining: 15
 2. Login as sales rep in another window
@@ -1264,16 +1490,19 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Switch back to driver inventory
 
 **Expected Results:**
+
 - ✅ Sold decreases back to 10 (5 units restored)
 - ✅ Remaining increases back to 15
 - ✅ Inventory accurately reflects cancellation
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 3.4.5: Verify Inventory Restoration for Cancelled Order WITH Payment (CRITICAL BUG FIX)
+
 **Steps:**
+
 1. Note current inventory
 2. Create a pending order via sales rep: 3 units
    - Inventory should decrease by 3
@@ -1281,56 +1510,66 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 4. Check driver inventory
 
 **Expected Results:**
+
 - ✅ **BUG FIX VERIFICATION**: Inventory RESTORED (3 units added back)
 - ✅ Sold count decreases by 3
 - ✅ Remaining increases by 3
 - ✅ **THIS WAS BROKEN BEFORE - should now work correctly**
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 3.4.6: Low Stock Indicators
+
 **Steps:**
+
 1. Find a product with low remaining quantity (< 10 units)
 2. Observe visual indicators
 
 **Expected Results:**
+
 - ✅ Low stock products highlighted (red/yellow)
 - ✅ Warning icon or badge shown
 - ✅ Threshold is reasonable (e.g., < 10 units)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 3.4.7: Sort Inventory
+
 **Steps:**
+
 1. If sorting is available, try sorting by:
    - Product name
    - Remaining quantity
    - Sold quantity
 
 **Expected Results:**
+
 - ✅ List sorts correctly
 - ✅ Ascending/descending toggle works
 - ✅ Sort persists during session
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 3.4.8: Search Inventory
+
 **Steps:**
+
 1. If search is available, search for a product by name
 2. Observe results
 
 **Expected Results:**
+
 - ✅ Matching products shown
 - ✅ Non-matching products hidden
 - ✅ Clear search shows all products
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass (no search)
 
 ---
 
@@ -1339,10 +1578,13 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 **Setup:** Go to "My Earnings" tab
 
 ### Test 3.5.1: View Earnings Summary
+
 **Steps:**
+
 1. Observe earnings display
 
 **Expected Results:**
+
 - ✅ Shows total earnings (from completed orders)
 - ✅ May show breakdown by period (today, week, month)
 - ✅ May show order count
@@ -1350,28 +1592,33 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 - ✅ Excludes cancelled orders where delivery method = "Free"
 - ✅ **INCLUDES** cancelled orders where delivery method = "Paid" (driver still gets paid)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ### Test 3.5.2: Filter Earnings by Period
+
 **Steps:**
+
 1. If period filter is available (Day/Week/Month)
 2. Select "Day" and choose today
 3. Select "Week" and choose current week
 4. Select "Month" and choose current month
 
 **Expected Results:**
+
 - ✅ Earnings filtered correctly for each period
 - ✅ Date range displayed accurately
 - ✅ Calculations are correct
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.5.3: Earnings from Cancelled Orders WITH Payment
+
 **Steps:**
+
 1. Check current total earnings (note the amount)
 2. Login as sales rep
 3. Create an order for this driver: $50, delivery method = Paid
@@ -1381,16 +1628,19 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 7. Check driver earnings again
 
 **Expected Results:**
+
 - ✅ Earnings REMAIN at increased amount ($50 still counted)
 - ✅ Cancelled orders with payment still contribute to earnings
 - ✅ This is correct behavior (driver delivered but order was cancelled)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.5.4: Earnings from Cancelled Orders WITHOUT Payment
+
 **Steps:**
+
 1. Note current earnings
 2. Create and complete an order for $30
 3. Earnings increase by $30
@@ -1398,107 +1648,127 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 5. Check earnings
 
 **Expected Results:**
+
 - ✅ Earnings DECREASE by $30 (order no longer paid)
 - ✅ Correctly reflects that driver is not paid for this order
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.5.5: View Earnings History/Details
+
 **Steps:**
+
 1. If there's a detailed view or order list
 2. Check individual order contributions to earnings
 
 **Expected Results:**
+
 - ✅ List of paid orders shown
 - ✅ Each order shows amount contributed
 - ✅ Date/time of each order
 - ✅ Customer information (if shown)
 
-**Pass/Fail:** ☐
+**Pass/Fail:** Pass
 
 ---
 
 ## 3.6 Driver Limitations (Security Test)
 
 ### Test 3.6.1: Cannot Access Admin Features
+
 **Steps:**
+
 1. Try to access admin URLs manually
 2. Try to navigate to Products, Drivers, Assignments, Users tabs
 
 **Expected Results:**
+
 - ✅ Access denied or redirected
 - ✅ Cannot view admin-only content
 - ✅ Tabs are hidden and inaccessible
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass (I guess is pass cuz there's no special url)
 
 ---
 
 ### Test 3.6.2: Cannot Access Sales Rep Features
+
 **Steps:**
+
 1. Try to access Orders tab (sales rep view)
 2. Try to create/modify orders
 
 **Expected Results:**
+
 - ✅ Access denied
 - ✅ Cannot create or modify orders
 - ✅ Can only VIEW own orders in "My Orders"
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.6.3: Cannot View Other Drivers' Data
+
 **Steps:**
+
 1. Check if any data from other drivers is visible
 2. Check orders, inventory, earnings
 
 **Expected Results:**
+
 - ✅ Only own driver's data visible
 - ✅ Cannot see other drivers' orders, inventory, or earnings
 - ✅ Data is properly isolated
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ## 3.7 Real-Time Updates
 
 ### Test 3.7.1: Inventory Updates in Real-Time
+
 **Steps:**
+
 1. Keep "My Inventory" tab open
 2. Login as admin in another window
 3. Assign more stock to this driver
 4. Switch back to driver window
 
 **Expected Results:**
+
 - ✅ Inventory updates automatically
 - ✅ New assigned quantity reflected
 - ✅ No manual refresh needed
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 ### Test 3.7.2: Order Updates in Real-Time
+
 **Steps:**
+
 1. Keep "My Orders" tab open
 2. Login as sales rep in another window
 3. Complete a pending order for this driver
 4. Switch back to driver window
 
 **Expected Results:**
+
 - ✅ Order status updates to "Completed" automatically
 - ✅ Order moves to completed section (if filtered)
 - ✅ Real-time sync working
 
-**Pass/Fail:** ☐
+**Pass/Fail:** pass
 
 ---
 
 # CROSS-ROLE INTEGRATION TESTS
+
 **Duration: ~15-20 minutes**
 
 These tests verify that different roles work together correctly and data flows properly across the system.
@@ -1508,7 +1778,9 @@ These tests verify that different roles work together correctly and data flows p
 ## 4.1 Complete Workflow Test
 
 ### Test 4.1.1: End-to-End Order Flow
+
 **Steps:**
+
 1. **Admin**: Create product "Integration Test Product", restock to 100 units
 2. **Admin**: Create driver "Integration Test Driver" with user account
 3. **Admin**: Assign 50 units to driver
@@ -1522,6 +1794,7 @@ These tests verify that different roles work together correctly and data flows p
 11. **Admin**: Run inventory report - should show accurate quantities
 
 **Expected Results:**
+
 - ✅ All steps complete without errors
 - ✅ Data consistent across all roles
 - ✅ Inventory tracking accurate throughout
@@ -1532,7 +1805,9 @@ These tests verify that different roles work together correctly and data flows p
 ---
 
 ### Test 4.1.2: Cancellation Workflow (Critical)
+
 **Steps:**
+
 1. **Sales Rep**: Create order for 5 units (driver now has 35 remaining)
 2. **Driver**: Verify inventory shows 15 sold, 35 remaining
 3. **Sales Rep**: Cancel order WITH paying driver
@@ -1542,6 +1817,7 @@ These tests verify that different roles work together correctly and data flows p
 7. **Admin**: Verify sales report excludes cancelled order
 
 **Expected Results:**
+
 - ✅ Inventory restored correctly
 - ✅ Earnings handled correctly based on payment choice
 - ✅ Reports exclude cancelled orders from sales
@@ -1554,13 +1830,16 @@ These tests verify that different roles work together correctly and data flows p
 ## 4.2 Concurrent User Tests
 
 ### Test 4.2.1: Multiple Users Creating Orders Simultaneously
+
 **Steps:**
+
 1. Open 2 browser windows (or use 2 devices)
 2. Login as sales rep in both
 3. Both create orders for same driver at exact same time
 4. Submit both orders simultaneously
 
 **Expected Results:**
+
 - ✅ Both orders created successfully
 - ✅ No duplicate order IDs
 - ✅ Inventory deducted correctly for both orders
@@ -1572,12 +1851,15 @@ These tests verify that different roles work together correctly and data flows p
 ---
 
 ### Test 4.2.2: Admin Modifying Data While Sales Rep Uses It
+
 **Steps:**
+
 1. Sales rep starts creating an order
 2. Admin deletes/modifies a driver or product while order form is open
 3. Sales rep tries to submit order
 
 **Expected Results:**
+
 - ✅ Error handling if referenced data deleted
 - ✅ Graceful validation message
 - ✅ No system crash
@@ -1590,7 +1872,9 @@ These tests verify that different roles work together correctly and data flows p
 ## 4.3 Data Consistency Tests
 
 ### Test 4.3.1: Inventory Calculations Across All Views
+
 **Steps:**
+
 1. **Admin**: Note main inventory quantity for a product
 2. **Admin**: Note total assigned to all drivers
 3. **Driver**: Note individual driver inventories
@@ -1598,6 +1882,7 @@ These tests verify that different roles work together correctly and data flows p
 5. **Admin**: Check inventory report totals
 
 **Expected Results:**
+
 - ✅ Main inventory + assigned inventory = total expected
 - ✅ No inventory "lost" in the system
 - ✅ Reports match actual data
@@ -1608,13 +1893,16 @@ These tests verify that different roles work together correctly and data flows p
 ---
 
 ### Test 4.3.2: Order Counts Across Roles
+
 **Steps:**
+
 1. Count total orders in admin view
 2. Count orders in sales rep view (should match if same sales rep)
 3. Count orders in driver view (only for that driver)
 4. Verify totals add up correctly
 
 **Expected Results:**
+
 - ✅ Order counts consistent
 - ✅ Filtering works correctly
 - ✅ No missing orders
@@ -1627,13 +1915,16 @@ These tests verify that different roles work together correctly and data flows p
 ## 4.4 Report Accuracy Tests
 
 ### Test 4.4.1: Sales Report Matches Order Data
+
 **Steps:**
+
 1. Count all completed orders manually for today
 2. Sum up total amounts
 3. Generate sales report for today
 4. Compare report totals with manual calculation
 
 **Expected Results:**
+
 - ✅ Report totals match manual calculation
 - ✅ Product breakdown accurate
 - ✅ Driver breakdown accurate
@@ -1645,7 +1936,9 @@ These tests verify that different roles work together correctly and data flows p
 ---
 
 ### Test 4.4.2: Inventory Report Matches Actual Inventory
+
 **Steps:**
+
 1. For each driver, manually calculate:
    - Assigned = sum of all assignments
    - Sold = sum of line items in pending + completed orders (not cancelled)
@@ -1654,6 +1947,7 @@ These tests verify that different roles work together correctly and data flows p
 3. Compare with manual calculations
 
 **Expected Results:**
+
 - ✅ Report matches calculations
 - ✅ Cancelled orders properly excluded
 - ✅ Free gifts not counted
@@ -1666,13 +1960,16 @@ These tests verify that different roles work together correctly and data flows p
 ## 4.5 Edge Cases
 
 ### Test 4.5.1: Empty States
+
 **Steps:**
+
 1. Create a new driver with no inventory
 2. View as driver - check My Inventory tab
 3. Create a driver with inventory but no orders
 4. Generate reports with no data
 
 **Expected Results:**
+
 - ✅ "No data" messages displayed appropriately
 - ✅ No errors or blank screens
 - ✅ UI remains functional
@@ -1683,12 +1980,15 @@ These tests verify that different roles work together correctly and data flows p
 ---
 
 ### Test 4.5.2: Very Large Quantities
+
 **Steps:**
+
 1. Create order with large quantity (e.g., 9999 units)
 2. Check calculations
 3. Generate reports
 
 **Expected Results:**
+
 - ✅ Large numbers handled correctly
 - ✅ No overflow errors
 - ✅ UI displays numbers properly
@@ -1699,12 +1999,15 @@ These tests verify that different roles work together correctly and data flows p
 ---
 
 ### Test 4.5.3: Special Characters in Text Fields
+
 **Steps:**
+
 1. Create product with special characters: `Test & "Product" <Special>`
 2. Create order with customer address containing: `O'Brien's House, 123 1st St.`
 3. View in different roles
 
 **Expected Results:**
+
 - ✅ Special characters displayed correctly
 - ✅ No XSS vulnerabilities
 - ✅ Data saved and retrieved properly
@@ -1715,7 +2018,9 @@ These tests verify that different roles work together correctly and data flows p
 ---
 
 ### Test 4.5.4: Browser Refresh During Operations
+
 **Steps:**
+
 1. Start creating an order
 2. Refresh browser mid-way through
 3. Start assignment
@@ -1723,6 +2028,7 @@ These tests verify that different roles work together correctly and data flows p
 5. Check data consistency
 
 **Expected Results:**
+
 - ✅ No partial data saved
 - ✅ No corrupted state
 - ✅ Form data cleared after refresh
@@ -1739,35 +2045,42 @@ After completing all tests, verify the following:
 ## Critical Bug Fixes Verification
 
 ### ✅ Bug Fix #1: Double Inventory Deduction
+
 - ☐ Orders only deduct inventory once (not twice)
 - ☐ No duplicate sale entries created
 - ☐ Inventory calculations use orders, not legacy sales
 
 ### ✅ Bug Fix #2: Cancelled Order Inventory Restoration
+
 - ☐ Cancelling order WITHOUT paying driver → inventory restored ✅
 - ☐ Cancelling order WITH paying driver → inventory restored ✅ (was broken, now fixed)
 - ☐ Both scenarios tested and working
 
 ### ✅ Bug Fix #3: User Deactivation
+
 - ☐ Deactivate user button works
 - ☐ Deactivated users cannot login
 - ☐ Activate user button works
 
 ### ✅ Bug Fix #4: Password Reset Security
+
 - ☐ Password reset hashes password properly
 - ☐ Can login with new password
 - ☐ No plain text passwords stored
 
 ### ✅ Bug Fix #5: Session Management
+
 - ☐ Login works correctly
 - ☐ Session persists across page refresh
 - ☐ Logout clears session properly
 
 ### ✅ Bug Fix #6: Alert Formatting
+
 - ☐ Driver creation alert shows proper line breaks
 - ☐ Messages are readable
 
 ### ✅ Bug Fix #7: Report Null Checks
+
 - ☐ Reports handle null values gracefully
 - ☐ No crashes when data is missing
 
@@ -1813,34 +2126,39 @@ After completing all tests, verify the following:
 ## Test Statistics
 
 **Admin Tests:**
+
 - Total Tests: 35+
-- Passed: ___
-- Failed: ___
-- Pass Rate: ___%
+- Passed: \_\_\_
+- Failed: \_\_\_
+- Pass Rate: \_\_\_%
 
 **Sales Rep Tests:**
+
 - Total Tests: 25+
-- Passed: ___
-- Failed: ___
-- Pass Rate: ___%
+- Passed: \_\_\_
+- Failed: \_\_\_
+- Pass Rate: \_\_\_%
 
 **Driver Tests:**
+
 - Total Tests: 25+
-- Passed: ___
-- Failed: ___
-- Pass Rate: ___%
+- Passed: \_\_\_
+- Failed: \_\_\_
+- Pass Rate: \_\_\_%
 
 **Integration Tests:**
+
 - Total Tests: 15+
-- Passed: ___
-- Failed: ___
-- Pass Rate: ___%
+- Passed: \_\_\_
+- Failed: \_\_\_
+- Pass Rate: \_\_\_%
 
 **Overall:**
+
 - Total Tests: 100+
-- Passed: ___
-- Failed: ___
-- **Overall Pass Rate: ___%**
+- Passed: \_\_\_
+- Failed: \_\_\_
+- **Overall Pass Rate: \_\_\_%**
 
 ---
 
@@ -1848,9 +2166,9 @@ After completing all tests, verify the following:
 
 List any bugs found:
 
-1. _______________________________________________
-2. _______________________________________________
-3. _______________________________________________
+1. ***
+2. ***
+3. ***
 
 ---
 
@@ -1858,18 +2176,18 @@ List any bugs found:
 
 Based on testing results:
 
-1. _______________________________________________
-2. _______________________________________________
-3. _______________________________________________
+1. ***
+2. ***
+3. ***
 
 ---
 
 ## Test Completion
 
-**Tested By:** ___________________
-**Date:** ___________________
-**Time Spent:** ___________________
-**Environment:** Browser: _______ OS: _______ Device: _______
+**Tested By:** **\*\*\*\***\_\_\_**\*\*\*\***
+**Date:** **\*\*\*\***\_\_\_**\*\*\*\***
+**Time Spent:** **\*\*\*\***\_\_\_**\*\*\*\***
+**Environment:** Browser: **\_\_\_** OS: **\_\_\_** Device: **\_\_\_**
 
 **Overall Assessment:**
 ☐ System ready for production
@@ -1879,9 +2197,12 @@ Based on testing results:
 ---
 
 **Notes:**
-_________________________________________
-_________________________________________
-_________________________________________
+
+---
+
+---
+
+---
 
 ---
 

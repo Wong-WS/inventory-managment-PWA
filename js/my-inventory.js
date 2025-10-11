@@ -8,11 +8,14 @@ const MyInventoryModule = {
   currentFilter: '',
   currentSort: 'name',
   lowStockThreshold: 5,
-  
+  assignmentsListener: null,
+  ordersListener: null,
+
   // Initialize the my inventory module
   async init() {
     this.bindEvents();
     await this.loadInventory();
+    await this.setupRealtimeListeners();
   },
 
   // Bind event listeners
@@ -312,6 +315,34 @@ const MyInventoryModule = {
   // Refresh inventory data
   refresh() {
     this.loadInventory();
+  },
+
+  // Setup real-time listeners for inventory changes
+  async setupRealtimeListeners() {
+    const driverId = await this.getCurrentDriverId();
+    if (!driverId) return;
+
+    // Listen to assignments for this driver
+    this.assignmentsListener = DB.listenToAssignments(() => {
+      this.loadInventory();
+    }, { driverId });
+
+    // Listen to orders for this driver (to detect when orders affect inventory)
+    this.ordersListener = DB.listenToOrders(() => {
+      this.loadInventory();
+    }, { driverId });
+  },
+
+  // Cleanup listeners when module is destroyed
+  cleanup() {
+    if (this.assignmentsListener) {
+      this.assignmentsListener();
+      this.assignmentsListener = null;
+    }
+    if (this.ordersListener) {
+      this.ordersListener();
+      this.ordersListener = null;
+    }
   }
 };
 

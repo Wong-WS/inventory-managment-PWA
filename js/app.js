@@ -759,21 +759,28 @@ const DashboardModule = {
   async loadAdminRecentActivity(activityList) {
     // Get recent orders and assignments (no longer show old sales)
     const orders = await DB.getAllOrders();
-    const assignments = await DB.getAllAssignments();
 
-    // Combine and sort by date
+    // Sales reps only see orders, admins see orders + assignments
+    const session = DB.getCurrentSession();
+    const isAdmin = session && session.role === DB.ROLES.ADMIN;
+
     const activities = [
       ...orders.map((order) => ({
         type: "order",
         date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
         data: order,
-      })),
-      ...assignments.map((assignment) => ({
+      }))
+    ];
+
+    // Only admins see assignments in recent activity
+    if (isAdmin) {
+      const assignments = await DB.getAllAssignments();
+      activities.push(...assignments.map((assignment) => ({
         type: "assignment",
         date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
         data: assignment,
-      })),
-    ];
+      })));
+    }
 
     // Sort by date, newest first
     activities.sort((a, b) => b.date - a.date);
@@ -1132,22 +1139,27 @@ const DashboardModule = {
         ];
       }
     } else {
-      // Admin/sales rep sees all activities
+      // Admin/sales rep sees activities (sales reps: orders only, admins: orders + assignments)
       const allOrders = await DB.getAllOrders();
-      const allAssignments = await DB.getAllAssignments();
+      const isAdmin = session.role === DB.ROLES.ADMIN;
 
       activities = [
         ...allOrders.map((order) => ({
           type: "order",
           date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
           data: order,
-        })),
-        ...allAssignments.map((assignment) => ({
+        }))
+      ];
+
+      // Only admins see assignments in recent activity
+      if (isAdmin) {
+        const allAssignments = await DB.getAllAssignments();
+        activities.push(...allAssignments.map((assignment) => ({
           type: "assignment",
           date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
           data: assignment,
-        })),
-      ];
+        })));
+      }
     }
 
     // Sort by date, newest first

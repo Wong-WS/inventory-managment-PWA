@@ -165,8 +165,8 @@ const AssignmentsModule = {
 
         const li = document.createElement('li');
 
-        const date = new Date(assignment.assignedAt);
-        const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+        const assignedDate = assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt);
+        const formattedDate = `${assignedDate.toLocaleDateString()} ${assignedDate.toLocaleTimeString()}`;
 
         li.innerHTML = `
           <div class="item-details">
