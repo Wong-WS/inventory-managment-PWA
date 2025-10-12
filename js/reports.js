@@ -186,42 +186,44 @@ const ReportsModule = {
     if (!driverId && Object.keys(driverTotals).length > 1) {
       reportHTML += '<h4>Orders by Driver</h4>';
       reportHTML += '<table class="report-table">';
-      reportHTML += '<tr><th>Driver</th><th>Revenue</th><th>Items</th><th>% of Total</th></tr>';
-      
+      reportHTML += '<thead><tr><th>Driver</th><th>Revenue</th><th>Items</th><th>% of Total</th></tr></thead>';
+      reportHTML += '<tbody>';
+
       Object.values(driverTotals)
         .sort((a, b) => b.sales - a.sales)
         .forEach(driver => {
           const percentage = (driver.sales / totalSales * 100).toFixed(1);
           reportHTML += `
             <tr>
-              <td>${driver.name}</td>
-              <td>$${driver.sales.toFixed(2)}</td>
-              <td>${driver.items}</td>
-              <td>${percentage}%</td>
+              <td data-label="Driver">${driver.name}</td>
+              <td data-label="Revenue">$${driver.sales.toFixed(2)}</td>
+              <td data-label="Items">${driver.items}</td>
+              <td data-label="% of Total">${percentage}%</td>
             </tr>
           `;
         });
-      
-      reportHTML += '</table>';
+
+      reportHTML += '</tbody></table>';
     }
     
     // Product breakdown
     reportHTML += '<h4>Sales by Product</h4>';
     reportHTML += '<table class="report-table">';
-    reportHTML += '<tr><th>Product</th><th>Quantity</th></tr>';
-    
+    reportHTML += '<thead><tr><th>Product</th><th>Quantity</th></tr></thead>';
+    reportHTML += '<tbody>';
+
     Object.values(productTotals)
       .sort((a, b) => b.quantity - a.quantity)
       .forEach(product => {
         reportHTML += `
           <tr>
-            <td>${product.name}</td>
-            <td>${product.quantity}</td>
+            <td data-label="Product">${product.name}</td>
+            <td data-label="Quantity">${product.quantity}</td>
           </tr>
         `;
       });
-    
-    reportHTML += '</table>';
+
+    reportHTML += '</tbody></table>';
     
     // Display the report
     resultsDiv.innerHTML = reportHTML;
@@ -233,45 +235,76 @@ const ReportsModule = {
         margin-bottom: 1.5rem;
       }
       .report-stats {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 1rem;
         margin-top: 1rem;
       }
       .stat-item {
         background-color: var(--card-background);
-        padding: 0.8rem;
+        padding: 1rem;
         border-radius: var(--border-radius);
         box-shadow: var(--box-shadow);
+        min-height: 80px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
       }
       .stat-label {
         font-weight: 500;
-        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+        display: block;
+        font-size: 0.9rem;
+        color: #666;
       }
       .stat-value {
         font-weight: 700;
         color: var(--primary-color);
+        font-size: 1.5rem;
       }
       .report-table {
         width: 100%;
         border-collapse: collapse;
         margin-top: 1rem;
         margin-bottom: 1.5rem;
+        overflow-x: auto;
+        display: block;
+      }
+      .report-table thead,
+      .report-table tbody,
+      .report-table tr {
+        display: table;
+        width: 100%;
+        table-layout: fixed;
       }
       .report-table th, .report-table td {
         padding: 0.8rem;
         text-align: left;
+        border-bottom: 1px solid var(--border-color);
       }
       .report-table th {
         background-color: rgba(0,0,0,0.05);
+        font-weight: 600;
       }
-      .report-table tr:nth-child(even) {
+      .report-table tbody tr:nth-child(even) {
         background-color: rgba(0,0,0,0.02);
       }
       .no-data {
         padding: 1rem;
         text-align: center;
         color: #666;
+      }
+
+      /* Mobile optimization */
+      @media (max-width: 767px) {
+        .report-stats {
+          grid-template-columns: 1fr;
+          gap: 0.75rem;
+        }
+        .stat-item {
+          padding: 0.75rem;
+          min-height: 60px;
+        }
       }
     `;
     
@@ -312,24 +345,27 @@ const ReportsModule = {
           <h4>Inventory Report for ${driver.name}</h4>
         </div>
         <table class="report-table">
-          <tr>
-            <th>Product</th>
-            <th>Sold</th>
-            <th>Remaining</th>
-          </tr>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Sold</th>
+              <th>Remaining</th>
+            </tr>
+          </thead>
+          <tbody>
       `;
-      
+
       inventoryData.forEach(item => {
         reportHTML += `
           <tr>
-            <td>${item.name}</td>
-            <td>${item.sold}</td>
-            <td>${item.remaining}</td>
+            <td data-label="Product">${item.name}</td>
+            <td data-label="Sold">${item.sold}</td>
+            <td data-label="Remaining">${item.remaining}</td>
           </tr>
         `;
       });
-      
-      reportHTML += '</table>';
+
+      reportHTML += '</tbody></table>';
       resultsDiv.innerHTML = reportHTML;
       
     } else {
@@ -354,22 +390,25 @@ const ReportsModule = {
       reportHTML += `
         <h4>Overall Inventory Status</h4>
         <table class="report-table">
-          <tr>
-            <th>Product</th>
-            <th>Total Quantity</th>
-          </tr>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Total Quantity</th>
+            </tr>
+          </thead>
+          <tbody>
       `;
-      
+
       products.sort((a, b) => a.name.localeCompare(b.name)).forEach(product => {
         reportHTML += `
           <tr>
-            <td>${product.name}</td>
-            <td>${product.totalQuantity}</td>
+            <td data-label="Product">${product.name}</td>
+            <td data-label="Total Quantity">${product.totalQuantity}</td>
           </tr>
         `;
       });
-      
-      reportHTML += '</table>';
+
+      reportHTML += '</tbody></table>';
       
       // Per driver inventory
       for (const driver of drivers) {
@@ -379,24 +418,27 @@ const ReportsModule = {
           reportHTML += `
             <h4>${driver.name}'s Inventory</h4>
             <table class="report-table">
-              <tr>
-                <th>Product</th>
-                <th>Sold</th>
-                <th>Remaining</th>
-              </tr>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Sold</th>
+                  <th>Remaining</th>
+                </tr>
+              </thead>
+              <tbody>
           `;
-          
+
           driverInventory.sort((a, b) => a.name.localeCompare(b.name)).forEach(item => {
             reportHTML += `
               <tr>
-                <td>${item.name}</td>
-                <td>${item.sold}</td>
-                <td>${item.remaining}</td>
+                <td data-label="Product">${item.name}</td>
+                <td data-label="Sold">${item.sold}</td>
+                <td data-label="Remaining">${item.remaining}</td>
               </tr>
             `;
           });
-          
-          reportHTML += '</table>';
+
+          reportHTML += '</tbody></table>';
         } else {
           reportHTML += `
             <h4>${driver.name}'s Inventory</h4>
@@ -408,39 +450,8 @@ const ReportsModule = {
       resultsDiv.innerHTML = reportHTML;
     }
     
-    // Add some styles for the report
-    const style = document.createElement('style');
-    style.textContent = `
-      .report-summary {
-        margin-bottom: 1.5rem;
-      }
-      .report-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 1rem;
-        margin-bottom: 1.5rem;
-      }
-      .report-table th, .report-table td {
-        padding: 0.8rem;
-        text-align: left;
-      }
-      .report-table th {
-        background-color: rgba(0,0,0,0.05);
-      }
-      .report-table tr:nth-child(even) {
-        background-color: rgba(0,0,0,0.02);
-      }
-      .no-data {
-        padding: 1rem;
-        text-align: center;
-        color: #666;
-      }
-    `;
-    
-    if (!document.head.querySelector('style[data-report-styles]')) {
-      style.setAttribute('data-report-styles', 'true');
-      document.head.appendChild(style);
-    }
+    // Styles already loaded from sales report generation
+    // No need to duplicate
   },
 
   // Update driver dropdowns
