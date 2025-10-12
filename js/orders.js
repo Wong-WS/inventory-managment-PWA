@@ -31,6 +31,7 @@ const OrdersModule = {
   getDeductionAmount(category, customQuantity = 0) {
     switch(category) {
       case 'Q': return 1;
+      case '3.5': return 1;
       case 'H': return 2;
       case 'Oz': return 4;
       case 'Quantity by pcs': return parseInt(customQuantity) || 0;
@@ -365,6 +366,7 @@ const OrdersModule = {
         <select class="line-item-category" id="line-item-category-${index}" required>
           <option value="">-- Select Type --</option>
           <option value="Q">Q</option>
+          <option value="3.5">3.5</option>
           <option value="H">H</option>
           <option value="Oz">Oz</option>
           <option value="Quantity by pcs">Quantity by pcs</option>
