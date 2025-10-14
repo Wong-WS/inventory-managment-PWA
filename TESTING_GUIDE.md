@@ -885,27 +885,57 @@ Before starting the role-specific tests, you'll need some baseline data. Use the
 
 ---
 
-### Test 2.3.3: Create Order with Free Gift (No Inventory Deduction)
+### Test 2.3.3: Create Order with Free Gift (NOW DEDUCTS INVENTORY - NEW BEHAVIOR)
 
 **Steps:**
 
-1. Click "Create Order"
-2. Select Driver: "Test Driver One"
-3. Customer Address: "789 Test Boulevard"
-4. Add Line Item:
+1. Note driver's current inventory for a product (e.g., Product A: 20 remaining)
+2. Click "Create Order"
+3. Select Driver: "Test Driver One"
+4. Customer Address: "789 Test Boulevard"
+5. Add Line Item:
    - Product: "Test Product Alpha - Updated"
-   - Category: "Q"
+   - Category: "Q" (deducts 1 unit)
    - **Check "Free Gift" checkbox**
-5. Enter Total Amount: `0.00`
-6. Click "Create Order"
+6. Enter Total Amount: `0.00`
+7. Click "Create Order"
 
 **Expected Results:**
 
-- ✅ Order created
-- ✅ **CRITICAL**: Inventory NOT deducted (check admin inventory report)
-- ✅ Free gift indicated in order details
+- ✅ Order created successfully
+- ✅ **CRITICAL NEW BEHAVIOR**: Inventory IS deducted (check admin inventory - should be 19 remaining)
+- ✅ Free gift badge shown in order details
+- ✅ Driver inventory reduced by 1 unit (same as paid items)
 
-**Pass/Fail:** Pass
+**Pass/Fail:** ☐
+
+**Notes:** Free gifts now deduct from inventory (changed behavior)
+
+---
+
+### Test 2.3.3b: Free Gift Requires Inventory (NEW VALIDATION)
+
+**Steps:**
+
+1. Find driver with exactly 1 unit remaining of a product
+2. Click "Create Order"
+3. Select that driver
+4. Add Line Item:
+   - Select the product with 1 unit
+   - Category: "H" (requires 2 units)
+   - **Check "Free Gift" checkbox**
+5. Try to create order
+
+**Expected Results:**
+
+- ✅ **NEW VALIDATION**: Error message appears
+- ✅ Error states "Insufficient inventory for [product name] (free gift)"
+- ✅ Order NOT created
+- ✅ Cannot give free gifts without sufficient inventory
+
+**Pass/Fail:** ☐
+
+**Notes:** Free gifts now require inventory validation just like paid items
 
 ---
 
@@ -1950,8 +1980,193 @@ These tests verify that different roles work together correctly and data flows p
 
 - ✅ Report matches calculations
 - ✅ Cancelled orders properly excluded
-- ✅ Free gifts not counted
+- ✅ Free gifts NOW DEDUCT from inventory (new behavior)
 - ✅ All drivers accounted for
+
+**Pass/Fail:** ☐
+
+---
+
+### Test 4.4.3: Free Gift Reporting - Summary Stats (NEW FEATURE)
+
+**Setup:** Create test orders with mix of paid and free gift items
+
+**Steps:**
+
+1. **Create Test Data** (as sales rep):
+   - Order 1: 3x Product A (paid, Q type = 3 units)
+   - Order 2: 2x Product B (free gift, H type = 4 units)
+   - Order 3: 1x Product A (free gift, Q type = 1 unit)
+2. Complete all orders
+3. Login as admin → Go to Reports → Sales Report
+4. Generate report for today
+5. Check summary stats section
+
+**Expected Results:**
+
+- ✅ **4 stat cards displayed** (not 3)
+- ✅ Card 1: "Total Revenue" - Shows revenue from paid items only
+- ✅ Card 2: "Total Items Sold" - Shows 3 (paid items only, excludes free gifts)
+- ✅ Card 3: "Number of Orders" - Shows 3
+- ✅ Card 4: **"Number of Free Gifts" - Shows 5** (2+2 from H type + 1 from Q type) ⭐ NEW
+- ✅ All numbers accurate and properly separated
+
+**Pass/Fail:** ☐
+
+**Notes:** This is a NEW feature - free gifts now tracked separately in reports
+
+---
+
+### Test 4.4.4: Free Gift Reporting - Product Breakdown Tables (NEW FEATURE)
+
+**Setup:** Using same test data from Test 4.4.3
+
+**Steps:**
+
+1. Generate sales report for today
+2. Scroll down to product breakdown section
+3. Verify TWO separate tables exist
+
+**Expected Results for "Sales by Product" Table:**
+
+- ✅ Table shows ONLY paid items
+- ✅ Product A: 3 units (free gift excluded)
+- ✅ Product B: NOT listed (was free gift only)
+- ✅ Sorted by quantity (highest first)
+
+**Expected Results for "Free Gifts by Product" Table:**
+
+- ✅ **NEW TABLE appears below "Sales by Product"**
+- ✅ Table header: "Free Gifts by Product" ⭐ NEW
+- ✅ Product B: 4 units (2 units x H type deduction)
+- ✅ Product A: 1 unit
+- ✅ Sorted by quantity (highest first - Product B at top)
+- ✅ Uses same styling as "Sales by Product" table
+
+**Pass/Fail:** ☐
+
+---
+
+### Test 4.4.5: Free Gift Section Visibility (NEW FEATURE)
+
+**Steps:**
+
+1. Generate report for period with NO free gifts
+2. Check if "Free Gifts by Product" section appears
+3. Generate report for period WITH free gifts
+4. Check section visibility
+
+**Expected Results:**
+
+- ✅ When totalFreeGifts = 0: "Free Gifts by Product" section HIDDEN
+- ✅ When totalFreeGifts > 0: "Free Gifts by Product" section VISIBLE
+- ✅ "Number of Free Gifts" stat always shows (even if 0)
+
+**Pass/Fail:** ☐
+
+---
+
+### Test 4.4.6: Free Gift Inventory Deduction (NEW BEHAVIOR)
+
+**Setup:** Test that free gifts now deduct inventory
+
+**Steps:**
+
+1. Note driver's current inventory: Product A = 20 units remaining
+2. As sales rep: Create order with Product A (Q type, **Free Gift checked**)
+3. Check driver inventory immediately after order creation
+4. Generate inventory report for driver
+
+**Expected Results:**
+
+- ✅ **CRITICAL NEW BEHAVIOR**: Inventory deducted by 1 unit (now 19 remaining)
+- ✅ Inventory report shows "Sold: increased by 1"
+- ✅ Free gifts treated identically to paid items for inventory
+- ✅ Cancelled free gift orders restore inventory
+
+**Pass/Fail:** ☐
+
+**Notes:** This is a MAJOR behavior change - free gifts previously did NOT deduct inventory
+
+---
+
+### Test 4.4.7: Free Gift Report Accuracy Calculation
+
+**Setup:** Manual calculation verification
+
+**Steps:**
+
+1. Create diverse test orders:
+   - 2 orders with paid Q (2 units sold)
+   - 1 order with paid H (2 units sold)
+   - 3 orders with free gift Q (3 units as gifts)
+   - 1 order with free gift Oz (4 units as gifts)
+2. Manually calculate:
+   - Total Items Sold (paid) = 2 + 2 = 4
+   - Total Free Gifts = 3 + 4 = 7
+3. Generate report
+4. Compare with manual calculation
+
+**Expected Results:**
+
+- ✅ "Total Items Sold" = 4 (matches manual)
+- ✅ "Number of Free Gifts" = 7 (matches manual)
+- ✅ "Sales by Product" totals match paid items
+- ✅ "Free Gifts by Product" totals match gift items
+- ✅ Sum of both tables = total inventory deducted
+
+**Pass/Fail:** ☐
+
+---
+
+### Test 4.4.8: Free Gift Date Range Filtering
+
+**Steps:**
+
+1. Create free gift order today
+2. Create free gift order yesterday (if possible, or use different dates)
+3. Generate reports for:
+   - Today only
+   - This week
+   - This month
+
+**Expected Results:**
+
+- ✅ Today's report: Shows only today's free gifts
+- ✅ Weekly report: Shows this week's free gifts
+- ✅ Monthly report: Shows this month's free gifts
+- ✅ Free gift filtering works same as paid items
+- ✅ Date range filtering accurate for both tables
+
+**Pass/Fail:** ☐
+
+---
+
+### Test 4.4.9: Mixed Orders in Reports (Paid + Free Gifts)
+
+**Setup:** Test orders with both paid and free gift items
+
+**Steps:**
+
+1. Create single order with 3 line items:
+   - Line 1: Product A, Q, paid (1 unit)
+   - Line 2: Product B, H, **free gift** (2 units)
+   - Line 3: Product C, Oz, paid (4 units)
+2. Complete order
+3. Generate sales report
+
+**Expected Results:**
+
+- ✅ "Total Items Sold": 5 (A + C only, 1+4)
+- ✅ "Number of Free Gifts": 2 (B only)
+- ✅ "Sales by Product":
+  - Product A: 1
+  - Product C: 4
+  - Product B: NOT listed
+- ✅ "Free Gifts by Product":
+  - Product B: 2
+  - Product A & C: NOT listed
+- ✅ Clear separation between paid and gift items
 
 **Pass/Fail:** ☐
 

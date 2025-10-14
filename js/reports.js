@@ -95,7 +95,9 @@ const ReportsModule = {
     // Calculate totals and prepare report data
     let totalSales = 0;
     let totalItems = 0;
+    let totalFreeGifts = 0;
     const productTotals = {};
+    const freeGiftProductTotals = {};
     const driverTotals = {};
 
     for (const order of orders) {
@@ -115,11 +117,13 @@ const ReportsModule = {
       }
       driverTotals[order.driverId].sales += order.totalAmount;
       
-      // Aggregate by product
+      // Aggregate by product (separate tracking for paid items vs free gifts)
       order.lineItems.forEach(item => {
+        // Use actualQuantity if available (new format), otherwise fall back to quantity (old format)
+        const deductionAmount = item.actualQuantity != null ? item.actualQuantity : item.quantity;
+
         if (!item.isFreeGift) {
-          // Use actualQuantity if available (new format), otherwise fall back to quantity (old format)
-          const deductionAmount = item.actualQuantity != null ? item.actualQuantity : item.quantity;
+          // Track paid items (for "Sales by Product")
           totalItems += deductionAmount;
           driverTotals[order.driverId].items += deductionAmount;
 
@@ -130,6 +134,17 @@ const ReportsModule = {
             };
           }
           productTotals[item.productId].quantity += deductionAmount;
+        } else {
+          // Track free gifts separately (for "Free Gifts by Product")
+          totalFreeGifts += deductionAmount;
+
+          if (!freeGiftProductTotals[item.productId]) {
+            freeGiftProductTotals[item.productId] = {
+              name: item.productName,
+              quantity: 0
+            };
+          }
+          freeGiftProductTotals[item.productId].quantity += deductionAmount;
         }
       });
     }
@@ -178,6 +193,10 @@ const ReportsModule = {
             <span class="stat-label">Number of Orders:</span>
             <span class="stat-value">${orders.length}</span>
           </div>
+          <div class="stat-item">
+            <span class="stat-label">Number of Free Gifts:</span>
+            <span class="stat-value">${totalFreeGifts}</span>
+          </div>
         </div>
       </div>
     `;
@@ -224,7 +243,28 @@ const ReportsModule = {
       });
 
     reportHTML += '</tbody></table>';
-    
+
+    // Free gifts breakdown (only show if there are free gifts)
+    if (totalFreeGifts > 0) {
+      reportHTML += '<h4>Free Gifts by Product</h4>';
+      reportHTML += '<table class="report-table">';
+      reportHTML += '<thead><tr><th>Product</th><th>Quantity</th></tr></thead>';
+      reportHTML += '<tbody>';
+
+      Object.values(freeGiftProductTotals)
+        .sort((a, b) => b.quantity - a.quantity)
+        .forEach(product => {
+          reportHTML += `
+            <tr>
+              <td data-label="Product">${product.name}</td>
+              <td data-label="Quantity">${product.quantity}</td>
+            </tr>
+          `;
+        });
+
+      reportHTML += '</tbody></table>';
+    }
+
     // Display the report
     resultsDiv.innerHTML = reportHTML;
     

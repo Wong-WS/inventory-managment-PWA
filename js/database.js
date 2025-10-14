@@ -1393,7 +1393,7 @@ export const DB = {
       }
 
       order.lineItems.forEach(item => {
-        if (!item.isFreeGift && inventory[item.productId]) {
+        if (inventory[item.productId]) {
           // Use actualQuantity if available (new format), otherwise fall back to quantity (old format)
           const deductionAmount = item.actualQuantity !== undefined ? item.actualQuantity : item.quantity;
           inventory[item.productId].sold += deductionAmount;
@@ -1704,16 +1704,15 @@ export const DB = {
       throw new Error('Missing required order fields');
     }
 
-    // Validate inventory availability for all line items
+    // Validate inventory availability for all line items (including free gifts)
     for (const item of orderData.lineItems) {
-      if (!item.isFreeGift) {
-        const driverInventory = await this.getDriverInventory(orderData.driverId);
-        const productInventory = driverInventory.find(inv => inv.id === item.productId);
+      const driverInventory = await this.getDriverInventory(orderData.driverId);
+      const productInventory = driverInventory.find(inv => inv.id === item.productId);
 
-        if (!productInventory || productInventory.remaining < item.actualQuantity) {
-          const product = await this.getProductById(item.productId);
-          throw new Error(`Insufficient inventory for ${product ? product.name : 'unknown product'}`);
-        }
+      if (!productInventory || productInventory.remaining < item.actualQuantity) {
+        const product = await this.getProductById(item.productId);
+        const giftNote = item.isFreeGift ? ' (free gift)' : '';
+        throw new Error(`Insufficient inventory for ${product ? product.name : 'unknown product'}${giftNote}`);
       }
     }
 
