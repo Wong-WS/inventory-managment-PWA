@@ -682,7 +682,13 @@ const OrdersModule = {
         const orderId = e.target.dataset.orderId;
         const order = await DB.getOrderById(orderId);
         if (order) {
-          await this.copyOrderDetails(order);
+          // Pre-fetch driver data in the click handler (within user gesture)
+          const driver = await DB.getDriverById(order.driverId);
+          if (driver) {
+            this.copyOrderDetails(order, driver);
+          } else {
+            this.showNotification('Driver information not found');
+          }
         } else {
           this.showNotification('Order not found');
         }
@@ -775,37 +781,54 @@ const OrdersModule = {
     }
   },
 
-  // Copy order details to clipboard
-  async copyOrderDetails(order) {
-    if (!order) {
-      this.showNotification('Order data not found');
+  // Copy order details to clipboard (driver data already fetched)
+  copyOrderDetails(order, driver) {
+    if (!order || !driver) {
+      this.showNotification('Order or driver data not found');
       return;
     }
 
     try {
-      // Get driver information
-      const driver = await DB.getDriverById(order.driverId);
-      if (!driver) {
-        this.showNotification('Driver information not found');
-        return;
-      }
-
       // Format order details
       const orderText = this.formatOrderDetails(order, driver);
-      
-      // Try to use Clipboard API first
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(orderText);
+
+      // Try clipboard methods
+      let copySuccess = false;
+
+      // Try execCommand first
+      try {
+        copySuccess = this.fallbackCopyToClipboard(orderText);
+      } catch (err) {
+        console.log('execCommand failed:', err);
+      }
+
+      // Try Clipboard API if execCommand failed
+      if (!copySuccess && navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(orderText)
+          .then(() => {
+            this.showNotification('Order details copied to clipboard! 📋');
+            copySuccess = true;
+          })
+          .catch(() => {
+            // Both methods failed, show manual copy dialog
+            this.showManualCopyDialog(orderText);
+          });
+      } else if (copySuccess) {
         this.showNotification('Order details copied to clipboard! 📋');
       } else {
-        // Fallback for older browsers or non-secure contexts
-        this.fallbackCopyToClipboard(orderText);
-        this.showNotification('Order details copied to clipboard! 📋');
+        // execCommand failed and no Clipboard API, show manual copy
+        this.showManualCopyDialog(orderText);
       }
     } catch (error) {
       console.error('Failed to copy order details:', error);
-      this.showNotification('Failed to copy order details. Please try again.');
+      const orderText = this.formatOrderDetails(order, driver);
+      this.showManualCopyDialog(orderText);
     }
+  },
+
+  // Show manual copy dialog
+  showManualCopyDialog(text) {
+    alert('Please copy the order details below:\n\n' + text);
   },
 
   // Format order details as text
@@ -848,7 +871,7 @@ Created: ${formattedDate}`;
     return orderText;
   },
 
-  // Fallback copy method for older browsers
+  // Fallback copy method using execCommand
   fallbackCopyToClipboard(text) {
     // Create a temporary textarea element
     const textArea = document.createElement('textarea');
@@ -857,18 +880,21 @@ Created: ${formattedDate}`;
     textArea.style.left = '-999999px';
     textArea.style.top = '-999999px';
     document.body.appendChild(textArea);
-    
+
     textArea.focus();
     textArea.select();
-    
+
+    let success = false;
     try {
-      document.execCommand('copy');
+      success = document.execCommand('copy');
     } catch (err) {
       console.error('Fallback copy failed:', err);
-      throw err;
+      success = false;
     } finally {
       document.body.removeChild(textArea);
     }
+
+    return success;
   },
 
 };
