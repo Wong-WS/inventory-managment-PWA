@@ -627,10 +627,13 @@ const OrdersModule = {
         `;
       }
 
+      // Generate Order ID (same format as copy details)
+      const orderId = `#${order.id.slice(-6).toUpperCase()}`;
+
       li.innerHTML = `
         <div class="order-details">
           <div class="order-header">
-            <strong>$${order.totalAmount.toFixed(2)}</strong> - ${driver.name} ${statusBadge}
+            <strong>Order ${orderId}</strong> • <strong>$${order.totalAmount.toFixed(2)}</strong> - ${driver.name} ${statusBadge}
             ${session.role === DB.ROLES.ADMIN && salesRep ? `<br><small>Sales Rep: ${salesRep.name}</small>` : ''}
           </div>
           <div class="order-info">

@@ -9,6 +9,12 @@ supabase-credentials.js
 config/secrets.js
 js/config-manual.js
 
+# Firebase credentials (NEVER commit)
+firebase-config.js
+
+# Firebase deployment cache
+.firebase/
+
 # Build and deployment
 dist/
 build/

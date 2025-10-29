@@ -165,10 +165,13 @@ const MyOrdersModule = {
           salesRepInfo = order.salesRepId ? `<br><small>Order by: Unknown</small>` : '';
         }
 
+        // Generate Order ID (same format as orders.js)
+        const orderId = `#${order.id.slice(-6).toUpperCase()}`;
+
         li.innerHTML = `
           <div class="order-details">
             <div class="order-header">
-              <strong>$${order.totalAmount.toFixed(2)}</strong> ${statusBadge}
+              <strong>Order ${orderId}</strong> • <strong>$${order.totalAmount.toFixed(2)}</strong> ${statusBadge}
               ${salesRepInfo}
             </div>
             <div class="order-info">
