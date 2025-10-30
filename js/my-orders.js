@@ -4,6 +4,53 @@
  */
 
 const MyOrdersModule = {
+  // Cache for users to avoid N+1 queries
+  usersCache: new Map(),
+  cacheInitialized: false,
+
+  // Initialize cache with all users
+  async initializeCache() {
+    if (this.cacheInitialized) return;
+
+    try {
+      const users = await DB.getAllUsers();
+
+      this.usersCache.clear();
+      users.forEach(user => {
+        this.usersCache.set(user.id, user);
+      });
+
+      this.cacheInitialized = true;
+      console.log(`MyOrdersModule: Cache initialized - ${users.length} users`);
+    } catch (error) {
+      console.error('Failed to initialize cache:', error);
+    }
+  },
+
+  // Get user from cache (with fallback to DB)
+  async getCachedUser(userId) {
+    if (!userId) return null;
+
+    // Check cache first
+    if (this.usersCache.has(userId)) {
+      return this.usersCache.get(userId);
+    }
+
+    // Fallback to DB and update cache
+    const user = await DB.getUserById(userId);
+    if (user) {
+      this.usersCache.set(userId, user);
+    }
+    return user;
+  },
+
+  // Refresh cache when users are updated
+  refreshUserCache(user) {
+    if (user && user.id) {
+      this.usersCache.set(user.id, user);
+    }
+  },
+
   // Parse Firebase date safely
   parseFirebaseDate(date) {
     if (!date) return new Date();
@@ -29,6 +76,9 @@ const MyOrdersModule = {
 
   // Initialize the my orders module
   async init() {
+    // Initialize cache for performance
+    await this.initializeCache();
+
     this.bindEvents();
     this.setupMyOrdersListener();
   },
@@ -93,10 +143,23 @@ const MyOrdersModule = {
       filters.status = selectedStatus;
     }
 
+    // Clean up existing listener first
+    if (this.ordersListenerUnsubscribe) {
+      this.ordersListenerUnsubscribe();
+      this.ordersListenerUnsubscribe = null;
+    }
+
     // Setup real-time listener for driver's orders
-    DB.listenToOrders(async (orders) => {
+    this.ordersListenerUnsubscribe = DB.listenToOrders(async (orders) => {
       await this.displayMyOrders(orders);
     }, filters);
+
+    // Also listen to users to keep cache updated
+    if (!this.usersListenerUnsubscribe) {
+      this.usersListenerUnsubscribe = DB.listenToUsers((users) => {
+        users.forEach(user => this.refreshUserCache(user));
+      });
+    }
   },
 
   // Display driver's orders (used by real-time listener)
@@ -123,6 +186,14 @@ const MyOrdersModule = {
         const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
         return dateB - dateA;
       });
+
+      // Pre-fetch all unique user IDs in parallel batch
+      const userIds = [...new Set(orders.map(o => o.salesRepId).filter(id => id))];
+      const missingUsers = userIds.filter(id => !this.usersCache.has(id));
+
+      if (missingUsers.length > 0) {
+        await Promise.all(missingUsers.map(id => this.getCachedUser(id)));
+      }
 
       for (const order of orders) {
         const li = document.createElement('li');
@@ -155,14 +226,11 @@ const MyOrdersModule = {
         // Status badge with appropriate styling
         const statusBadge = `<span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span>`;
 
-        // Get sales rep info if available - handle async with fallback
+        // Get sales rep info from cache (instant lookup!)
         let salesRepInfo = '';
-        try {
-          const salesRep = order.salesRepId ? await DB.getUserById(order.salesRepId) : null;
-          salesRepInfo = salesRep ? `<br><small>Order by: ${salesRep.name}</small>` : '';
-        } catch (error) {
-          // Fallback to show unknown if DB call fails
-          salesRepInfo = order.salesRepId ? `<br><small>Order by: Unknown</small>` : '';
+        if (order.salesRepId) {
+          const salesRep = this.usersCache.get(order.salesRepId);
+          salesRepInfo = salesRep ? `<br><small>Order by: ${salesRep.name}</small>` : '<br><small>Order by: Unknown</small>';
         }
 
         // Generate Order ID (same format as orders.js)
