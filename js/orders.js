@@ -4,6 +4,88 @@
  */
 
 const OrdersModule = {
+  // Cache for drivers and users to avoid N+1 queries
+  driversCache: new Map(),
+  usersCache: new Map(),
+  cacheInitialized: false,
+
+  // Initialize caches with all drivers and users
+  async initializeCaches() {
+    if (this.cacheInitialized) return;
+
+    try {
+      // Fetch all drivers and users in parallel
+      const [drivers, users] = await Promise.all([
+        DB.getAllDrivers(),
+        DB.getAllUsers()
+      ]);
+
+      // Populate caches
+      this.driversCache.clear();
+      this.usersCache.clear();
+
+      drivers.forEach(driver => {
+        this.driversCache.set(driver.id, driver);
+      });
+
+      users.forEach(user => {
+        this.usersCache.set(user.id, user);
+      });
+
+      this.cacheInitialized = true;
+      console.log(`OrdersModule: Caches initialized - ${drivers.length} drivers, ${users.length} users`);
+    } catch (error) {
+      console.error('Failed to initialize caches:', error);
+    }
+  },
+
+  // Get driver from cache (with fallback to DB)
+  async getCachedDriver(driverId) {
+    if (!driverId) return null;
+
+    // Check cache first
+    if (this.driversCache.has(driverId)) {
+      return this.driversCache.get(driverId);
+    }
+
+    // Fallback to DB and update cache
+    const driver = await DB.getDriverById(driverId);
+    if (driver) {
+      this.driversCache.set(driverId, driver);
+    }
+    return driver;
+  },
+
+  // Get user from cache (with fallback to DB)
+  async getCachedUser(userId) {
+    if (!userId) return null;
+
+    // Check cache first
+    if (this.usersCache.has(userId)) {
+      return this.usersCache.get(userId);
+    }
+
+    // Fallback to DB and update cache
+    const user = await DB.getUserById(userId);
+    if (user) {
+      this.usersCache.set(userId, user);
+    }
+    return user;
+  },
+
+  // Refresh caches when drivers/users are updated
+  refreshDriverCache(driver) {
+    if (driver && driver.id) {
+      this.driversCache.set(driver.id, driver);
+    }
+  },
+
+  refreshUserCache(user) {
+    if (user && user.id) {
+      this.usersCache.set(user.id, user);
+    }
+  },
+
   // Parse Firebase date safely
   parseFirebaseDate(date) {
     if (!date) return new Date();
@@ -105,6 +187,10 @@ const OrdersModule = {
     this.lineItemCounter = 1; // Start at 1 because HTML already has line-item with data-index="0"
     this.currentView = 'create'; // 'create' or 'manage'
     this.ordersListenerUnsubscribe = null; // Track listener for cleanup
+
+    // Initialize caches immediately for performance
+    await this.initializeCaches();
+
     this.bindEvents();
     // Don't setup listener immediately - only when manage view is shown
     await this.updateDriverDropdown();
@@ -174,10 +260,18 @@ const OrdersModule = {
     if (createBtn) createBtn.classList.add('active');
     if (manageBtn) manageBtn.classList.remove('active');
 
-    // Clean up orders listener when not in manage view
+    // Clean up all listeners when not in manage view
     if (this.ordersListenerUnsubscribe) {
       this.ordersListenerUnsubscribe();
       this.ordersListenerUnsubscribe = null;
+    }
+    if (this.driversListenerUnsubscribe) {
+      this.driversListenerUnsubscribe();
+      this.driversListenerUnsubscribe = null;
+    }
+    if (this.usersListenerUnsubscribe) {
+      this.usersListenerUnsubscribe();
+      this.usersListenerUnsubscribe = null;
     }
   },
 
@@ -545,6 +639,19 @@ const OrdersModule = {
     this.ordersListenerUnsubscribe = DB.listenToOrders(async (orders) => {
       await this.displayOrders(orders);
     }, filters);
+
+    // Also listen to drivers and users to keep cache updated
+    if (!this.driversListenerUnsubscribe) {
+      this.driversListenerUnsubscribe = DB.listenToDrivers((drivers) => {
+        drivers.forEach(driver => this.refreshDriverCache(driver));
+      });
+    }
+
+    if (!this.usersListenerUnsubscribe) {
+      this.usersListenerUnsubscribe = DB.listenToUsers((users) => {
+        users.forEach(user => this.refreshUserCache(user));
+      });
+    }
   },
 
   // Display orders (used by real-time listener)
@@ -567,12 +674,28 @@ const OrdersModule = {
       return dateB - dateA;
     });
 
+    // Pre-fetch all unique driver and user IDs in parallel batches
+    const driverIds = [...new Set(orders.map(o => o.driverId))];
+    const userIds = [...new Set(orders.map(o => o.salesRepId).filter(id => id))];
+
+    // Batch fetch any missing drivers/users not in cache
+    const missingDrivers = driverIds.filter(id => !this.driversCache.has(id));
+    const missingUsers = userIds.filter(id => !this.usersCache.has(id));
+
+    if (missingDrivers.length > 0 || missingUsers.length > 0) {
+      await Promise.all([
+        ...missingDrivers.map(id => this.getCachedDriver(id)),
+        ...missingUsers.map(id => this.getCachedUser(id))
+      ]);
+    }
+
     // Build all DOM elements BEFORE manipulating the actual DOM to prevent race conditions
     const orderElements = [];
 
     for (const order of orders) {
-      const driver = await DB.getDriverById(order.driverId);
-      const salesRep = await DB.getUserById(order.salesRepId);
+      // Use cached data (synchronous now!)
+      const driver = this.driversCache.get(order.driverId);
+      const salesRep = this.usersCache.get(order.salesRepId);
       if (!driver) continue;
 
       const li = document.createElement('li');
@@ -685,8 +808,8 @@ const OrdersModule = {
         const orderId = e.target.dataset.orderId;
         const order = await DB.getOrderById(orderId);
         if (order) {
-          // Pre-fetch driver data in the click handler (within user gesture)
-          const driver = await DB.getDriverById(order.driverId);
+          // Use cached driver data for instant access
+          const driver = await this.getCachedDriver(order.driverId);
           if (driver) {
             this.copyOrderDetails(order, driver);
           } else {
