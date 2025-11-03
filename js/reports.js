@@ -4,8 +4,51 @@
  */
 
 const ReportsModule = {
+  // Cache for drivers to avoid N+1 queries
+  driversCache: new Map(),
+  cacheInitialized: false,
+
+  // Initialize cache with all drivers
+  async initializeCache() {
+    if (this.cacheInitialized) return;
+
+    try {
+      const drivers = await DB.getAllDrivers();
+
+      this.driversCache.clear();
+      drivers.forEach(driver => {
+        this.driversCache.set(driver.id, driver);
+      });
+
+      this.cacheInitialized = true;
+      console.log(`ReportsModule: Cache initialized - ${drivers.length} drivers`);
+    } catch (error) {
+      console.error('Failed to initialize cache:', error);
+    }
+  },
+
+  // Get driver from cache (with fallback to DB)
+  async getCachedDriver(driverId) {
+    if (!driverId) return null;
+
+    // Check cache first
+    if (this.driversCache.has(driverId)) {
+      return this.driversCache.get(driverId);
+    }
+
+    // Fallback to DB and update cache
+    const driver = await DB.getDriverById(driverId);
+    if (driver) {
+      this.driversCache.set(driverId, driver);
+    }
+    return driver;
+  },
+
   // Initialize the reports module
   async init() {
+    // Initialize cache for performance
+    await this.initializeCache();
+
     this.bindEvents();
     await this.updateDriverDropdowns();
     this.setDefaultDate();
@@ -100,8 +143,17 @@ const ReportsModule = {
     const freeGiftProductTotals = {};
     const driverTotals = {};
 
+    // Pre-fetch all unique driver IDs in parallel batch
+    const driverIds = [...new Set(orders.map(o => o.driverId))];
+    const missingDrivers = driverIds.filter(id => !this.driversCache.has(id));
+
+    if (missingDrivers.length > 0) {
+      await Promise.all(missingDrivers.map(id => this.getCachedDriver(id)));
+    }
+
     for (const order of orders) {
-      const driver = await DB.getDriverById(order.driverId);
+      // Use cached driver (instant lookup!)
+      const driver = this.driversCache.get(order.driverId);
       if (!driver) continue;
       
       // Aggregate total order amount
@@ -378,7 +430,7 @@ const ReportsModule = {
       inventoryData.sort((a, b) => a.name.localeCompare(b.name));
 
       // Build report HTML for a specific driver
-      const driver = await DB.getDriverById(driverId);
+      const driver = await this.getCachedDriver(driverId);
       
       let reportHTML = `
         <div class="report-summary">
@@ -449,10 +501,17 @@ const ReportsModule = {
       });
 
       reportHTML += '</tbody></table>';
-      
+
+      // Pre-fetch all driver inventories in parallel (much faster!)
+      const driverInventories = await Promise.all(
+        drivers.map(async (driver) => ({
+          driver,
+          inventory: await DB.getDriverInventory(driver.id)
+        }))
+      );
+
       // Per driver inventory
-      for (const driver of drivers) {
-        const driverInventory = await DB.getDriverInventory(driver.id);
+      for (const { driver, inventory: driverInventory } of driverInventories) {
         
         if (driverInventory.length > 0) {
           reportHTML += `
