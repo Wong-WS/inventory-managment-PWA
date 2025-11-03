@@ -107,6 +107,19 @@ const ReportsModule = {
     });
   },
 
+  // Show loading indicator
+  showLoading(elementId, message = 'Loading...') {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    element.innerHTML = `
+      <div class="loading-container">
+        <div class="loading-spinner"></div>
+        <p>${message}</p>
+      </div>
+    `;
+  },
+
   // Generate sales report
   async generateSalesReport() {
     const driverSelect = document.getElementById('report-driver');
@@ -124,6 +137,9 @@ const ReportsModule = {
       alert('Please select a period and date.');
       return;
     }
+
+    // Show loading state
+    this.showLoading('sales-report-results', 'Generating sales report...');
 
     // Get orders for the specified period and driver (use orders if available, fallback to sales)
     const orders = typeof DB.getOrdersByPeriod === 'function' ?
@@ -414,6 +430,9 @@ const ReportsModule = {
     if (!resultsDiv) return;
 
     const driverId = driverSelect.value;
+
+    // Show loading state
+    this.showLoading('inventory-report-results', 'Generating inventory report...');
 
     let inventoryData = [];
 

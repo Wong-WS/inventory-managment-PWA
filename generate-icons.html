@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Icon Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .icon-preview {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        .icon-item {
+            text-align: center;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            margin: 10px 0;
+        }
+        button {
+            background: #4A90E2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #357ABD;
+        }
+        .instructions {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>PWA Icon Generator</h1>
+
+    <div class="instructions">
+        <h3>Instructions:</h3>
+        <ol>
+            <li>Click "Generate Icons" below</li>
+            <li>Right-click each icon and "Save Image As..."</li>
+            <li>Save them with the exact filenames shown (e.g., icon-72x72.png)</li>
+            <li>Save them to the <code>images/icons/</code> folder</li>
+        </ol>
+    </div>
+
+    <button onclick="generateAllIcons()">Generate Icons</button>
+
+    <div class="icon-preview" id="iconPreview"></div>
+
+    <script>
+        const sizes = [72, 96, 128, 144, 152, 192, 384];
+
+        function createIcon(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#4A90E2');
+            gradient.addColorStop(1, '#357ABD');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+
+            // Add rounded corners
+            ctx.globalCompositeOperation = 'destination-in';
+            ctx.beginPath();
+            const radius = size * 0.15;
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(size - radius, 0);
+            ctx.quadraticCurveTo(size, 0, size, radius);
+            ctx.lineTo(size, size - radius);
+            ctx.quadraticCurveTo(size, size, size - radius, size);
+            ctx.lineTo(radius, size);
+            ctx.quadraticCurveTo(0, size, 0, size - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.globalCompositeOperation = 'source-over';
+
+            // Draw icon symbol (box/inventory icon)
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = size * 0.04;
+
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const iconSize = size * 0.5;
+
+            // Draw a simple box/package icon
+            ctx.beginPath();
+            // Top flap
+            ctx.moveTo(centerX, centerY - iconSize * 0.5);
+            ctx.lineTo(centerX - iconSize * 0.4, centerY - iconSize * 0.2);
+            ctx.lineTo(centerX, centerY);
+            ctx.lineTo(centerX + iconSize * 0.4, centerY - iconSize * 0.2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Left side
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.moveTo(centerX - iconSize * 0.4, centerY - iconSize * 0.2);
+            ctx.lineTo(centerX - iconSize * 0.4, centerY + iconSize * 0.4);
+            ctx.lineTo(centerX, centerY + iconSize * 0.6);
+            ctx.lineTo(centerX, centerY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Right side
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.beginPath();
+            ctx.moveTo(centerX + iconSize * 0.4, centerY - iconSize * 0.2);
+            ctx.lineTo(centerX + iconSize * 0.4, centerY + iconSize * 0.4);
+            ctx.lineTo(centerX, centerY + iconSize * 0.6);
+            ctx.lineTo(centerX, centerY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Add "IM" text for "Inventory Management"
+            if (size >= 144) {
+                ctx.fillStyle = 'white';
+                ctx.font = `bold ${size * 0.15}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('IM', centerX, centerY + iconSize * 0.25);
+            }
+
+            return canvas;
+        }
+
+        function generateAllIcons() {
+            const preview = document.getElementById('iconPreview');
+            preview.innerHTML = '';
+
+            sizes.forEach(size => {
+                const canvas = createIcon(size);
+
+                const container = document.createElement('div');
+                container.className = 'icon-item';
+
+                const label = document.createElement('div');
+                label.textContent = `${size}x${size}`;
+                label.style.fontWeight = 'bold';
+
+                const filename = document.createElement('div');
+                filename.textContent = `icon-${size}x${size}.png`;
+                filename.style.fontSize = '12px';
+                filename.style.color = '#666';
+
+                const downloadBtn = document.createElement('button');
+                downloadBtn.textContent = 'Download';
+                downloadBtn.onclick = () => downloadIcon(canvas, size);
+
+                container.appendChild(label);
+                container.appendChild(canvas);
+                container.appendChild(filename);
+                container.appendChild(downloadBtn);
+
+                preview.appendChild(container);
+            });
+        }
+
+        function downloadIcon(canvas, size) {
+            const link = document.createElement('a');
+            link.download = `icon-${size}x${size}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Auto-generate on load
+        window.onload = generateAllIcons;
+    </script>
+</body>
+</html>

@@ -288,6 +288,9 @@ const OrdersModule = {
     if (createBtn) createBtn.classList.remove('active');
     if (manageBtn) manageBtn.classList.add('active');
 
+    // Show loading state while orders load
+    this.showLoading('Loading orders...');
+
     // Setup real-time listener only when showing manage view
     this.setupOrdersListener();
   },
@@ -652,6 +655,21 @@ const OrdersModule = {
         users.forEach(user => this.refreshUserCache(user));
       });
     }
+  },
+
+  // Show loading indicator
+  showLoading(message = 'Loading orders...') {
+    const ordersList = document.getElementById('orders-list');
+    if (!ordersList) return;
+
+    ordersList.innerHTML = `
+      <li>
+        <div class="loading-container">
+          <div class="loading-spinner"></div>
+          <p>${message}</p>
+        </div>
+      </li>
+    `;
   },
 
   // Display orders (used by real-time listener)
