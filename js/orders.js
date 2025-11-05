@@ -299,6 +299,12 @@ const OrdersModule = {
   async handleCreateOrder(event) {
     event.preventDefault();
 
+    // Prevent duplicate submissions
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    if (submitButton && submitButton.disabled) {
+      return; // Already submitting
+    }
+
     const orderDriverSelect = document.getElementById('order-driver');
     const customerAddressInput = document.getElementById('customer-address');
     const customerDescInput = document.getElementById('customer-description');
@@ -317,6 +323,12 @@ const OrdersModule = {
     if (isNaN(totalAmount) || totalAmount < 0) {
       alert('Total amount is invalid.');
       return;
+    }
+
+    // Disable submit button to prevent duplicates
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = 'Creating Order...';
     }
 
     // Collect line items
@@ -363,6 +375,12 @@ const OrdersModule = {
           this.showInventoryError(productInventory.name, productInventory.remaining, category, required);
         }
         valid = false;
+
+        // Re-enable submit button on validation error
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Create Order';
+        }
         return;
       }
       
@@ -380,6 +398,12 @@ const OrdersModule = {
     
     if (!valid || lineItems.length === 0) {
       alert('Please check your line items. Each item must have a valid product and quantity type.');
+
+      // Re-enable submit button on validation error
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Create Order';
+      }
       return;
     }
     
@@ -411,12 +435,24 @@ const OrdersModule = {
       // Show notification
       const driver = await DB.getDriverById(driverId);
       this.showNotification(`Order created for ${driver.name} - $${totalAmount.toFixed(2)} (Status: Pending)`);
-      
+
+      // Re-enable submit button after successful submission
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Create Order';
+      }
+
       // Real-time listener will automatically show the new order
       // No need to manually switch views
-      
+
     } catch (error) {
       alert(`Failed to create order: ${error.message}`);
+
+      // Re-enable submit button on error
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Create Order';
+      }
     }
   },
 

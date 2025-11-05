@@ -1704,6 +1704,16 @@ input:valid {
   font-size: 1rem;
 }
 
+/* Disabled button states */
+button:disabled,
+.primary-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #ccc !important;
+  color: #666 !important;
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   *,
