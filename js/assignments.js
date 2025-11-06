@@ -176,22 +176,14 @@ const AssignmentsModule = {
       // Reset form
       quantityInput.value = '';
 
-      // Refresh dropdowns to show updated quantities
-      await this.updateDropdowns();
-
-      // Update product dropdowns in other modules
-      if (typeof ProductsModule !== 'undefined') {
-        await ProductsModule.updateProductDropdowns();
-        await ProductsModule.loadProductsList();
-      }
-
-      // Refresh assignment history
-      await this.loadAssignmentHistory();
-
-      // Update dashboard if it exists
-      if (typeof DashboardModule !== 'undefined') {
-        await DashboardModule.updateDashboard();
-      }
+      // Refresh all UI elements in parallel (independent operations)
+      await Promise.all([
+        this.updateDropdowns(),
+        this.loadAssignmentHistory(),
+        typeof ProductsModule !== 'undefined' ? ProductsModule.updateProductDropdowns() : Promise.resolve(),
+        typeof ProductsModule !== 'undefined' ? ProductsModule.loadProductsList() : Promise.resolve(),
+        typeof DashboardModule !== 'undefined' ? DashboardModule.updateDashboard() : Promise.resolve()
+      ]);
 
       // Show notification
       this.showNotification(`Assigned ${quantity} units of "${product.name}" to ${driver.name}`);
@@ -439,29 +431,23 @@ const AssignmentsModule = {
 
     try {
       // Perform the transfer
-      const transfer = await DB.transferStock(fromDriverId, toDriverId, productId, quantity);
+      await DB.transferStock(fromDriverId, toDriverId, productId, quantity);
 
       // Reset form
       quantityInput.value = '';
       productSelect.innerHTML = '<option value="">-- Select Product --</option>';
       document.getElementById('available-quantity-display').textContent = '';
 
-      // Refresh dropdowns and data
-      await this.updateDropdowns();
-      await this.updateTransferDropdowns();
-      if (this.currentHistoryView === 'transfer') {
-        await this.loadTransferHistory();
-      }
+      // Refresh all UI elements in parallel (independent operations)
+      await Promise.all([
+        this.updateDropdowns(),
+        this.updateTransferDropdowns(),
+        this.currentHistoryView === 'transfer' ? this.loadTransferHistory() : Promise.resolve(),
+        typeof ProductsModule !== 'undefined' ? ProductsModule.updateProductDropdowns() : Promise.resolve(),
+        typeof ProductsModule !== 'undefined' ? ProductsModule.loadProductsList() : Promise.resolve(),
+        typeof DashboardModule !== 'undefined' ? DashboardModule.updateDashboard() : Promise.resolve()
+      ]);
 
-      // Update other modules
-      if (typeof ProductsModule !== 'undefined') {
-        await ProductsModule.updateProductDropdowns();
-        await ProductsModule.loadProductsList();
-      }
-      if (typeof DashboardModule !== 'undefined') {
-        await DashboardModule.updateDashboard();
-      }
-      
       // Show success notification
       const destinationText = toDriverId === 'main-inventory' ?
         'main inventory' : toDriver.name;

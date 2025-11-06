@@ -419,19 +419,17 @@ const OrdersModule = {
     try {
       // Create the order
       const newOrder = await DB.createOrder(orderData);
-      
+
       // Reset form
       await this.resetOrderForm();
-      
-      // Update driver dropdown and product options
-      await this.updateDriverDropdown();
-      await this.updateLineItemProductOptions();
-      
-      // Update dashboard if it exists
-      if (typeof DashboardModule !== 'undefined') {
-        DashboardModule.updateDashboard();
-      }
-      
+
+      // Refresh all UI elements in parallel (independent operations)
+      await Promise.all([
+        this.updateDriverDropdown(),
+        this.updateLineItemProductOptions(),
+        typeof DashboardModule !== 'undefined' ? DashboardModule.updateDashboard() : Promise.resolve()
+      ]);
+
       // Show notification
       const driver = await DB.getDriverById(driverId);
       this.showNotification(`Order created for ${driver.name} - $${totalAmount.toFixed(2)} (Status: Pending)`);
