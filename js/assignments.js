@@ -130,6 +130,12 @@ const AssignmentsModule = {
   async handleAssignProducts(event) {
     event.preventDefault();
 
+    // Prevent duplicate submissions
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    if (submitButton && submitButton.disabled) {
+      return; // Already submitting
+    }
+
     const driverSelect = document.getElementById('assign-driver');
     const productSelect = document.getElementById('assign-product');
     const quantityInput = document.getElementById('assign-quantity');
@@ -143,6 +149,12 @@ const AssignmentsModule = {
       return;
     }
 
+    // Disable submit button to prevent duplicates
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = 'Assigning...';
+    }
+
     try {
       // Get driver and product names for display
       const driver = await DB.getDriverById(driverId);
@@ -150,6 +162,12 @@ const AssignmentsModule = {
 
       if (!driver || !product) {
         alert('Selected driver or product not found.');
+
+        // Re-enable button on error
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Assign Products';
+        }
         return;
       }
 
@@ -178,9 +196,21 @@ const AssignmentsModule = {
       // Show notification
       this.showNotification(`Assigned ${quantity} units of "${product.name}" to ${driver.name}`);
 
+      // Re-enable button after successful assignment
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Assign Products';
+      }
+
     } catch (error) {
       // Handle the error when there's not enough quantity in stock
       alert(error.message);
+
+      // Re-enable button on error
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Assign Products';
+      }
     }
   },
   
@@ -364,6 +394,12 @@ const AssignmentsModule = {
   async handleTransferStock(event) {
     event.preventDefault();
 
+    // Prevent duplicate submissions
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    if (submitButton && submitButton.disabled) {
+      return; // Already submitting
+    }
+
     const fromDriverSelect = document.getElementById('transfer-from-driver');
     const toDriverSelect = document.getElementById('transfer-to-driver');
     const productSelect = document.getElementById('transfer-product');
@@ -379,13 +415,25 @@ const AssignmentsModule = {
       return;
     }
 
+    // Disable submit button to prevent duplicates
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = 'Transferring...';
+    }
+
     // Get names for display
     const fromDriver = await DB.getDriverById(fromDriverId);
     const toDriver = toDriverId === 'main-inventory' ? null : await DB.getDriverById(toDriverId);
     const product = await DB.getProductById(productId);
-    
+
     if (!fromDriver || !product || (toDriverId !== 'main-inventory' && !toDriver)) {
       alert('Selected driver or product not found.');
+
+      // Re-enable button on error
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Transfer Stock';
+      }
       return;
     }
 
@@ -415,12 +463,24 @@ const AssignmentsModule = {
       }
       
       // Show success notification
-      const destinationText = toDriverId === 'main-inventory' ? 
+      const destinationText = toDriverId === 'main-inventory' ?
         'main inventory' : toDriver.name;
       this.showNotification(`Transferred ${quantity} units of "${product.name}" from ${fromDriver.name} to ${destinationText}`);
-      
+
+      // Re-enable button after successful transfer
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Transfer Stock';
+      }
+
     } catch (error) {
       alert(error.message);
+
+      // Re-enable button on error
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Transfer Stock';
+      }
     }
   },
 
