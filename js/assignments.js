@@ -8,8 +8,61 @@ const AssignmentsModule = {
   currentView: 'assign', // 'assign' or 'transfer'
   currentHistoryView: 'assignment', // 'assignment' or 'transfer'
 
+  // Cache for drivers and products to avoid N+1 queries
+  driversCache: new Map(),
+  productsCache: new Map(),
+  cacheInitialized: false,
+
+  // Initialize caches
+  async initializeCaches() {
+    if (this.cacheInitialized) return;
+
+    try {
+      const [drivers, products] = await Promise.all([
+        DB.getAllDrivers(),
+        DB.getAllProducts()
+      ]);
+
+      this.driversCache.clear();
+      this.productsCache.clear();
+
+      drivers.forEach(driver => this.driversCache.set(driver.id, driver));
+      products.forEach(product => this.productsCache.set(product.id, product));
+
+      this.cacheInitialized = true;
+      console.log(`AssignmentsModule: Caches initialized - ${drivers.length} drivers, ${products.length} products`);
+    } catch (error) {
+      console.error('Failed to initialize caches:', error);
+    }
+  },
+
+  // Get cached driver
+  async getCachedDriver(driverId) {
+    if (!driverId) return null;
+    if (this.driversCache.has(driverId)) {
+      return this.driversCache.get(driverId);
+    }
+    const driver = await DB.getDriverById(driverId);
+    if (driver) this.driversCache.set(driverId, driver);
+    return driver;
+  },
+
+  // Get cached product
+  async getCachedProduct(productId) {
+    if (!productId) return null;
+    if (this.productsCache.has(productId)) {
+      return this.productsCache.get(productId);
+    }
+    const product = await DB.getProductById(productId);
+    if (product) this.productsCache.set(productId, product);
+    return product;
+  },
+
   // Initialize the assignments module
   async init() {
+    // Initialize caches for performance
+    await this.initializeCaches();
+
     this.bindEvents();
     await this.loadAssignmentHistory();
     await this.updateDropdowns();
@@ -154,12 +207,26 @@ const AssignmentsModule = {
         return;
       }
 
-      // Sort by date, newest first
-      assignments.sort((a, b) => new Date(b.assignedAt) - new Date(a.assignedAt));
+      // Sort by date, newest first (handle Firebase Timestamps properly)
+      assignments.sort((a, b) => {
+        const dateA = a.assignedAt?.toDate ? a.assignedAt.toDate() : new Date(a.assignedAt);
+        const dateB = b.assignedAt?.toDate ? b.assignedAt.toDate() : new Date(b.assignedAt);
+        return dateB - dateA;
+      });
+
+      // Pre-fetch any missing drivers/products
+      const driverIds = [...new Set(assignments.map(a => a.driverId))];
+      const productIds = [...new Set(assignments.map(a => a.productId))];
+
+      await Promise.all([
+        ...driverIds.filter(id => !this.driversCache.has(id)).map(id => this.getCachedDriver(id)),
+        ...productIds.filter(id => !this.productsCache.has(id)).map(id => this.getCachedProduct(id))
+      ]);
 
       for (const assignment of assignments) {
-        const driver = await DB.getDriverById(assignment.driverId);
-        const product = await DB.getProductById(assignment.productId);
+        // Use cached data (instant!)
+        const driver = this.driversCache.get(assignment.driverId);
+        const product = this.productsCache.get(assignment.productId);
 
         if (!driver || !product) continue;
 
@@ -486,19 +553,35 @@ const AssignmentsModule = {
       return;
     }
 
-    // Sort by date, newest first
-    transfers.sort((a, b) => new Date(b.transferredAt) - new Date(a.transferredAt));
+    // Sort by date, newest first (handle Firebase Timestamps properly)
+    transfers.sort((a, b) => {
+      const dateA = a.transferredAt?.toDate ? a.transferredAt.toDate() : new Date(a.transferredAt);
+      const dateB = b.transferredAt?.toDate ? b.transferredAt.toDate() : new Date(b.transferredAt);
+      return dateB - dateA;
+    });
+
+    // Pre-fetch any missing drivers/products
+    const fromDriverIds = [...new Set(transfers.map(t => t.fromDriverId))];
+    const toDriverIds = [...new Set(transfers.map(t => t.toDriverId).filter(id => id))];
+    const productIds = [...new Set(transfers.map(t => t.productId))];
+
+    await Promise.all([
+      ...fromDriverIds.filter(id => !this.driversCache.has(id)).map(id => this.getCachedDriver(id)),
+      ...toDriverIds.filter(id => !this.driversCache.has(id)).map(id => this.getCachedDriver(id)),
+      ...productIds.filter(id => !this.productsCache.has(id)).map(id => this.getCachedProduct(id))
+    ]);
 
     for (const transfer of transfers) {
-      const fromDriver = await DB.getDriverById(transfer.fromDriverId);
-      const toDriver = transfer.toDriverId ? await DB.getDriverById(transfer.toDriverId) : null;
-      const product = await DB.getProductById(transfer.productId);
-      
-      if (!fromDriver || !product) return;
-      
+      // Use cached data (instant!)
+      const fromDriver = this.driversCache.get(transfer.fromDriverId);
+      const toDriver = transfer.toDriverId ? this.driversCache.get(transfer.toDriverId) : null;
+      const product = this.productsCache.get(transfer.productId);
+
+      if (!fromDriver || !product) continue;
+
       const li = document.createElement('li');
-      
-      const date = new Date(transfer.transferredAt);
+
+      const date = transfer.transferredAt?.toDate ? transfer.transferredAt.toDate() : new Date(transfer.transferredAt);
       const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
       
       const toText = toDriver ? toDriver.name : 'Main Inventory';
