@@ -2127,6 +2127,97 @@ export const DB = {
     return transfers.filter(transfer =>
       transfer.fromDriverId === driverId || transfer.toDriverId === driverId
     );
+  },
+
+  /**
+   * Reset the entire database - DELETE ALL DATA
+   * WARNING: This action is irreversible!
+   * @returns {Promise<Object>} Result with counts of deleted items
+   */
+  async resetDatabase() {
+    try {
+      const batch = writeBatch(db);
+      const result = {
+        products: 0,
+        drivers: 0,
+        assignments: 0,
+        orders: 0,
+        sales: 0,
+        stockTransfers: 0,
+        users: 0,
+        sessions: 0
+      };
+
+      // Delete all products
+      const productsSnapshot = await getDocs(collection(db, this.COLLECTIONS.PRODUCTS));
+      productsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        result.products++;
+      });
+
+      // Delete all drivers
+      const driversSnapshot = await getDocs(collection(db, this.COLLECTIONS.DRIVERS));
+      driversSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        result.drivers++;
+      });
+
+      // Delete all assignments
+      const assignmentsSnapshot = await getDocs(collection(db, this.COLLECTIONS.ASSIGNMENTS));
+      assignmentsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        result.assignments++;
+      });
+
+      // Delete all orders
+      const ordersSnapshot = await getDocs(collection(db, this.COLLECTIONS.ORDERS));
+      ordersSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        result.orders++;
+      });
+
+      // Delete all sales
+      const salesSnapshot = await getDocs(collection(db, this.COLLECTIONS.SALES));
+      salesSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        result.sales++;
+      });
+
+      // Delete all stock transfers
+      const transfersSnapshot = await getDocs(collection(db, this.COLLECTIONS.STOCK_TRANSFERS));
+      transfersSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        result.stockTransfers++;
+      });
+
+      // Delete all users
+      const usersSnapshot = await getDocs(collection(db, this.COLLECTIONS.USERS));
+      usersSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        result.users++;
+      });
+
+      // Delete all sessions
+      const sessionsSnapshot = await getDocs(collection(db, this.COLLECTIONS.SESSIONS));
+      sessionsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        result.sessions++;
+      });
+
+      // Commit the batch delete
+      await batch.commit();
+
+      // Clear local session
+      this.logout();
+
+      // Recreate default admin user
+      await this.createDefaultAdmin();
+
+      return result;
+    } catch (error) {
+      console.error('Error resetting database:', error);
+      throw error;
+    }
   }
 };
 

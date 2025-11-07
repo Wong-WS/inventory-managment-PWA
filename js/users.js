@@ -29,6 +29,12 @@ const UsersModule = {
     if (userRoleSelect) {
       userRoleSelect.addEventListener('change', this.handleRoleChange.bind(this));
     }
+
+    // Database reset button
+    const resetDatabaseBtn = document.getElementById('reset-database-btn');
+    if (resetDatabaseBtn) {
+      resetDatabaseBtn.addEventListener('click', this.handleResetDatabase.bind(this));
+    }
   },
 
   // Handle role change in user form
@@ -371,6 +377,78 @@ const UsersModule = {
       AppModule.showNotification(message);
     } else {
       alert(message);
+    }
+  },
+
+  // Handle database reset
+  async handleResetDatabase() {
+    const confirmMessage = 'WARNING: This will DELETE ALL DATA from the database!\n\n' +
+      'This includes:\n' +
+      '- All products\n' +
+      '- All drivers\n' +
+      '- All assignments\n' +
+      '- All orders\n' +
+      '- All sales records\n' +
+      '- All stock transfers\n' +
+      '- All users (except the default admin)\n\n' +
+      'This action CANNOT be undone!\n\n' +
+      'Type "RESET" to confirm:';
+
+    const userInput = prompt(confirmMessage);
+
+    if (userInput !== 'RESET') {
+      if (userInput !== null) {
+        alert('Database reset cancelled. You must type "RESET" to confirm.');
+      }
+      return;
+    }
+
+    // Final confirmation
+    const finalConfirm = confirm('Are you absolutely sure? This is your last chance to cancel!');
+    if (!finalConfirm) {
+      alert('Database reset cancelled.');
+      return;
+    }
+
+    try {
+      // Disable the button to prevent multiple clicks
+      const resetBtn = document.getElementById('reset-database-btn');
+      if (resetBtn) {
+        resetBtn.disabled = true;
+        resetBtn.textContent = 'Resetting...';
+      }
+
+      // Perform the reset
+      const result = await DB.resetDatabase();
+
+      // Show summary
+      const summary = `Database reset complete!\n\n` +
+        `Deleted:\n` +
+        `- ${result.products} products\n` +
+        `- ${result.drivers} drivers\n` +
+        `- ${result.assignments} assignments\n` +
+        `- ${result.orders} orders\n` +
+        `- ${result.sales} sales records\n` +
+        `- ${result.stockTransfers} stock transfers\n` +
+        `- ${result.users} users\n\n` +
+        `Default admin account has been recreated.\n` +
+        `Username: admin\n` +
+        `Password: Admin123!\n\n` +
+        `You will now be logged out. Please log in again.`;
+
+      alert(summary);
+
+      // Redirect to login
+      window.location.reload();
+    } catch (error) {
+      alert(`Failed to reset database: ${error.message}`);
+
+      // Re-enable the button
+      const resetBtn = document.getElementById('reset-database-btn');
+      if (resetBtn) {
+        resetBtn.disabled = false;
+        resetBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Reset Database';
+      }
     }
   }
 };
