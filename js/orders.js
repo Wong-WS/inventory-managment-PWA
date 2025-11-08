@@ -307,11 +307,13 @@ const OrdersModule = {
     const orderDriverSelect = document.getElementById('order-driver');
     const customerAddressInput = document.getElementById('customer-address');
     const customerDescInput = document.getElementById('customer-description');
+    const orderRemarkInput = document.getElementById('order-remark');
     const totalAmountInput = document.getElementById('total-amount');
 
     const driverId = orderDriverSelect.value;
     const customerAddress = customerAddressInput.value.trim();
     const customerDescription = customerDescInput.value.trim();
+    const orderRemark = orderRemarkInput.value.trim();
     const totalAmount = parseFloat(totalAmountInput.value);
 
     if (!driverId || !customerAddress) {
@@ -411,6 +413,7 @@ const OrdersModule = {
       driverId,
       customerAddress,
       customerDescription,
+      remark: orderRemark,
       totalAmount,
       lineItems
     };
@@ -811,7 +814,8 @@ const OrdersModule = {
           </div>
           <div class="order-info">
             <span>${order.customerAddress}</span>${order.deliveryMethod ? ` • <span class="delivery-method">${order.deliveryMethod}</span>` : ''}
-            ${order.customerDescription ? `<br><small>${order.customerDescription}</small>` : ''}
+            ${order.customerDescription ? `<br><small><strong>Description:</strong> ${order.customerDescription}</small>` : ''}
+            ${order.remark ? `<br><small><strong>Remark:</strong> ${order.remark}</small>` : ''}
             <br><small>Created: ${formattedDate}</small>
             ${order.completedAt ? `<br><small>Completed: ${this.parseFirebaseDate(order.completedAt).toLocaleDateString()} ${this.parseFirebaseDate(order.completedAt).toLocaleTimeString()}</small>` : ''}
           </div>
@@ -1034,7 +1038,7 @@ const OrdersModule = {
     // Build formatted text
     const orderText = `🚚 ORDER DETAILS
 Driver: ${driver.name}${driver.phone ? ` (${driver.phone})` : ''}
-Address: ${order.customerAddress}${order.customerDescription ? `\nDescription: ${order.customerDescription}` : ''}
+Address: ${order.customerAddress}${order.customerDescription ? `\nDescription: ${order.customerDescription}` : ''}${order.remark ? `\nRemark: ${order.remark}` : ''}
 Payment: ${order.deliveryMethod}${earningsNote}
 ---
 Items:

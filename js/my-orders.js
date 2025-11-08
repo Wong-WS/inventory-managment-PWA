@@ -249,6 +249,7 @@ const MyOrdersModule = {
                 ${order.deliveryMethod ? `<span class="delivery-method"> • ${order.deliveryMethod}</span>` : ''}
               </div>
               ${order.customerDescription ? `<div class="customer-description"><small>${order.customerDescription}</small></div>` : ''}
+              ${order.remark ? `<div class="order-remark"><small><strong>Remark:</strong> ${order.remark}</small></div>` : ''}
               <div class="order-timestamps">
                 <small>Created: ${formattedDate}</small>
                 ${order.completedAt ? `<br><small>Completed: ${this.parseFirebaseDate(order.completedAt).toLocaleDateString()} ${this.parseFirebaseDate(order.completedAt).toLocaleTimeString()}</small>` : ''}

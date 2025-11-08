@@ -334,6 +334,12 @@ const MyEarningsModule = {
             <span>${order.customerDescription}</span>
           </div>
         ` : ''}
+        ${order.remark ? `
+          <div class="order-remark">
+            <i class="fas fa-sticky-note"></i>
+            <span><strong>Remark:</strong> ${order.remark}</span>
+          </div>
+        ` : ''}
       </div>
     `;
 

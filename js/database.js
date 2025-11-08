@@ -1722,6 +1722,7 @@ export const DB = {
         salesRepId: session.userId, // Track who created the order
         customerAddress: orderData.customerAddress.trim(),
         customerDescription: orderData.customerDescription ? orderData.customerDescription.trim() : '',
+        remark: orderData.remark ? orderData.remark.trim() : '',
         deliveryMethod: orderData.deliveryMethod || 'Paid',
         totalAmount: parseFloat(orderData.totalAmount) || 0,
         status: this.ORDER_STATUS.PENDING,
