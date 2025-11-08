@@ -30,17 +30,50 @@ function getEnvVar(key, fallback = '') {
 }
 
 /**
- * Firebase configuration with environment variable support
- * Falls back to build-time values if env vars not available
+ * Environment Detection
+ * Determines if running locally or in production
  */
-export const firebaseConfig = {
-  apiKey: getEnvVar('VITE_FIREBASE_API_KEY', 'AIzaSyAFcbgTrdkC6HEw6cYrYnJwOSFuXmeGITY'),
-  authDomain: getEnvVar('VITE_FIREBASE_AUTH_DOMAIN', 'chong-918f9.firebaseapp.com'),
-  projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID', 'chong-918f9'),
-  storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET', 'chong-918f9.firebasestorage.app'),
-  messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID', '90026447698'),
-  appId: getEnvVar('VITE_FIREBASE_APP_ID', '1:90026447698:web:616336add43a855d8f608b')
+const isLocalEnvironment = () => {
+  if (typeof window === 'undefined') return false;
+
+  const hostname = window.location.hostname;
+  return hostname === 'localhost' ||
+         hostname === '127.0.0.1' ||
+         hostname === '0.0.0.0' ||
+         hostname.includes('192.168.'); // Local network IPs
 };
+
+/**
+ * Development Firebase Configuration
+ * Used when running on localhost
+ */
+const DEV_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAYtiwQmZcEs8YQqNbYRWOf2poYaMoMCy8",
+  authDomain: "chong-dev-aa98a.firebaseapp.com",
+  projectId: "chong-dev-aa98a",
+  storageBucket: "chong-dev-aa98a.firebasestorage.app",
+  messagingSenderId: "992860157593",
+  appId: "1:992860157593:web:a4bb6ac91753c883d16a08"
+};
+
+/**
+ * Production Firebase Configuration
+ * Used when deployed to Firebase Hosting
+ */
+const PROD_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFcbgTrdkC6HEw6cYrYnJwOSFuXmeGITY",
+  authDomain: "chong-918f9.firebaseapp.com",
+  projectId: "chong-918f9",
+  storageBucket: "chong-918f9.firebasestorage.app",
+  messagingSenderId: "90026447698",
+  appId: "1:90026447698:web:616336add43a855d8f608b"
+};
+
+/**
+ * Firebase configuration with automatic environment detection
+ * Automatically uses DEV config on localhost, PROD config when deployed
+ */
+export const firebaseConfig = isLocalEnvironment() ? DEV_FIREBASE_CONFIG : PROD_FIREBASE_CONFIG;
 
 /**
  * Application configuration
@@ -60,8 +93,10 @@ export const appConfig = {
   },
 
   // Environment detection
-  isDevelopment: getEnvVar('NODE_ENV', 'development') === 'development',
-  isProduction: getEnvVar('NODE_ENV', 'development') === 'production'
+  isDevelopment: isLocalEnvironment(),
+  isProduction: !isLocalEnvironment(),
+  currentEnvironment: isLocalEnvironment() ? 'development' : 'production',
+  currentProject: isLocalEnvironment() ? 'chong-dev-aa98a' : 'chong-918f9'
 };
 
 // Validation helper
@@ -81,11 +116,11 @@ export function validateConfig() {
   return true;
 }
 
-// Log configuration status in development
-if (appConfig.isDevelopment) {
-  console.log('Configuration loaded:', {
-    hasValidFirebaseConfig: validateConfig(),
-    environment: getEnvVar('NODE_ENV', 'development'),
-    sessionTimeout: appConfig.session.timeoutMinutes + ' minutes'
-  });
-}
+// Log configuration status
+console.log('🔥 Firebase Configuration:', {
+  environment: appConfig.currentEnvironment,
+  project: appConfig.currentProject,
+  isLocal: appConfig.isDevelopment,
+  hasValidConfig: validateConfig(),
+  sessionTimeout: appConfig.session.timeoutMinutes + ' minutes'
+});
