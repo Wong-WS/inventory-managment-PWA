@@ -1918,14 +1918,15 @@ export const DB = {
    * @param {string} driverId - Driver ID (optional)
    * @param {string} period - Period type
    * @param {string} date - Target date
-   * @returns {Array} Filtered orders
+   * @returns {Array} Filtered orders (includes completed and cancelled orders)
    */
   getOrdersByPeriod(driverId, period, date) {
     return this.getOrdersWithFilters({
       driverId: driverId,
       period: period,
-      date: date,
-      status: this.ORDER_STATUS.COMPLETED // Only show completed orders in reports
+      date: date
+      // Note: No status filter - returns ALL orders (completed, cancelled, pending)
+      // Calling code can filter by status as needed
     });
   },
 

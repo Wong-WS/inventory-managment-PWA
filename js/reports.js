@@ -60,12 +60,17 @@ const ReportsModule = {
     if (salesReportBtn) {
       salesReportBtn.addEventListener('click', async () => await this.generateSalesReport());
     }
-    
+
     const inventoryReportBtn = document.getElementById('generate-inventory-report');
     if (inventoryReportBtn) {
       inventoryReportBtn.addEventListener('click', async () => await this.generateInventoryReport());
     }
-    
+
+    const earningsReportBtn = document.getElementById('generate-earnings-report');
+    if (earningsReportBtn) {
+      earningsReportBtn.addEventListener('click', async () => await this.generateDriverEarningsReport());
+    }
+
     const reportTabs = document.querySelectorAll('.report-tab');
     reportTabs.forEach(tab => {
       tab.addEventListener('click', () => this.switchReportTab(tab.dataset.report));
@@ -74,13 +79,20 @@ const ReportsModule = {
 
   // Set default date to today
   setDefaultDate() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const defaultDate = `${year}-${month}-${day}`;
+
     const dateInput = document.getElementById('report-date');
     if (dateInput) {
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      dateInput.value = `${year}-${month}-${day}`;
+      dateInput.value = defaultDate;
+    }
+
+    const earningsDateInput = document.getElementById('earnings-date');
+    if (earningsDateInput) {
+      earningsDateInput.value = defaultDate;
     }
   },
 
@@ -577,6 +589,311 @@ const ReportsModule = {
     if (typeof DriversModule !== 'undefined') {
       await DriversModule.updateDriverDropdowns();
     }
+  },
+
+  // ===== DRIVER EARNINGS REPORT METHODS =====
+
+  // Helper: Format date range for display
+  formatDateRange(period, date) {
+    const displayDate = new Date(date);
+    let dateRangeText = '';
+
+    switch(period) {
+      case 'day':
+        dateRangeText = displayDate.toLocaleDateString();
+        break;
+      case 'week': {
+        const weekStart = new Date(displayDate);
+        weekStart.setDate(displayDate.getDate() - displayDate.getDay());
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        dateRangeText = `${weekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()}`;
+        break;
+      }
+      case 'month': {
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                           'July', 'August', 'September', 'October', 'November', 'December'];
+        dateRangeText = `${monthNames[displayDate.getMonth()]} ${displayDate.getFullYear()}`;
+        break;
+      }
+      case 'year':
+        dateRangeText = displayDate.getFullYear().toString();
+        break;
+    }
+
+    return dateRangeText;
+  },
+
+  // Generate driver earnings report (main entry point)
+  async generateDriverEarningsReport() {
+    const driverId = document.getElementById('earnings-driver').value;
+    const period = document.getElementById('earnings-period').value;
+    const date = document.getElementById('earnings-date').value;
+
+    if (!date) {
+      alert('Please select a date');
+      return;
+    }
+
+    this.showLoading('earnings-report-results', 'Calculating earnings...');
+
+    try {
+      if (driverId) {
+        // Single driver view
+        await this.generateSingleDriverEarnings(driverId, period, date);
+      } else {
+        // All drivers view
+        await this.generateAllDriversEarnings(period, date);
+      }
+    } catch (error) {
+      console.error('Error generating earnings report:', error);
+      document.getElementById('earnings-report-results').innerHTML =
+        `<div class="no-data">Error generating report: ${error.message}</div>`;
+    }
+  },
+
+  // Generate earnings report for all drivers
+  async generateAllDriversEarnings(period, date) {
+    const drivers = await DB.getAllDrivers();
+
+    if (drivers.length === 0) {
+      document.getElementById('earnings-report-results').innerHTML =
+        '<div class="no-data">No drivers found</div>';
+      return;
+    }
+
+    // Calculate earnings for each driver in parallel
+    const driverEarningsPromises = drivers.map(async (driver) => {
+      const orders = await DB.getOrdersByPeriod(driver.id, period, date);
+      const earnings = this.calculateDriverEarnings(orders);
+      return {
+        driver,
+        ...earnings
+      };
+    });
+
+    const driverEarnings = await Promise.all(driverEarningsPromises);
+
+    // Calculate totals
+    const totals = {
+      totalSales: driverEarnings.reduce((sum, d) => sum + d.totalSales, 0),
+      totalDriverSalary: driverEarnings.reduce((sum, d) => sum + d.driverSalary, 0),
+      totalBossCollection: driverEarnings.reduce((sum, d) => sum + d.bossCollection, 0),
+      totalOrders: driverEarnings.reduce((sum, d) => sum + d.totalOrders, 0),
+      totalDeliveries: driverEarnings.reduce((sum, d) => sum + d.deliveryCount, 0)
+    };
+
+    // Render the all-drivers view
+    this.renderAllDriversEarningsReport(driverEarnings, totals, period, date);
+  },
+
+  // Generate earnings report for a single driver
+  async generateSingleDriverEarnings(driverId, period, date) {
+    const driver = await this.getCachedDriver(driverId);
+    if (!driver) {
+      document.getElementById('earnings-report-results').innerHTML =
+        '<div class="no-data">Driver not found</div>';
+      return;
+    }
+
+    const orders = await DB.getOrdersByPeriod(driverId, period, date);
+    const earnings = this.calculateDriverEarnings(orders);
+
+    // Render the single-driver view
+    this.renderSingleDriverEarningsReport(driver, earnings, orders, period, date);
+  },
+
+  // Calculate driver earnings from orders (reused from my-earnings.js)
+  calculateDriverEarnings(orders) {
+    // Separate completed and cancelled orders
+    const completedOrders = orders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
+    const cancelledOrders = orders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
+
+    // For sales metrics, only count completed orders
+    const totalSales = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+
+    // For driver salary, count paid orders from both completed and cancelled
+    const paidOrders = orders.filter(order =>
+      order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery'
+    );
+    const freeOrders = orders.filter(order =>
+      order.deliveryMethod === 'Free' || order.deliveryMethod === 'Pick up'
+    );
+
+    const paidCount = paidOrders.length;
+
+    // Calculate driver salary by summing individual order salaries
+    // Use nullish coalescing for backward compatibility (old orders default to $30)
+    const DELIVERY_FEE = 30;
+    const driverSalary = paidOrders.reduce((sum, order) => {
+      return sum + (order.driverSalary ?? DELIVERY_FEE);
+    }, 0);
+
+    // Boss collection = Total completed sales - ALL driver payments
+    const bossCollection = totalSales - driverSalary;
+
+    return {
+      totalSales,
+      totalOrders: completedOrders.length,
+      deliveryCount: paidCount,
+      pickupCount: freeOrders.length,
+      driverSalary,
+      bossCollection,
+      completedOrders,
+      cancelledOrders,
+      paidOrders,
+      freeOrders
+    };
+  },
+
+  // Render all drivers earnings report
+  renderAllDriversEarningsReport(driverEarnings, totals, period, date) {
+    const dateRange = this.formatDateRange(period, date);
+
+    let html = `
+      <div class="report-summary">
+        <h4>Driver Earnings Report: ${dateRange}</h4>
+        <div class="report-stats">
+          <div class="stat-item">
+            <span class="stat-label">Total Sales:</span>
+            <span class="stat-value">$${totals.totalSales.toFixed(2)}</span>
+            <span class="stat-detail">${totals.totalOrders} completed orders</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Paid to Drivers:</span>
+            <span class="stat-value">$${totals.totalDriverSalary.toFixed(2)}</span>
+            <span class="stat-detail">${totals.totalDeliveries} paid deliveries</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Boss Collection:</span>
+            <span class="stat-value">$${totals.totalBossCollection.toFixed(2)}</span>
+            <span class="stat-detail">${((totals.totalBossCollection / totals.totalSales * 100) || 0).toFixed(1)}% of sales</span>
+          </div>
+        </div>
+      </div>
+
+      <h4>Earnings by Driver</h4>
+    `;
+
+    // Sort drivers by total sales (descending)
+    const sortedEarnings = [...driverEarnings].sort((a, b) => b.totalSales - a.totalSales);
+
+    if (sortedEarnings.length === 0 || sortedEarnings.every(d => d.totalSales === 0)) {
+      html += '<div class="no-data">No earnings data for this period</div>';
+    } else {
+      html += `
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Driver</th>
+              <th>Sales</th>
+              <th>Deliveries</th>
+              <th>Salary</th>
+              <th>Boss Gets</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sortedEarnings.map(d => `
+              <tr>
+                <td data-label="Driver">${d.driver.name}</td>
+                <td data-label="Sales">$${d.totalSales.toFixed(2)}</td>
+                <td data-label="Deliveries">${d.deliveryCount} paid</td>
+                <td data-label="Salary">$${d.driverSalary.toFixed(2)}</td>
+                <td data-label="Boss Gets">$${d.bossCollection.toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    document.getElementById('earnings-report-results').innerHTML = html;
+  },
+
+  // Render single driver earnings report
+  renderSingleDriverEarningsReport(driver, earnings, orders, period, date) {
+    const dateRange = this.formatDateRange(period, date);
+
+    let html = `
+      <div class="report-summary">
+        <h4>Earnings Report for ${driver.name}: ${dateRange}</h4>
+        <div class="report-stats">
+          <div class="stat-item">
+            <span class="stat-label">Total Sales:</span>
+            <span class="stat-value">$${earnings.totalSales.toFixed(2)}</span>
+            <span class="stat-detail">${earnings.totalOrders} completed orders</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Driver Earnings:</span>
+            <span class="stat-value">$${earnings.driverSalary.toFixed(2)}</span>
+            <span class="stat-detail">${earnings.deliveryCount} paid deliveries</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Boss Collection:</span>
+            <span class="stat-value">$${earnings.bossCollection.toFixed(2)}</span>
+            <span class="stat-detail">${((earnings.bossCollection / earnings.totalSales * 100) || 0).toFixed(1)}% of sales</span>
+          </div>
+        </div>
+      </div>
+
+      <h4>Order Details</h4>
+    `;
+
+    if (orders.length === 0) {
+      html += '<div class="no-data">No orders for this period</div>';
+    } else {
+      // Group orders by type
+      const paidDeliveries = earnings.paidOrders;
+      const freePickups = earnings.freeOrders;
+
+      html += `
+        <div class="earnings-breakdown">
+          <h5>Paid Deliveries (${paidDeliveries.length})</h5>
+          ${paidDeliveries.length > 0 ? this.renderOrderList(paidDeliveries) : '<p class="no-data">No paid deliveries</p>'}
+
+          <h5>Free Pickups (${freePickups.length})</h5>
+          ${freePickups.length > 0 ? this.renderOrderList(freePickups) : '<p class="no-data">No free pickups</p>'}
+        </div>
+      `;
+    }
+
+    document.getElementById('earnings-report-results').innerHTML = html;
+  },
+
+  // Helper: Render order list
+  renderOrderList(orders) {
+    return `
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Order ID</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Amount</th>
+            <th>Driver Salary</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${orders.map(order => {
+            const createdDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+            const formattedDate = createdDate.toLocaleDateString();
+            const orderNum = `#${order.id.slice(-6).toUpperCase()}`;
+            const salary = order.driverSalary ?? 30;
+            const isPaid = order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery';
+
+            return `
+              <tr>
+                <td data-label="Order ID">${orderNum}</td>
+                <td data-label="Date">${formattedDate}</td>
+                <td data-label="Status">${order.status}</td>
+                <td data-label="Amount">$${order.totalAmount.toFixed(2)}</td>
+                <td data-label="Driver Salary">${isPaid ? `$${salary.toFixed(2)}` : '-'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
   }
 };
 

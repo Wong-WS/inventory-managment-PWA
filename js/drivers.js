@@ -373,6 +373,13 @@ const DriversModule = {
         inventoryDriverSelect.innerHTML = '<option value="">All Drivers</option>' +
           options.replace('<option value="">-- Select Driver --</option>', '');
       }
+
+      // Update earnings driver dropdown
+      const earningsDriverSelect = document.getElementById('earnings-driver');
+      if (earningsDriverSelect) {
+        earningsDriverSelect.innerHTML = '<option value="">All Drivers</option>' +
+          options.replace('<option value="">-- Select Driver --</option>', '');
+      }
     } catch (error) {
       console.error('Error updating driver dropdowns:', error);
     }

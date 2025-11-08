@@ -226,11 +226,11 @@ const MyEarningsModule = {
     if (driverSalaryDetail) {
       const completedPaidCount = earnings.completedOrders.filter(order => order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery').length;
       const cancelledPaidCount = earnings.cancelledOrders.filter(order => order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery').length;
-      
+
       if (cancelledPaidCount > 0) {
-        driverSalaryDetail.textContent = `${completedPaidCount} completed + ${cancelledPaidCount} cancelled (paid) × $30`;
+        driverSalaryDetail.textContent = `${completedPaidCount} completed + ${cancelledPaidCount} cancelled (paid deliveries)`;
       } else {
-        driverSalaryDetail.textContent = `${earnings.deliveryCount} paid deliveries × $30`;
+        driverSalaryDetail.textContent = `${earnings.deliveryCount} paid deliveries`;
       }
     }
 
@@ -308,7 +308,7 @@ const MyEarningsModule = {
     const formattedTime = completedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
     const isPaid = order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery';
-    const earningsAmount = isPaid ? this.DELIVERY_FEE : 0;
+    const earningsAmount = isPaid ? (order.driverSalary ?? this.DELIVERY_FEE) : 0;
     
     div.innerHTML = `
       <div class="earnings-item-header">

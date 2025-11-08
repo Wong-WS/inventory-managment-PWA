@@ -430,6 +430,7 @@
             <div class="report-selector">
                 <button class="report-tab active" data-report="sales">Sales Reports</button>
                 <button class="report-tab" data-report="inventory">Inventory Reports</button>
+                <button class="report-tab" data-report="earnings">Driver Earnings</button>
             </div>
             
             <div id="sales-report" class="report-section active">
@@ -476,6 +477,36 @@
                 </div>
                 <div id="inventory-report-results" class="report-results">
                     <!-- Inventory report results will be loaded here -->
+                </div>
+            </div>
+
+            <div id="earnings-report" class="report-section">
+                <h3>Driver Earnings Reports</h3>
+                <div class="report-filters">
+                    <div class="form-group">
+                        <label for="earnings-driver">Driver</label>
+                        <select id="earnings-driver">
+                            <option value="">All Drivers</option>
+                            <!-- Drivers will be loaded here -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="earnings-period">Period</label>
+                        <select id="earnings-period">
+                            <option value="day">Day</option>
+                            <option value="week">Week</option>
+                            <option value="month">Month</option>
+                            <option value="year">Year</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="earnings-date">Date</label>
+                        <input type="date" id="earnings-date">
+                    </div>
+                    <button id="generate-earnings-report" class="secondary-button">Generate Report</button>
+                </div>
+                <div id="earnings-report-results" class="report-results">
+                    <!-- Earnings report results will be loaded here -->
                 </div>
             </div>
         </div>
