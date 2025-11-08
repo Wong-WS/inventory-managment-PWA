@@ -1723,6 +1723,7 @@ export const DB = {
         customerAddress: orderData.customerAddress.trim(),
         customerDescription: orderData.customerDescription ? orderData.customerDescription.trim() : '',
         remark: orderData.remark ? orderData.remark.trim() : '',
+        driverSalary: parseFloat(orderData.driverSalary) || 0,
         deliveryMethod: orderData.deliveryMethod || 'Paid',
         totalAmount: parseFloat(orderData.totalAmount) || 0,
         status: this.ORDER_STATUS.PENDING,

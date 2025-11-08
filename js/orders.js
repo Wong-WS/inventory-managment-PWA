@@ -314,16 +314,23 @@ const OrdersModule = {
     const customerAddressInput = document.getElementById('customer-address');
     const customerDescInput = document.getElementById('customer-description');
     const orderRemarkInput = document.getElementById('order-remark');
+    const driverSalaryInput = document.getElementById('driver-salary');
     const totalAmountInput = document.getElementById('total-amount');
 
     const driverId = orderDriverSelect.value;
     const customerAddress = customerAddressInput.value.trim();
     const customerDescription = customerDescInput.value.trim();
     const orderRemark = orderRemarkInput.value.trim();
+    const driverSalary = parseFloat(driverSalaryInput.value);
     const totalAmount = parseFloat(totalAmountInput.value);
 
     if (!driverId || !customerAddress) {
       alert('Please select a driver and enter a customer address.');
+      return;
+    }
+
+    if (isNaN(driverSalary) || driverSalary < 0) {
+      alert('Driver salary must be a valid positive number.');
       return;
     }
 
@@ -420,6 +427,7 @@ const OrdersModule = {
       customerAddress,
       customerDescription,
       remark: orderRemark,
+      driverSalary,
       totalAmount,
       lineItems
     };
@@ -1113,7 +1121,8 @@ const OrdersModule = {
 
     // Determine earnings info for driver (support both old and new values)
     const isPaid = order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery';
-    const earningsNote = isPaid ? ' ($30 earned)' : ' (No payment)';
+    const driverSalary = order.driverSalary ?? 30; // Default to $30 for old orders
+    const earningsNote = isPaid ? ` ($${driverSalary.toFixed(2)} earned)` : ' (No payment)';
 
     // Build formatted text
     const orderText = `🚚 ORDER DETAILS

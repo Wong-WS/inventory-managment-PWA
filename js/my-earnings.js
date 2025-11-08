@@ -170,17 +170,22 @@ const MyEarningsModule = {
     // Separate completed and cancelled orders
     const completedOrders = orders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
     const cancelledOrders = orders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
-    
+
     // For sales metrics, only count completed orders
     const totalSales = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
-    
+
     // For driver salary, count paid orders from both completed and cancelled
     const paidOrders = orders.filter(order => order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery');
     const freeOrders = orders.filter(order => order.deliveryMethod === 'Free' || order.deliveryMethod === 'Pick up');
-    
+
     const paidCount = paidOrders.length;
-    const driverSalary = paidCount * this.DELIVERY_FEE;
-    
+
+    // Calculate driver salary by summing individual order salaries
+    // Use nullish coalescing for backward compatibility (old orders default to $30)
+    const driverSalary = paidOrders.reduce((sum, order) => {
+      return sum + (order.driverSalary ?? this.DELIVERY_FEE);
+    }, 0);
+
     // Boss collection = Total completed sales - ALL driver payments (completed + cancelled paid)
     // This is because driver gets paid from business regardless of order completion
     const bossCollection = totalSales - driverSalary;
