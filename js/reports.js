@@ -180,13 +180,18 @@ const ReportsModule = {
     }
 
     for (const order of orders) {
+      // Skip cancelled orders for sales report (only count completed orders)
+      if (order.status === DB.ORDER_STATUS.CANCELLED) {
+        continue;
+      }
+
       // Use cached driver (instant lookup!)
       const driver = this.driversCache.get(order.driverId);
       if (!driver) continue;
-      
-      // Aggregate total order amount
+
+      // Aggregate total order amount (completed orders only)
       totalSales += order.totalAmount;
-      
+
       // Aggregate by driver
       if (!driverTotals[order.driverId]) {
         driverTotals[order.driverId] = {
