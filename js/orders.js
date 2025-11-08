@@ -225,15 +225,20 @@ const OrdersModule = {
     // View switching buttons
     const createOrderBtn = document.getElementById('show-create-order');
     const manageOrdersBtn = document.getElementById('show-manage-orders');
-    
+    const payDriverBtn = document.getElementById('show-pay-driver');
+
     if (createOrderBtn) {
       createOrderBtn.addEventListener('click', this.showCreateOrderView.bind(this));
     }
-    
+
     if (manageOrdersBtn) {
       manageOrdersBtn.addEventListener('click', async () => {
         await this.showManageOrdersView();
       });
+    }
+
+    if (payDriverBtn) {
+      payDriverBtn.addEventListener('click', this.showPayDriverView.bind(this));
     }
 
     // Order status filter
@@ -244,6 +249,12 @@ const OrdersModule = {
       });
     }
 
+    // Payment form
+    const paymentForm = document.getElementById('pay-driver-form');
+    if (paymentForm) {
+      paymentForm.addEventListener('submit', async (e) => await this.handleCreatePayment(e));
+    }
+
   },
 
   // Show create order view
@@ -251,13 +262,17 @@ const OrdersModule = {
     this.currentView = 'create';
     const createSection = document.getElementById('create-order-section');
     const manageSection = document.getElementById('manage-orders-section');
+    const payDriverSection = document.getElementById('pay-driver-section');
     const createBtn = document.getElementById('show-create-order');
     const manageBtn = document.getElementById('show-manage-orders');
+    const payDriverBtn = document.getElementById('show-pay-driver');
 
     if (createSection) createSection.style.display = 'block';
     if (manageSection) manageSection.style.display = 'none';
+    if (payDriverSection) payDriverSection.style.display = 'none';
     if (createBtn) createBtn.classList.add('active');
     if (manageBtn) manageBtn.classList.remove('active');
+    if (payDriverBtn) payDriverBtn.classList.remove('active');
 
     // Clean up all listeners when not in manage view
     if (this.ordersListenerUnsubscribe) {
@@ -285,19 +300,260 @@ const OrdersModule = {
     this.currentView = 'manage';
     const createSection = document.getElementById('create-order-section');
     const manageSection = document.getElementById('manage-orders-section');
+    const payDriverSection = document.getElementById('pay-driver-section');
     const createBtn = document.getElementById('show-create-order');
     const manageBtn = document.getElementById('show-manage-orders');
+    const payDriverBtn = document.getElementById('show-pay-driver');
 
     if (createSection) createSection.style.display = 'none';
     if (manageSection) manageSection.style.display = 'block';
+    if (payDriverSection) payDriverSection.style.display = 'none';
     if (createBtn) createBtn.classList.remove('active');
     if (manageBtn) manageBtn.classList.add('active');
+    if (payDriverBtn) payDriverBtn.classList.remove('active');
 
     // Show loading state while orders load
     this.showLoading('Loading orders...');
 
     // Setup real-time listener only when showing manage view
     this.setupOrdersListener();
+  },
+
+  // Show pay driver view
+  showPayDriverView() {
+    this.currentView = 'payment';
+    const createSection = document.getElementById('create-order-section');
+    const manageSection = document.getElementById('manage-orders-section');
+    const payDriverSection = document.getElementById('pay-driver-section');
+    const createBtn = document.getElementById('show-create-order');
+    const manageBtn = document.getElementById('show-manage-orders');
+    const payDriverBtn = document.getElementById('show-pay-driver');
+
+    if (createSection) createSection.style.display = 'none';
+    if (manageSection) manageSection.style.display = 'none';
+    if (payDriverSection) payDriverSection.style.display = 'block';
+    if (createBtn) createBtn.classList.remove('active');
+    if (manageBtn) manageBtn.classList.remove('active');
+    if (payDriverBtn) payDriverBtn.classList.add('active');
+
+    // Set default payment date to today
+    const paymentDateInput = document.getElementById('payment-date');
+    if (paymentDateInput) {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      paymentDateInput.value = `${year}-${month}-${day}`;
+    }
+
+    // Load recent payment history
+    this.loadPaymentHistory();
+
+    // Clean up orders listeners when not in manage view
+    if (this.ordersListenerUnsubscribe) {
+      this.ordersListenerUnsubscribe();
+      this.ordersListenerUnsubscribe = null;
+    }
+    if (this.driversListenerUnsubscribe) {
+      if (typeof DB !== 'undefined') {
+        DB.cleanupListener(this.driversListenerUnsubscribe);
+      }
+      this.driversListenerUnsubscribe = null;
+    }
+    if (this.usersListenerUnsubscribe) {
+      if (typeof DB !== 'undefined') {
+        DB.cleanupListener(this.usersListenerUnsubscribe);
+      }
+      this.usersListenerUnsubscribe = null;
+    }
+  },
+
+  // Handle creating a direct payment
+  async handleCreatePayment(event) {
+    event.preventDefault();
+
+    // Prevent duplicate submissions
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    if (submitButton && submitButton.disabled) {
+      return; // Already submitting
+    }
+
+    const driverSelect = document.getElementById('payment-driver');
+    const amountInput = document.getElementById('payment-amount');
+    const reasonInput = document.getElementById('payment-reason');
+    const dateInput = document.getElementById('payment-date');
+
+    const driverId = driverSelect.value;
+    const amount = parseFloat(amountInput.value);
+    const reason = reasonInput.value.trim();
+    const date = dateInput.value;
+
+    // Determine payment type based on amount (for database storage)
+    const paymentType = amount >= 0 ? 'Payment' : 'Deduction';
+
+    // Validation
+    if (!driverId) {
+      alert('Please select a driver');
+      return;
+    }
+
+    if (isNaN(amount) || amount === 0) {
+      alert('Please enter a valid non-zero amount');
+      return;
+    }
+
+    if (!reason || reason.length < 5) {
+      alert('Please enter a reason (minimum 5 characters)');
+      return;
+    }
+
+    if (!date) {
+      alert('Please select a payment date');
+      return;
+    }
+
+    // Check if date is in the future
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (selectedDate > today) {
+      alert('Payment date cannot be in the future');
+      return;
+    }
+
+    // Disable submit button
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = 'Recording Payment...';
+    }
+
+    try {
+      const paymentData = {
+        driverId,
+        amount,
+        paymentType,
+        reason,
+        date
+      };
+
+      await DB.createDirectPayment(paymentData);
+
+      // Get driver name for notification
+      const driver = await DB.getDriverById(driverId);
+      const driverName = driver ? driver.name : 'Unknown Driver';
+      const amountStr = amount >= 0 ? `+$${amount.toFixed(2)}` : `-$${Math.abs(amount).toFixed(2)}`;
+
+      this.showNotification(`Payment recorded: ${amountStr} ${paymentType} for ${driverName}`);
+
+      // Reset form
+      event.target.reset();
+
+      // Set default date to today again
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      dateInput.value = `${year}-${month}-${day}`;
+
+      // Reload payment history
+      this.loadPaymentHistory();
+
+    } catch (error) {
+      console.error('Error creating payment:', error);
+      alert(`Failed to create payment: ${error.message}`);
+    } finally {
+      // Re-enable submit button
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Record Payment';
+      }
+    }
+  },
+
+  // Load payment history
+  async loadPaymentHistory() {
+    const historyList = document.getElementById('payment-history-list');
+    if (!historyList) return;
+
+    historyList.innerHTML = '<li class="loading">Loading payment history...</li>';
+
+    try {
+      const payments = await DB.getAllDirectPayments();
+
+      if (payments.length === 0) {
+        historyList.innerHTML = '<li class="no-data">No payment history yet</li>';
+        return;
+      }
+
+      // Show only recent 10 payments
+      const recentPayments = payments.slice(0, 10);
+
+      historyList.innerHTML = '';
+
+      recentPayments.forEach(payment => {
+        const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
+        const formattedDate = `${paymentDate.toLocaleDateString()} ${paymentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const amountClass = payment.amount >= 0 ? 'positive' : 'negative';
+        const amountStr = payment.amount >= 0 ? `+$${payment.amount.toFixed(2)}` : `-$${Math.abs(payment.amount).toFixed(2)}`;
+
+        // Get driver name from cache
+        const driver = this.driversCache.get(payment.driverId);
+        const driverName = driver ? driver.name : 'Unknown Driver';
+
+        const li = document.createElement('li');
+        li.className = `payment-item ${amountClass}`;
+        li.style.display = 'flex';
+        li.style.justifyContent = 'space-between';
+        li.style.alignItems = 'center';
+        li.style.padding = '1rem';
+        li.style.borderBottom = '1px solid #eee';
+
+        const paymentInfo = document.createElement('div');
+        paymentInfo.style.flex = '1';
+        paymentInfo.innerHTML = `
+          <div class="payment-header" style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+            <strong>${driverName}</strong>
+            <span class="payment-amount ${amountClass}" style="color: ${payment.amount >= 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">${amountStr}</span>
+          </div>
+          <div class="payment-details" style="font-size: 0.9rem; color: #666; margin-bottom: 0.5rem;">
+            <span class="payment-date">${formattedDate}</span>
+          </div>
+          <div class="payment-reason" style="font-size: 0.9rem; color: #666;">${payment.reason}</div>
+        `;
+
+        const deleteButton = document.createElement('button');
+        deleteButton.textContent = 'Delete';
+        deleteButton.className = 'danger-button';
+        deleteButton.style.padding = '0.5rem 1rem';
+        deleteButton.style.fontSize = '0.9rem';
+        deleteButton.addEventListener('click', () => this.deletePayment(payment.id));
+
+        li.appendChild(paymentInfo);
+        li.appendChild(deleteButton);
+        historyList.appendChild(li);
+      });
+
+    } catch (error) {
+      console.error('Error loading payment history:', error);
+      historyList.innerHTML = '<li class="error">Error loading payment history</li>';
+    }
+  },
+
+  // Delete a direct payment
+  async deletePayment(paymentId) {
+    if (!confirm('Are you sure you want to delete this payment?')) {
+      return;
+    }
+
+    try {
+      await DB.deleteDirectPayment(paymentId);
+      this.showNotification('Payment deleted successfully');
+      await this.loadPaymentHistory();
+    } catch (error) {
+      console.error('Error deleting payment:', error);
+      alert(`Failed to delete payment: ${error.message}`);
+    }
   },
 
   // Handle creating a new order

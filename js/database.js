@@ -33,6 +33,7 @@ export const DB = {
     USERS: 'users',
     SESSIONS: 'sessions',
     STOCK_TRANSFERS: 'stock_transfers',
+    DIRECT_PAYMENTS: 'directPayments',
   },
 
 
@@ -48,6 +49,15 @@ export const DB = {
     PENDING: 'pending',
     COMPLETED: 'completed',
     CANCELLED: 'cancelled'
+  },
+
+  // Direct payment type enumeration
+  PAYMENT_TYPES: {
+    BONUS: 'Bonus',
+    ADVANCE: 'Advance',
+    REIMBURSEMENT: 'Reimbursement',
+    DEDUCTION: 'Deduction',
+    OTHER: 'Other'
   },
 
   // Session configuration (from app config)
@@ -2251,6 +2261,256 @@ export const DB = {
       return result;
     } catch (error) {
       console.error('Error resetting database:', error);
+      throw error;
+    }
+  },
+
+  // ===================================
+  // DIRECT PAYMENT METHODS
+  // ===================================
+
+  /**
+   * Create a direct payment to a driver
+   * @param {Object} paymentData - Payment information
+   * @returns {Promise<Object>} Created payment object
+   */
+  async createDirectPayment(paymentData) {
+    const session = this.getCurrentSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+
+    // Validate required fields
+    if (!paymentData.driverId) {
+      throw new Error('Driver ID is required');
+    }
+    if (paymentData.amount === undefined || paymentData.amount === null || paymentData.amount === 0) {
+      throw new Error('Amount is required and cannot be zero');
+    }
+    if (!paymentData.paymentType) {
+      throw new Error('Payment type is required');
+    }
+    if (!paymentData.reason || paymentData.reason.trim().length < 5) {
+      throw new Error('Reason is required (minimum 5 characters)');
+    }
+
+    // Verify driver exists
+    const driver = await this.getDriverById(paymentData.driverId);
+    if (!driver) {
+      throw new Error('Driver not found');
+    }
+
+    try {
+      const newPaymentData = {
+        driverId: paymentData.driverId,
+        amount: parseFloat(paymentData.amount),
+        paymentType: paymentData.paymentType,
+        reason: paymentData.reason.trim(),
+        createdBy: session.userId,
+        createdAt: serverTimestamp(),
+        date: paymentData.date ? new Date(paymentData.date) : serverTimestamp()
+      };
+
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.DIRECT_PAYMENTS), newPaymentData);
+      const newPayment = {
+        id: docRef.id,
+        ...newPaymentData,
+        createdAt: new Date().toISOString(),
+        date: paymentData.date ? new Date(paymentData.date).toISOString() : new Date().toISOString()
+      };
+
+      return newPayment;
+    } catch (error) {
+      console.error('Error creating direct payment:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get all direct payments for a driver
+   * @param {string} driverId - Driver ID
+   * @returns {Promise<Array>} Array of payment objects
+   */
+  async getDirectPaymentsByDriver(driverId) {
+    try {
+      const paymentsQuery = query(
+        collection(db, this.COLLECTIONS.DIRECT_PAYMENTS),
+        where('driverId', '==', driverId)
+      );
+
+      const snapshot = await getDocs(paymentsQuery);
+      const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Sort by date in JavaScript (descending)
+      payments.sort((a, b) => {
+        const aDate = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+        const bDate = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+        return bDate - aDate;
+      });
+
+      return payments;
+    } catch (error) {
+      console.error('Error getting direct payments by driver:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Get direct payments filtered by period
+   * @param {string} driverId - Driver ID (optional, null for all drivers)
+   * @param {string} period - Period type (day/week/month/year)
+   * @param {string} date - Target date
+   * @returns {Promise<Array>} Filtered payment objects
+   */
+  async getDirectPaymentsByPeriod(driverId, period, date) {
+    try {
+      const targetDate = new Date(date);
+      let startDate, endDate;
+
+      // Calculate date range based on period
+      switch (period) {
+        case 'day':
+          startDate = new Date(targetDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(targetDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'week': {
+          const dayOfWeek = targetDate.getDay();
+          startDate = new Date(targetDate);
+          startDate.setDate(targetDate.getDate() - dayOfWeek);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(startDate);
+          endDate.setDate(startDate.getDate() + 6);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        }
+        case 'month':
+          startDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+          endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59, 999);
+          break;
+        case 'year':
+          startDate = new Date(targetDate.getFullYear(), 0, 1);
+          endDate = new Date(targetDate.getFullYear(), 11, 31, 23, 59, 59, 999);
+          break;
+        default:
+          throw new Error('Invalid period');
+      }
+
+      // Fetch all payments and filter in JavaScript to avoid composite index requirement
+      let paymentsQuery;
+      if (driverId) {
+        // Only filter by driver ID in the query
+        paymentsQuery = query(
+          collection(db, this.COLLECTIONS.DIRECT_PAYMENTS),
+          where('driverId', '==', driverId)
+        );
+      } else {
+        // Get all payments
+        paymentsQuery = query(
+          collection(db, this.COLLECTIONS.DIRECT_PAYMENTS)
+        );
+      }
+
+      const snapshot = await getDocs(paymentsQuery);
+      const allPayments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Filter by date range in JavaScript
+      const payments = allPayments.filter(payment => {
+        const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
+        return paymentDate >= startDate && paymentDate <= endDate;
+      });
+
+      // Sort by date in JavaScript (descending)
+      payments.sort((a, b) => {
+        const aDate = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+        const bDate = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+        return bDate - aDate;
+      });
+
+      return payments;
+    } catch (error) {
+      console.error('Error getting direct payments by period:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Get all direct payments (admin view)
+   * @returns {Promise<Array>} Array of all payment objects
+   */
+  async getAllDirectPayments() {
+    try {
+      const paymentsQuery = query(
+        collection(db, this.COLLECTIONS.DIRECT_PAYMENTS)
+      );
+
+      const snapshot = await getDocs(paymentsQuery);
+      const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Sort by date in JavaScript (descending)
+      payments.sort((a, b) => {
+        const aDate = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+        const bDate = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+        return bDate - aDate;
+      });
+
+      return payments;
+    } catch (error) {
+      console.error('Error getting all direct payments:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Delete a direct payment
+   * @param {string} paymentId - Payment ID
+   * @returns {Promise<boolean>} Success status
+   */
+  async deleteDirectPayment(paymentId) {
+    try {
+      await deleteDoc(doc(db, this.COLLECTIONS.DIRECT_PAYMENTS, paymentId));
+      return true;
+    } catch (error) {
+      console.error('Error deleting direct payment:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Listen to direct payments changes
+   * @param {Function} callback - Callback function to handle updates
+   * @param {Object} filters - Optional filters (driverId, etc.)
+   * @returns {string} Listener ID
+   */
+  listenToDirectPayments(callback, filters = {}) {
+    try {
+      let paymentsQuery;
+
+      if (filters.driverId) {
+        paymentsQuery = query(
+          collection(db, this.COLLECTIONS.DIRECT_PAYMENTS),
+          where('driverId', '==', filters.driverId),
+          orderBy('date', 'desc')
+        );
+      } else {
+        paymentsQuery = query(
+          collection(db, this.COLLECTIONS.DIRECT_PAYMENTS),
+          orderBy('date', 'desc')
+        );
+      }
+
+      const unsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
+        const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(payments);
+      });
+
+      const listenerId = `directPayments_${Date.now()}`;
+      this.listeners.set(listenerId, unsubscribe);
+
+      return listenerId;
+    } catch (error) {
+      console.error('Error listening to direct payments:', error);
       throw error;
     }
   }

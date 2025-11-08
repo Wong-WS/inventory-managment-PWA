@@ -380,6 +380,12 @@ const DriversModule = {
         earningsDriverSelect.innerHTML = '<option value="">All Drivers</option>' +
           options.replace('<option value="">-- Select Driver --</option>', '');
       }
+
+      // Update payment driver dropdown
+      const paymentDriverSelect = document.getElementById('payment-driver');
+      if (paymentDriverSelect) {
+        paymentDriverSelect.innerHTML = options;
+      }
     } catch (error) {
       console.error('Error updating driver dropdowns:', error);
     }

@@ -670,7 +670,8 @@ const ReportsModule = {
     // Calculate earnings for each driver in parallel
     const driverEarningsPromises = drivers.map(async (driver) => {
       const orders = await DB.getOrdersByPeriod(driver.id, period, date);
-      const earnings = this.calculateDriverEarnings(orders);
+      const directPayments = await DB.getDirectPaymentsByPeriod(driver.id, period, date);
+      const earnings = this.calculateDriverEarnings(orders, directPayments);
       return {
         driver,
         ...earnings
@@ -683,6 +684,8 @@ const ReportsModule = {
     const totals = {
       totalSales: driverEarnings.reduce((sum, d) => sum + d.totalSales, 0),
       totalDriverSalary: driverEarnings.reduce((sum, d) => sum + d.driverSalary, 0),
+      totalDirectPayments: driverEarnings.reduce((sum, d) => sum + d.directPaymentsTotal, 0),
+      totalDriverEarnings: driverEarnings.reduce((sum, d) => sum + d.totalDriverEarnings, 0),
       totalBossCollection: driverEarnings.reduce((sum, d) => sum + d.bossCollection, 0),
       totalOrders: driverEarnings.reduce((sum, d) => sum + d.totalOrders, 0),
       totalDeliveries: driverEarnings.reduce((sum, d) => sum + d.deliveryCount, 0)
@@ -702,14 +705,15 @@ const ReportsModule = {
     }
 
     const orders = await DB.getOrdersByPeriod(driverId, period, date);
-    const earnings = this.calculateDriverEarnings(orders);
+    const directPayments = await DB.getDirectPaymentsByPeriod(driverId, period, date);
+    const earnings = this.calculateDriverEarnings(orders, directPayments);
 
     // Render the single-driver view
-    this.renderSingleDriverEarningsReport(driver, earnings, orders, period, date);
+    this.renderSingleDriverEarningsReport(driver, earnings, orders, directPayments, period, date);
   },
 
-  // Calculate driver earnings from orders (reused from my-earnings.js)
-  calculateDriverEarnings(orders) {
+  // Calculate driver earnings from orders and direct payments
+  calculateDriverEarnings(orders, directPayments = []) {
     // Separate completed and cancelled orders
     const completedOrders = orders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
     const cancelledOrders = orders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
@@ -727,27 +731,36 @@ const ReportsModule = {
 
     const paidCount = paidOrders.length;
 
-    // Calculate driver salary by summing individual order salaries
+    // Calculate driver salary from orders by summing individual order salaries
     // Use nullish coalescing for backward compatibility (old orders default to $30)
     const DELIVERY_FEE = 30;
     const driverSalary = paidOrders.reduce((sum, order) => {
       return sum + (order.driverSalary ?? DELIVERY_FEE);
     }, 0);
 
+    // Calculate direct payments total
+    const directPaymentsTotal = directPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+    // Total driver earnings = order salary + direct payments
+    const totalDriverEarnings = driverSalary + directPaymentsTotal;
+
     // Boss collection = Total completed sales - ALL driver payments
-    const bossCollection = totalSales - driverSalary;
+    const bossCollection = totalSales - totalDriverEarnings;
 
     return {
       totalSales,
       totalOrders: completedOrders.length,
       deliveryCount: paidCount,
       pickupCount: freeOrders.length,
-      driverSalary,
+      driverSalary,              // Salary from orders only
+      directPaymentsTotal,       // Total from direct payments
+      totalDriverEarnings,       // Combined total
       bossCollection,
       completedOrders,
       cancelledOrders,
       paidOrders,
-      freeOrders
+      freeOrders,
+      directPayments             // Include for display
     };
   },
 
@@ -765,9 +778,19 @@ const ReportsModule = {
             <span class="stat-detail">${totals.totalOrders} completed orders</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Paid to Drivers:</span>
+            <span class="stat-label">Order Salary:</span>
             <span class="stat-value">$${totals.totalDriverSalary.toFixed(2)}</span>
             <span class="stat-detail">${totals.totalDeliveries} paid deliveries</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Direct Payments:</span>
+            <span class="stat-value">$${totals.totalDirectPayments.toFixed(2)}</span>
+            <span class="stat-detail">Bonuses, advances, etc.</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Total to Drivers:</span>
+            <span class="stat-value">$${totals.totalDriverEarnings.toFixed(2)}</span>
+            <span class="stat-detail">All driver payments</span>
           </div>
           <div class="stat-item">
             <span class="stat-label">Boss Collection:</span>
@@ -793,7 +816,9 @@ const ReportsModule = {
               <th>Driver</th>
               <th>Sales</th>
               <th>Deliveries</th>
-              <th>Salary</th>
+              <th>Order Salary</th>
+              <th>Direct Payments</th>
+              <th>Total Earnings</th>
               <th>Boss Gets</th>
             </tr>
           </thead>
@@ -803,7 +828,9 @@ const ReportsModule = {
                 <td data-label="Driver">${d.driver.name}</td>
                 <td data-label="Sales">$${d.totalSales.toFixed(2)}</td>
                 <td data-label="Deliveries">${d.deliveryCount} paid</td>
-                <td data-label="Salary">$${d.driverSalary.toFixed(2)}</td>
+                <td data-label="Order Salary">$${d.driverSalary.toFixed(2)}</td>
+                <td data-label="Direct Payments" style="color: ${d.directPaymentsTotal >= 0 ? '#28a745' : '#dc3545'}">$${d.directPaymentsTotal.toFixed(2)}</td>
+                <td data-label="Total Earnings"><strong>$${d.totalDriverEarnings.toFixed(2)}</strong></td>
                 <td data-label="Boss Gets">$${d.bossCollection.toFixed(2)}</td>
               </tr>
             `).join('')}
@@ -816,7 +843,7 @@ const ReportsModule = {
   },
 
   // Render single driver earnings report
-  renderSingleDriverEarningsReport(driver, earnings, orders, period, date) {
+  renderSingleDriverEarningsReport(driver, earnings, orders, directPayments, period, date) {
     const dateRange = this.formatDateRange(period, date);
 
     let html = `
@@ -829,9 +856,19 @@ const ReportsModule = {
             <span class="stat-detail">${earnings.totalOrders} completed orders</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Driver Earnings:</span>
+            <span class="stat-label">Order Salary:</span>
             <span class="stat-value">$${earnings.driverSalary.toFixed(2)}</span>
             <span class="stat-detail">${earnings.deliveryCount} paid deliveries</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Direct Payments:</span>
+            <span class="stat-value" style="color: ${earnings.directPaymentsTotal >= 0 ? '#28a745' : '#dc3545'}">$${earnings.directPaymentsTotal.toFixed(2)}</span>
+            <span class="stat-detail">${directPayments.length} payments</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Total Earnings:</span>
+            <span class="stat-value">$${earnings.totalDriverEarnings.toFixed(2)}</span>
+            <span class="stat-detail">All driver payments</span>
           </div>
           <div class="stat-item">
             <span class="stat-label">Boss Collection:</span>
@@ -841,26 +878,25 @@ const ReportsModule = {
         </div>
       </div>
 
-      <h4>Order Details</h4>
+      <h4>Earnings Breakdown</h4>
     `;
 
-    if (orders.length === 0) {
-      html += '<div class="no-data">No orders for this period</div>';
-    } else {
-      // Group orders by type
-      const paidDeliveries = earnings.paidOrders;
-      const freePickups = earnings.freeOrders;
+    // Create earnings breakdown with orders and direct payments
+    const paidDeliveries = earnings.paidOrders;
+    const freePickups = earnings.freeOrders;
 
-      html += `
-        <div class="earnings-breakdown">
-          <h5>Paid Deliveries (${paidDeliveries.length})</h5>
-          ${paidDeliveries.length > 0 ? this.renderOrderList(paidDeliveries) : '<p class="no-data">No paid deliveries</p>'}
+    html += `
+      <div class="earnings-breakdown">
+        <h5>Paid Deliveries (${paidDeliveries.length})</h5>
+        ${paidDeliveries.length > 0 ? this.renderOrderList(paidDeliveries) : '<p class="no-data">No paid deliveries</p>'}
 
-          <h5>Free Pickups (${freePickups.length})</h5>
-          ${freePickups.length > 0 ? this.renderOrderList(freePickups) : '<p class="no-data">No free pickups</p>'}
-        </div>
-      `;
-    }
+        <h5>Free Pickups (${freePickups.length})</h5>
+        ${freePickups.length > 0 ? this.renderOrderList(freePickups) : '<p class="no-data">No free pickups</p>'}
+
+        <h5>Direct Payments (${directPayments.length})</h5>
+        ${directPayments.length > 0 ? this.renderDirectPaymentsList(directPayments) : '<p class="no-data">No direct payments</p>'}
+      </div>
+    `;
 
     document.getElementById('earnings-report-results').innerHTML = html;
   },
@@ -893,6 +929,39 @@ const ReportsModule = {
                 <td data-label="Status">${order.status}</td>
                 <td data-label="Amount">$${order.totalAmount.toFixed(2)}</td>
                 <td data-label="Driver Salary">${isPaid ? `$${salary.toFixed(2)}` : '-'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  },
+
+  // Helper: Render direct payments list
+  renderDirectPaymentsList(payments) {
+    return `
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Reason</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${payments.map(payment => {
+            const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
+            const formattedDate = paymentDate.toLocaleDateString();
+            const isPositive = payment.amount >= 0;
+            const sign = payment.amount >= 0 ? '+' : '';
+
+            return `
+              <tr>
+                <td data-label="Date">${formattedDate}</td>
+                <td data-label="Reason">${payment.reason}</td>
+                <td data-label="Amount" style="color: ${isPositive ? '#28a745' : '#dc3545'}; font-weight: bold;">
+                  ${sign}$${payment.amount.toFixed(2)}
+                </td>
               </tr>
             `;
           }).join('')}

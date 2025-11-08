@@ -322,6 +322,7 @@
                 <div class="view-switcher">
                     <button id="show-create-order" class="secondary-button active">Create Order</button>
                     <button id="show-manage-orders" class="secondary-button">Manage Orders</button>
+                    <button id="show-pay-driver" class="secondary-button">Pay Driver</button>
                 </div>
             </div>
 
@@ -416,6 +417,41 @@
                 <div class="orders-list">
                     <ul id="orders-list" class="data-list">
                         <!-- Orders will be loaded here -->
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Pay Driver Section -->
+            <div id="pay-driver-section" class="section" style="display: none;">
+                <h3>Pay Driver</h3>
+                <form id="pay-driver-form">
+                    <div class="form-group">
+                        <label for="payment-driver">Select Driver</label>
+                        <select id="payment-driver" required>
+                            <option value="">-- Select Driver --</option>
+                            <!-- Drivers will be loaded here -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="payment-amount">Amount ($)</label>
+                        <input type="number" id="payment-amount" step="0.01" placeholder="Enter amount (positive or negative)" required>
+                        <small>Positive for bonuses/payments, negative for deductions (e.g., -20)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="payment-reason">Reason / Note</label>
+                        <textarea id="payment-reason" rows="3" placeholder="Describe the reason for this payment (minimum 5 characters)" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="payment-date">Payment Date</label>
+                        <input type="date" id="payment-date" required>
+                    </div>
+                    <button type="submit" class="primary-button">Record Payment</button>
+                </form>
+
+                <div id="payment-history" style="margin-top: 2rem;">
+                    <h4>Recent Payments</h4>
+                    <ul id="payment-history-list" class="data-list">
+                        <!-- Payment history will be loaded here -->
                     </ul>
                 </div>
             </div>
@@ -728,10 +764,11 @@
             </div>
 
             <div class="earnings-breakdown">
-                <h3>Delivery Details</h3>
+                <h3>Earnings Details</h3>
                 <div class="earnings-tabs">
                     <button class="earnings-tab active" data-filter="delivery">Paid Deliveries</button>
                     <button class="earnings-tab" data-filter="pickup">Free Pickups</button>
+                    <button class="earnings-tab" data-filter="payments">Direct Payments</button>
                     <button class="earnings-tab" data-filter="all">All Orders</button>
                 </div>
                 

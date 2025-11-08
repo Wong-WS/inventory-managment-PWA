@@ -108,8 +108,12 @@ const MyEarningsModule = {
     const orders = await this.getFilteredOrders(driverId, this.currentPeriod, this.currentDate);
     console.log('Filtered orders:', orders);
 
-    // Calculate earnings
-    const earnings = this.calculateEarnings(orders);
+    // Get direct payments for the driver
+    const directPayments = await DB.getDirectPaymentsByPeriod(driverId, this.currentPeriod, this.currentDate);
+    console.log('Direct payments:', directPayments);
+
+    // Calculate earnings (including direct payments)
+    const earnings = this.calculateEarnings(orders, directPayments);
     console.log('Calculated earnings:', earnings);
 
     // Update UI
@@ -165,8 +169,8 @@ const MyEarningsModule = {
     });
   },
 
-  // Calculate earnings from orders
-  calculateEarnings(orders) {
+  // Calculate earnings from orders and direct payments
+  calculateEarnings(orders, directPayments = []) {
     // Separate completed and cancelled orders
     const completedOrders = orders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
     const cancelledOrders = orders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
@@ -180,28 +184,36 @@ const MyEarningsModule = {
 
     const paidCount = paidOrders.length;
 
-    // Calculate driver salary by summing individual order salaries
+    // Calculate driver salary from orders by summing individual order salaries
     // Use nullish coalescing for backward compatibility (old orders default to $30)
-    const driverSalary = paidOrders.reduce((sum, order) => {
+    const orderSalary = paidOrders.reduce((sum, order) => {
       return sum + (order.driverSalary ?? this.DELIVERY_FEE);
     }, 0);
 
-    // Boss collection = Total completed sales - ALL driver payments (completed + cancelled paid)
-    // This is because driver gets paid from business regardless of order completion
-    const bossCollection = totalSales - driverSalary;
+    // Calculate direct payments total
+    const directPaymentsTotal = directPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+    // Total driver earnings = order salary + direct payments
+    const totalDriverEarnings = orderSalary + directPaymentsTotal;
+
+    // Boss collection = Total completed sales - ALL driver payments (orders + direct payments)
+    const bossCollection = totalSales - totalDriverEarnings;
 
     return {
       totalSales, // Only completed orders
       totalOrders: completedOrders.length, // Only completed orders for sales metrics
       deliveryCount: paidCount, // Keep old property name for compatibility (includes cancelled paid orders)
       pickupCount: freeOrders.length,
-      driverSalary, // Includes completed + cancelled paid orders
+      driverSalary: orderSalary, // Salary from orders only (for display breakdown)
+      directPaymentsTotal, // Total from direct payments
+      totalDriverEarnings, // Combined total
       bossCollection, // Based on completed sales only
       deliveryOrders: paidOrders, // Keep old property name for compatibility
       pickupOrders: freeOrders,
       allOrders: orders, // All orders for display purposes
       completedOrders,
-      cancelledOrders
+      cancelledOrders,
+      directPayments // Include direct payments for display
     };
   },
 
@@ -217,20 +229,39 @@ const MyEarningsModule = {
       totalSalesDetail.textContent = `${earnings.totalOrders} completed orders`;
     }
 
-    // Driver salary
+    // Driver salary (now shows total earnings including direct payments)
     const driverSalaryAmount = document.getElementById('driver-salary-amount');
     const driverSalaryDetail = document.getElementById('driver-salary-detail');
     if (driverSalaryAmount) {
-      driverSalaryAmount.textContent = `$${earnings.driverSalary.toFixed(2)}`;
+      driverSalaryAmount.textContent = `$${earnings.totalDriverEarnings.toFixed(2)}`;
     }
     if (driverSalaryDetail) {
       const completedPaidCount = earnings.completedOrders.filter(order => order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery').length;
       const cancelledPaidCount = earnings.cancelledOrders.filter(order => order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery').length;
 
-      if (cancelledPaidCount > 0) {
-        driverSalaryDetail.textContent = `${completedPaidCount} completed + ${cancelledPaidCount} cancelled (paid deliveries)`;
+      // Build detail text showing breakdown
+      let detailParts = [];
+
+      // Add order salary part
+      if (completedPaidCount > 0 || cancelledPaidCount > 0) {
+        if (cancelledPaidCount > 0) {
+          detailParts.push(`$${earnings.driverSalary.toFixed(2)} from ${completedPaidCount + cancelledPaidCount} deliveries`);
+        } else {
+          detailParts.push(`$${earnings.driverSalary.toFixed(2)} from ${completedPaidCount} deliveries`);
+        }
+      }
+
+      // Add direct payments part
+      if (earnings.directPaymentsTotal !== 0) {
+        const sign = earnings.directPaymentsTotal > 0 ? '+' : '';
+        detailParts.push(`${sign}$${earnings.directPaymentsTotal.toFixed(2)} direct payments`);
+      }
+
+      // Combine or show default
+      if (detailParts.length > 0) {
+        driverSalaryDetail.textContent = detailParts.join(' + ');
       } else {
-        driverSalaryDetail.textContent = `${earnings.deliveryCount} paid deliveries`;
+        driverSalaryDetail.textContent = `0 deliveries`;
       }
     }
 
@@ -248,8 +279,17 @@ const MyEarningsModule = {
   displayOrdersList(orders = null) {
     const container = document.getElementById('earnings-list-container');
     const noDataMessage = document.getElementById('no-earnings-message');
-    
+
     if (!container || !this.currentEarnings) {
+      return;
+    }
+
+    // Clear container
+    container.innerHTML = '';
+
+    // Special handling for direct payments filter
+    if (this.currentFilter === 'payments') {
+      this.displayDirectPaymentsList();
       return;
     }
 
@@ -266,9 +306,6 @@ const MyEarningsModule = {
         ordersToShow = this.currentEarnings.allOrders;
         break;
     }
-
-    // Clear container
-    container.innerHTML = '';
 
     if (ordersToShow.length === 0) {
       if (noDataMessage) {
@@ -345,6 +382,88 @@ const MyEarningsModule = {
             <span><strong>Remark:</strong> ${order.remark}</span>
           </div>
         ` : ''}
+      </div>
+    `;
+
+    return div;
+  },
+
+  // Display direct payments list
+  displayDirectPaymentsList() {
+    const container = document.getElementById('earnings-list-container');
+    const noDataMessage = document.getElementById('no-earnings-message');
+
+    if (!container || !this.currentEarnings) {
+      return;
+    }
+
+    // Clear container
+    container.innerHTML = '';
+
+    const directPayments = this.currentEarnings.directPayments || [];
+
+    if (directPayments.length === 0) {
+      if (noDataMessage) {
+        noDataMessage.style.display = 'block';
+        noDataMessage.innerHTML = `
+          <i class="fas fa-inbox"></i>
+          <p>No direct payments found</p>
+          <small>Direct payments will appear here when made by admin or sales reps</small>
+        `;
+      }
+      return;
+    }
+
+    if (noDataMessage) {
+      noDataMessage.style.display = 'none';
+    }
+
+    // Sort payments by date, newest first
+    directPayments.sort((a, b) => {
+      const aDate = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+      const bDate = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+      return bDate - aDate;
+    });
+
+    // Display each payment
+    directPayments.forEach(payment => {
+      const paymentElement = this.createDirectPaymentElement(payment);
+      container.appendChild(paymentElement);
+    });
+  },
+
+  // Create HTML element for a direct payment
+  createDirectPaymentElement(payment) {
+    const div = document.createElement('div');
+    const isPositive = payment.amount >= 0;
+    div.className = `earnings-item ${isPositive ? 'payment-positive' : 'payment-negative'}`;
+
+    const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
+    const formattedDate = paymentDate.toLocaleDateString();
+
+    // Format amount with sign
+    const sign = payment.amount >= 0 ? '+' : '';
+    const amountDisplay = `${sign}$${payment.amount.toFixed(2)}`;
+    const amountClass = isPositive ? 'positive-amount' : 'negative-amount';
+
+    div.innerHTML = `
+      <div class="order-header">
+        <div class="order-info">
+          <div class="order-id">
+            <i class="fas fa-money-bill-wave"></i>
+            <span>Direct Payment</span>
+          </div>
+          <div class="order-date">${formattedDate}</div>
+        </div>
+        <div class="order-amount ${amountClass}" style="font-weight: bold;">
+          ${amountDisplay}
+        </div>
+      </div>
+      <div class="order-details">
+        <div class="order-address">
+          <i class="fas fa-comment"></i>
+          <span>${payment.reason}</span>
+        </div>
       </div>
     `;
 
@@ -634,6 +753,23 @@ const MyEarningsModule = {
       .error-message i {
         font-size: 2rem;
         margin-bottom: 1rem;
+      }
+
+      /* Direct payment styling */
+      .payment-positive {
+        border-left: 4px solid #28a745;
+      }
+
+      .payment-negative {
+        border-left: 4px solid #dc3545;
+      }
+
+      .positive-amount {
+        color: #28a745;
+      }
+
+      .negative-amount {
+        color: #dc3545;
       }
 
       /* Mobile optimizations */
