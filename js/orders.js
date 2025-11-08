@@ -265,11 +265,17 @@ const OrdersModule = {
       this.ordersListenerUnsubscribe = null;
     }
     if (this.driversListenerUnsubscribe) {
-      this.driversListenerUnsubscribe();
+      // driversListenerUnsubscribe is a listenerId string, use DB.cleanupListener
+      if (typeof DB !== 'undefined') {
+        DB.cleanupListener(this.driversListenerUnsubscribe);
+      }
       this.driversListenerUnsubscribe = null;
     }
     if (this.usersListenerUnsubscribe) {
-      this.usersListenerUnsubscribe();
+      // usersListenerUnsubscribe is a listenerId string, use DB.cleanupListener
+      if (typeof DB !== 'undefined') {
+        DB.cleanupListener(this.usersListenerUnsubscribe);
+      }
       this.usersListenerUnsubscribe = null;
     }
   },
@@ -790,14 +796,20 @@ const OrdersModule = {
             <button class="copy-order-btn secondary-button" data-order-id="${order.id}">
               <i class="fas fa-copy"></i> Copy Details
             </button>
+            <button class="delete-order-btn danger-button" data-order-id="${order.id}">
+              <i class="fas fa-trash"></i> Delete
+            </button>
           </div>
         `;
       } else {
-        // For completed/cancelled orders, only show copy button
+        // For completed/cancelled orders, show copy and delete buttons
         actionButtons = `
           <div class="order-actions">
             <button class="copy-order-btn secondary-button" data-order-id="${order.id}">
               <i class="fas fa-copy"></i> Copy Details
+            </button>
+            <button class="delete-order-btn danger-button" data-order-id="${order.id}">
+              <i class="fas fa-trash"></i> Delete
             </button>
           </div>
         `;
@@ -842,14 +854,15 @@ const OrdersModule = {
     const completeButtons = document.querySelectorAll('.complete-order-btn');
     const cancelButtons = document.querySelectorAll('.cancel-order-btn');
     const copyButtons = document.querySelectorAll('.copy-order-btn');
-    
+    const deleteButtons = document.querySelectorAll('.delete-order-btn');
+
     completeButtons.forEach(button => {
       button.addEventListener('click', async (e) => {
         const orderId = e.target.dataset.orderId;
         await this.completeOrder(orderId);
       });
     });
-    
+
     cancelButtons.forEach(button => {
       button.addEventListener('click', async (e) => {
         const orderId = e.target.dataset.orderId;
@@ -872,6 +885,13 @@ const OrdersModule = {
         } else {
           this.showNotification('Order not found');
         }
+      });
+    });
+
+    deleteButtons.forEach(button => {
+      button.addEventListener('click', async (e) => {
+        const orderId = e.target.dataset.orderId;
+        await this.deleteOrder(orderId);
       });
     });
   },
@@ -958,6 +978,66 @@ const OrdersModule = {
       AppModule.showNotification(message);
     } else {
       alert(message);
+    }
+  },
+
+  // Delete an order
+  async deleteOrder(orderId) {
+    // Get order details first for confirmation message
+    const order = await DB.getOrderById(orderId);
+    if (!order) {
+      alert('Order not found');
+      return;
+    }
+
+    // Get driver for display
+    const driver = await this.getCachedDriver(order.driverId);
+    const driverName = driver ? driver.name : 'Unknown Driver';
+    const orderNumber = `#${order.id.slice(-6).toUpperCase()}`;
+
+    // Confirmation with strong warning
+    const confirmMessage = `⚠️ WARNING: DELETE ORDER ${orderNumber}\n\n` +
+      `This will permanently delete this order and:\n` +
+      `• Restore driver inventory (${order.lineItems.length} product(s))\n` +
+      `• Remove from ${driverName}'s earnings\n` +
+      `• Remove from all reports\n` +
+      `• Cannot be undone!\n\n` +
+      `Type "DELETE" to confirm:`;
+
+    const userInput = prompt(confirmMessage);
+
+    if (userInput !== 'DELETE') {
+      if (userInput !== null) {
+        alert('Deletion cancelled. You must type "DELETE" to confirm.');
+      }
+      return;
+    }
+
+    // Final confirmation
+    const finalConfirm = confirm(`Are you absolutely sure you want to delete order ${orderNumber}?\n\nThis action CANNOT be undone!`);
+    if (!finalConfirm) {
+      alert('Deletion cancelled.');
+      return;
+    }
+
+    try {
+      // Delete the order
+      await DB.deleteOrder(orderId);
+
+      // Refresh orders list - orders are auto-refreshed via real-time listener
+      // No need to call loadOrders() - the listener will update automatically
+
+      // Update dashboard if available
+      if (typeof DashboardModule !== 'undefined') {
+        await DashboardModule.updateDashboard();
+      }
+
+      // Show success notification
+      this.showNotification(`Order ${orderNumber} deleted successfully. Driver inventory and earnings automatically restored.`);
+
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      alert(`Failed to delete order: ${error.message}`);
     }
   },
 

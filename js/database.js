@@ -1871,6 +1871,38 @@ export const DB = {
   },
 
   /**
+   * Delete an order completely from the database
+   * SAFE OPERATION: Driver inventory and earnings are automatically recalculated
+   * - Driver inventory auto-restores (order no longer counted in "sold")
+   * - Driver earnings auto-update (order no longer counted)
+   * - All reports auto-update (order excluded from calculations)
+   *
+   * @param {string} orderId - Order ID to delete
+   * @returns {Promise<Object|null>} Deleted order data or null if not found
+   */
+  async deleteOrder(orderId) {
+    try {
+      // Get order data before deletion (for return value)
+      const order = await this.getOrderById(orderId);
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      // Delete the order document
+      await deleteDoc(doc(db, this.COLLECTIONS.ORDERS, orderId));
+
+      // NO manual inventory restoration needed!
+      // Driver inventory is calculated on-the-fly via getDriverInventory()
+      // which automatically excludes deleted orders from the "sold" calculation
+
+      return order;
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Get orders with advanced filtering options (now uses enhanced getOrdersWithFilters)
    * @param {Object} filters - Filter options (same as getOrdersWithFilters)
    * @returns {Array} Filtered orders
