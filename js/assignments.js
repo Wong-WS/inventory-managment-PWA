@@ -12,6 +12,7 @@ const AssignmentsModule = {
   driversCache: new Map(),
   productsCache: new Map(),
   cacheInitialized: false,
+  assignmentItemCounter: 1, // Track dynamic line items
 
   // Initialize caches
   async initializeCaches() {
@@ -63,6 +64,8 @@ const AssignmentsModule = {
     // Initialize caches for performance
     await this.initializeCaches();
 
+    this.assignmentItemCounter = 1; // Initialize counter
+
     this.bindEvents();
     await this.loadAssignmentHistory();
     await this.updateDropdowns();
@@ -76,7 +79,16 @@ const AssignmentsModule = {
     if (assignForm) {
       assignForm.addEventListener('submit', this.handleAssignProducts.bind(this));
     }
-    
+
+    // Add assignment item button
+    const addItemButton = document.getElementById('add-assignment-item');
+    if (addItemButton) {
+      addItemButton.addEventListener('click', this.addAssignmentItem.bind(this));
+    }
+
+    // Add listeners for first item
+    this.addAssignmentItemListeners(0);
+
     // Transfer form
     const transferForm = document.getElementById('transfer-form');
     if (transferForm) {
@@ -137,15 +149,10 @@ const AssignmentsModule = {
     }
 
     const driverSelect = document.getElementById('assign-driver');
-    const productSelect = document.getElementById('assign-product');
-    const quantityInput = document.getElementById('assign-quantity');
-
     const driverId = driverSelect.value;
-    const productId = productSelect.value;
-    const quantity = parseInt(quantityInput.value);
 
-    if (!driverId || !productId || isNaN(quantity) || quantity <= 0) {
-      alert('Please select a driver, product, and enter a valid quantity.');
+    if (!driverId) {
+      alert('Please select a driver.');
       return;
     }
 
@@ -156,12 +163,29 @@ const AssignmentsModule = {
     }
 
     try {
-      // Get driver and product names for display
-      const driver = await DB.getDriverById(driverId);
-      const product = await DB.getProductById(productId);
+      // Collect all assignment items
+      const assignmentItems = [];
+      const itemElements = document.querySelectorAll('.assignment-item');
 
-      if (!driver || !product) {
-        alert('Selected driver or product not found.');
+      let valid = true;
+      for (const element of itemElements) {
+        const index = element.dataset.index;
+        const productSelect = document.getElementById(`assignment-product-${index}`);
+        const quantityInput = document.getElementById(`assignment-quantity-${index}`);
+
+        const productId = productSelect.value;
+        const quantity = parseInt(quantityInput.value);
+
+        if (!productId || isNaN(quantity) || quantity <= 0) {
+          valid = false;
+          break;
+        }
+
+        assignmentItems.push({ productId, quantity });
+      }
+
+      if (!valid || assignmentItems.length === 0) {
+        alert('Please select products and enter valid quantities for all items.');
 
         // Re-enable button on error
         if (submitButton) {
@@ -171,10 +195,59 @@ const AssignmentsModule = {
         return;
       }
 
-      const newAssignment = await DB.addAssignment(driverId, productId, quantity);
+      // Check for duplicate products
+      const productIds = assignmentItems.map(item => item.productId);
+      const uniqueProductIds = new Set(productIds);
+      if (productIds.length !== uniqueProductIds.size) {
+        alert('You have selected the same product multiple times. Please remove duplicates.');
+
+        // Re-enable button on error
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Assign Products';
+        }
+        return;
+      }
+
+      // Get driver for display
+      const driver = await DB.getDriverById(driverId);
+      if (!driver) {
+        alert('Selected driver not found.');
+
+        // Re-enable button on error
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Assign Products';
+        }
+        return;
+      }
+
+      // Validate inventory for all products BEFORE creating assignments
+      for (const item of assignmentItems) {
+        const product = await DB.getProductById(item.productId);
+        if (!product || product.totalQuantity < item.quantity) {
+          const productName = product ? product.name : 'Unknown product';
+          const available = product ? product.totalQuantity : 0;
+          alert(`Insufficient stock for "${productName}". Available: ${available}, Requested: ${item.quantity}`);
+
+          // Re-enable button on error
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Assign Products';
+          }
+          return;
+        }
+      }
+
+      // Create assignments for each item
+      const assignmentPromises = assignmentItems.map(item =>
+        DB.addAssignment(driverId, item.productId, item.quantity)
+      );
+
+      await Promise.all(assignmentPromises);
 
       // Reset form
-      quantityInput.value = '';
+      await this.resetAssignmentForm();
 
       // Refresh all UI elements in parallel (independent operations)
       await Promise.all([
@@ -186,7 +259,9 @@ const AssignmentsModule = {
       ]);
 
       // Show notification
-      this.showNotification(`Assigned ${quantity} units of "${product.name}" to ${driver.name}`);
+      const totalItems = assignmentItems.length;
+      const totalQuantity = assignmentItems.reduce((sum, item) => sum + item.quantity, 0);
+      this.showNotification(`Assigned ${totalItems} product(s) (${totalQuantity} total units) to ${driver.name}`);
 
       // Re-enable button after successful assignment
       if (submitButton) {
@@ -281,9 +356,9 @@ const AssignmentsModule = {
         await DriversModule.updateDriverDropdowns();
       }
 
-      // Directly update product dropdown with quantities
-      const assignProductSelect = document.getElementById('assign-product');
-      if (assignProductSelect && typeof DB !== 'undefined') {
+      // Update all product dropdowns for assignment items
+      const productSelects = document.querySelectorAll('.assignment-product');
+      if (productSelects.length > 0 && typeof DB !== 'undefined') {
         const products = await DB.getAllProducts();
         let options = '<option value="">-- Select Product --</option>';
 
@@ -291,7 +366,9 @@ const AssignmentsModule = {
           options += `<option value="${product.id}">${product.name} (Qty: ${product.totalQuantity})</option>`;
         });
 
-        assignProductSelect.innerHTML = options;
+        productSelects.forEach(select => {
+          select.innerHTML = options;
+        });
       }
     } catch (error) {
       console.error('Error updating dropdowns:', error);
@@ -306,7 +383,109 @@ const AssignmentsModule = {
       alert(message);
     }
   },
-  
+
+  // Add a new assignment line item
+  async addAssignmentItem() {
+    const container = document.getElementById('assignment-items-container');
+    const index = this.assignmentItemCounter++;
+
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'assignment-item';
+    itemDiv.dataset.index = index;
+
+    itemDiv.innerHTML = `
+      <div class="form-group">
+        <label for="assignment-product-${index}">Select Product</label>
+        <select class="assignment-product" id="assignment-product-${index}" required>
+          <option value="">-- Select Product --</option>
+          ${await this.getProductOptionsHtml()}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="assignment-quantity-${index}">Quantity</label>
+        <input type="number" class="assignment-quantity" id="assignment-quantity-${index}" min="1" required>
+      </div>
+      <button type="button" class="remove-assignment-item danger-button">Remove</button>
+    `;
+
+    container.appendChild(itemDiv);
+
+    // Show remove buttons if there's more than one item
+    this.updateRemoveButtons();
+
+    // Add event listeners for the new item
+    this.addAssignmentItemListeners(index);
+  },
+
+  // Remove an assignment line item
+  removeAssignmentItem(index) {
+    const itemDiv = document.querySelector(`.assignment-item[data-index="${index}"]`);
+    if (!itemDiv) return;
+
+    itemDiv.remove();
+
+    // Update the visibility of remove buttons
+    this.updateRemoveButtons();
+  },
+
+  // Update the visibility of remove buttons
+  updateRemoveButtons() {
+    const removeButtons = document.querySelectorAll('.remove-assignment-item');
+    const items = document.querySelectorAll('.assignment-item');
+
+    if (items.length > 1) {
+      removeButtons.forEach(button => {
+        button.style.display = '';
+      });
+    } else {
+      removeButtons.forEach(button => {
+        button.style.display = 'none';
+      });
+    }
+  },
+
+  // Add event listeners for assignment items
+  addAssignmentItemListeners(index) {
+    const itemDiv = document.querySelector(`.assignment-item[data-index="${index}"]`);
+    if (!itemDiv) return;
+
+    const removeButton = itemDiv.querySelector('.remove-assignment-item');
+    if (removeButton) {
+      removeButton.addEventListener('click', () => this.removeAssignmentItem(index));
+    }
+  },
+
+  // Get product options as HTML string
+  async getProductOptionsHtml() {
+    if (typeof DB !== 'undefined') {
+      const products = await DB.getAllProducts();
+      let options = '';
+
+      products.forEach(product => {
+        options += `<option value="${product.id}">${product.name} (Qty: ${product.totalQuantity})</option>`;
+      });
+
+      return options;
+    }
+    return '';
+  },
+
+  // Reset assignment form to initial state
+  async resetAssignmentForm() {
+    const form = document.getElementById('assign-form');
+    if (form) {
+      form.reset();
+    }
+
+    // Reset to single item
+    const container = document.getElementById('assignment-items-container');
+    if (container) {
+      container.innerHTML = '';
+      this.assignmentItemCounter = 0;
+      await this.addAssignmentItem();
+    }
+  },
+
   // Get driver's current inventory for a specific product
   async getDriverProductInventory(driverId, productId) {
     if (!driverId || !productId) return 0;

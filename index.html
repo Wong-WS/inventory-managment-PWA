@@ -216,17 +216,28 @@
                         <!-- Drivers will be loaded here -->
                     </select>
                 </div>
-                <div class="form-group">
-                    <label for="assign-product">Select Product</label>
-                    <select id="assign-product" required>
-                        <option value="">-- Select Product --</option>
-                        <!-- Products will be loaded here -->
-                    </select>
+
+                <h4>Products to Assign</h4>
+                <div id="assignment-items-container">
+                    <!-- Line items will be added here dynamically -->
+                    <div class="assignment-item" data-index="0">
+                        <div class="form-group">
+                            <label for="assignment-product-0">Select Product</label>
+                            <select class="assignment-product" id="assignment-product-0" required>
+                                <option value="">-- Select Product --</option>
+                                <!-- Products will be loaded here -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="assignment-quantity-0">Quantity</label>
+                            <input type="number" class="assignment-quantity" id="assignment-quantity-0" min="1" required>
+                        </div>
+                        <button type="button" class="remove-assignment-item danger-button" style="display: none;">Remove</button>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="assign-quantity">Quantity</label>
-                    <input type="number" id="assign-quantity" min="1" required>
-                </div>
+
+                <button type="button" id="add-assignment-item" class="secondary-button">Add Another Product</button>
+
                 <button type="submit" class="primary-button">Assign Products</button>
             </form>
             </div>
