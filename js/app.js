@@ -678,9 +678,9 @@ const DashboardModule = {
       return;
     }
 
-    // Get driver's recent orders and assignments
+    // Get driver's recent orders and assignments (today only)
     const driverOrders = await DB.getOrdersByDriver(driverId);
-    const allAssignments = await DB.getAllAssignments();
+    const allAssignments = await DB.getAllAssignments({ todayOnly: true });
     const driverAssignments = allAssignments.filter(
       (a) => a.driverId === driverId
     );
@@ -702,8 +702,12 @@ const DashboardModule = {
     // Sort by date, newest first
     activities.sort((a, b) => b.date - a.date);
 
-    // Take only the 10 most recent activities
-    const recentActivities = activities.slice(0, 10);
+    // Store all activities for load more functionality
+    this.allActivities = activities;
+    this.displayedActivityCount = Math.min(5, activities.length);
+
+    // Take only the 5 most recent activities initially
+    const recentActivities = activities.slice(0, this.displayedActivityCount);
 
     activityList.innerHTML = "";
 
@@ -752,13 +756,16 @@ const DashboardModule = {
       activityList.appendChild(li);
     }
 
+    // Show/hide load more button
+    this.updateLoadMoreButton();
+
     this.addActivityListStyles();
   },
 
   // Load recent activity for admin/sales rep users (all activities)
   async loadAdminRecentActivity(activityList) {
-    // Get recent orders and assignments (no longer show old sales)
-    const orders = await DB.getAllOrders();
+    // Get recent orders and assignments (today only for performance)
+    const orders = await DB.getAllOrders({ todayOnly: true });
 
     // Sales reps only see orders, admins see orders + assignments
     const session = DB.getCurrentSession();
@@ -774,7 +781,7 @@ const DashboardModule = {
 
     // Only admins see assignments in recent activity
     if (isAdmin) {
-      const assignments = await DB.getAllAssignments();
+      const assignments = await DB.getAllAssignments({ todayOnly: true });
       activities.push(...assignments.map((assignment) => ({
         type: "assignment",
         date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
@@ -785,8 +792,12 @@ const DashboardModule = {
     // Sort by date, newest first
     activities.sort((a, b) => b.date - a.date);
 
-    // Take only the 10 most recent activities
-    const recentActivities = activities.slice(0, 10);
+    // Store all activities for load more functionality
+    this.allActivities = activities;
+    this.displayedActivityCount = Math.min(5, activities.length);
+
+    // Take only the 5 most recent activities initially
+    const recentActivities = activities.slice(0, this.displayedActivityCount);
 
     activityList.innerHTML = "";
 
@@ -838,7 +849,55 @@ const DashboardModule = {
       activityList.appendChild(li);
     }
 
+    // Show/hide load more button
+    this.updateLoadMoreButton();
+
     this.addActivityListStyles();
+  },
+
+  // Update load more button visibility and handler
+  updateLoadMoreButton() {
+    const loadMoreBtn = document.getElementById('load-more-activities');
+    if (!loadMoreBtn) return;
+
+    // Show button if there are more activities to display
+    if (this.allActivities && this.displayedActivityCount < this.allActivities.length) {
+      loadMoreBtn.style.display = 'block';
+      loadMoreBtn.textContent = `Load More (${this.allActivities.length - this.displayedActivityCount} remaining)`;
+
+      // Remove old event listener and add new one
+      const newBtn = loadMoreBtn.cloneNode(true);
+      loadMoreBtn.parentNode.replaceChild(newBtn, loadMoreBtn);
+
+      newBtn.addEventListener('click', () => {
+        this.loadMoreActivities();
+      });
+    } else {
+      loadMoreBtn.style.display = 'none';
+    }
+  },
+
+  // Load more activities when button is clicked
+  loadMoreActivities() {
+    if (!this.allActivities) return;
+
+    // Increase displayed count by 10 (or remaining amount)
+    const remainingCount = this.allActivities.length - this.displayedActivityCount;
+    this.displayedActivityCount += Math.min(10, remainingCount);
+
+    // Re-render the activities
+    const activityList = document.getElementById('recent-activity-list');
+    if (!activityList) return;
+
+    const session = DB.getCurrentSession();
+    if (!session) return;
+
+    // Determine if we need to reload driver or admin activities
+    if (session.role === DB.ROLES.DRIVER) {
+      this.loadDriverRecentActivity(activityList);
+    } else {
+      this.loadAdminRecentActivity(activityList);
+    }
   },
 
   // Add styles for activity list
@@ -1140,7 +1199,7 @@ const DashboardModule = {
       }
     } else {
       // Admin/sales rep sees activities (sales reps: orders only, admins: orders + assignments)
-      const allOrders = await DB.getAllOrders();
+      const allOrders = await DB.getAllOrders({ todayOnly: true });
       const isAdmin = session.role === DB.ROLES.ADMIN;
 
       activities = [
@@ -1153,7 +1212,7 @@ const DashboardModule = {
 
       // Only admins see assignments in recent activity
       if (isAdmin) {
-        const allAssignments = await DB.getAllAssignments();
+        const allAssignments = await DB.getAllAssignments({ todayOnly: true });
         activities.push(...allAssignments.map((assignment) => ({
           type: "assignment",
           date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),

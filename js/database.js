@@ -1277,7 +1277,17 @@ export const DB = {
   },
 
   // Assignments (Firebase versions)
-  async getAllAssignments() {
+  async getAllAssignments(options = {}) {
+    if (options.todayOnly) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const q = query(
+        collection(db, this.COLLECTIONS.ASSIGNMENTS),
+        where("assignedAt", ">=", today)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
     return await this.getAll(this.COLLECTIONS.ASSIGNMENTS);
   },
 
@@ -1583,7 +1593,17 @@ export const DB = {
    * Get all orders
    * @returns {Array} Array of order objects
    */
-  async getAllOrders() {
+  async getAllOrders(options = {}) {
+    if (options.todayOnly) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const q = query(
+        collection(db, this.COLLECTIONS.ORDERS),
+        where("createdAt", ">=", today)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
     return await this.getAll(this.COLLECTIONS.ORDERS);
   },
 
