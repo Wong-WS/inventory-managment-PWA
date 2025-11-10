@@ -985,21 +985,32 @@ const OrdersModule = {
     const session = DB.getCurrentSession();
     if (!session) return;
 
-    if (orders.length === 0) {
-      ordersList.innerHTML = '<li class="empty-list">No orders found.</li>';
+    // Filter out orders created before today (hide yesterday's orders)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+
+    const todaysOrders = orders.filter(order => {
+      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+      const orderDateNormalized = new Date(orderDate);
+      orderDateNormalized.setHours(0, 0, 0, 0); // Normalize to start of day
+      return orderDateNormalized >= today; // Only show today's orders
+    });
+
+    if (todaysOrders.length === 0) {
+      ordersList.innerHTML = '<li class="empty-list">No orders found for today.</li>';
       return;
     }
 
     // Sort by creation date, newest first (Firebase timestamp handling)
-    orders.sort((a, b) => {
+    todaysOrders.sort((a, b) => {
       const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
       const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
       return dateB - dateA;
     });
 
     // Pre-fetch all unique driver and user IDs in parallel batches
-    const driverIds = [...new Set(orders.map(o => o.driverId))];
-    const userIds = [...new Set(orders.map(o => o.salesRepId).filter(id => id))];
+    const driverIds = [...new Set(todaysOrders.map(o => o.driverId))];
+    const userIds = [...new Set(todaysOrders.map(o => o.salesRepId).filter(id => id))];
 
     // Batch fetch any missing drivers/users not in cache
     const missingDrivers = driverIds.filter(id => !this.driversCache.has(id));
@@ -1015,7 +1026,7 @@ const OrdersModule = {
     // Build all DOM elements BEFORE manipulating the actual DOM to prevent race conditions
     const orderElements = [];
 
-    for (const order of orders) {
+    for (const order of todaysOrders) {
       // Use cached data (synchronous now!)
       const driver = this.driversCache.get(order.driverId);
       const salesRep = this.usersCache.get(order.salesRepId);
