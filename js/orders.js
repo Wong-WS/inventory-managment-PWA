@@ -1375,23 +1375,14 @@ const OrdersModule = {
       itemsText += `• ${item.productName} x ${displayQuantity}${giftNote}\n`;
     });
 
-    // Determine earnings info for driver (support both old and new values)
-    const isPaid = order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery';
-    const driverSalary = order.driverSalary ?? 30; // Default to $30 for old orders
-    const earningsNote = isPaid ? ` ($${driverSalary.toFixed(2)} earned)` : ' (No payment)';
-
     // Build formatted text
     const orderText = `🚚 ORDER DETAILS
-Driver: ${driver.name}${driver.phone ? ` (${driver.phone})` : ''}
 Address: ${order.customerAddress}${order.customerDescription ? `\nDescription: ${order.customerDescription}` : ''}${order.remark ? `\nRemark: ${order.remark}` : ''}
-Payment: ${order.deliveryMethod}${earningsNote}
 ---
 Items:
 ${itemsText}---
 Total: $${order.totalAmount.toFixed(2)}
-Order #${order.id.slice(-6).toUpperCase()}
-Status: ${order.status.toUpperCase()}
-Created: ${formattedDate}`;
+Order #${order.id.slice(-6).toUpperCase()}`;
 
     return orderText;
   },
