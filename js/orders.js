@@ -1060,6 +1060,9 @@ const OrdersModule = {
           <div class="order-actions">
             <button class="complete-order-btn primary-button" data-order-id="${order.id}">Complete</button>
             <button class="cancel-order-btn danger-button" data-order-id="${order.id}">Cancel</button>
+            <button class="edit-order-btn secondary-button" data-order-id="${order.id}">
+              <i class="fas fa-edit"></i> Edit
+            </button>
             <button class="copy-order-btn secondary-button" data-order-id="${order.id}">
               <i class="fas fa-copy"></i> Copy Details
             </button>
@@ -1118,10 +1121,18 @@ const OrdersModule = {
 
   // Bind event listeners for order actions
   bindOrderActionListeners() {
+    const editButtons = document.querySelectorAll('.edit-order-btn');
     const completeButtons = document.querySelectorAll('.complete-order-btn');
     const cancelButtons = document.querySelectorAll('.cancel-order-btn');
     const copyButtons = document.querySelectorAll('.copy-order-btn');
     const deleteButtons = document.querySelectorAll('.delete-order-btn');
+
+    editButtons.forEach(button => {
+      button.addEventListener('click', async (e) => {
+        const orderId = e.currentTarget.dataset.orderId;
+        await this.openEditModal(orderId);
+      });
+    });
 
     completeButtons.forEach(button => {
       button.addEventListener('click', async (e) => {
@@ -1184,13 +1195,17 @@ const OrdersModule = {
     if (!confirm('Are you sure you want to cancel this order? This will restore the inventory.')) {
       return;
     }
-    
-    // Ask whether to pay the driver
-    const payDriver = confirm('Pay the driver $30 for this cancelled order?\n\nClick "OK" to pay the driver $30\nClick "Cancel" to not pay the driver');
-    
+
     try {
+      // Get the order to retrieve the driver salary
+      const order = await DB.getOrderById(orderId);
+      const driverSalary = order.driverSalary || 30;
+
+      // Ask whether to pay the driver
+      const payDriver = confirm(`Pay the driver $${driverSalary} for this cancelled order?\n\nClick "OK" to pay the driver $${driverSalary}\nClick "Cancel" to not pay the driver`);
+
       await DB.cancelOrder(orderId, payDriver);
-      const paymentMessage = payDriver ? 'Order cancelled, inventory restored, and driver will be paid $30' : 'Order cancelled, inventory restored, and driver will not be paid';
+      const paymentMessage = payDriver ? `Order cancelled, inventory restored, and driver will be paid $${driverSalary}` : 'Order cancelled, inventory restored, and driver will not be paid';
       this.showNotification(paymentMessage);
 
       // Real-time listeners will automatically update dashboard
@@ -1414,6 +1429,358 @@ Order #${order.id.slice(-6).toUpperCase()}`;
     }
 
     return success;
+  },
+
+  // ==================== EDIT ORDER FUNCTIONALITY ====================
+
+  // Counter for edit modal line items
+  editLineItemCounter: 0,
+
+  // Store the order being edited
+  currentEditOrder: null,
+
+  /**
+   * Open edit modal for an order
+   */
+  async openEditModal(orderId) {
+    try {
+      const order = await DB.getOrderById(orderId);
+      if (!order) {
+        alert('Order not found');
+        return;
+      }
+
+      if (order.status !== DB.ORDER_STATUS.PENDING) {
+        alert('Only pending orders can be edited');
+        return;
+      }
+
+      // Store the order being edited
+      this.currentEditOrder = order;
+      this.editLineItemCounter = 0;
+
+      // Populate driver dropdown
+      const drivers = await DB.getAllDrivers();
+      const editDriverSelect = document.getElementById('edit-driver');
+
+      let driverOptions = '<option value="">-- Select Driver --</option>';
+      drivers.forEach(driver => {
+        const selected = driver.id === order.driverId ? 'selected' : '';
+        driverOptions += `<option value="${driver.id}" ${selected}>${driver.name}</option>`;
+      });
+      editDriverSelect.innerHTML = driverOptions;
+
+      // Set order details
+      document.getElementById('edit-order-number').textContent = `#${order.id.slice(-6).toUpperCase()}`;
+      document.getElementById('edit-customer-address').value = order.customerAddress || '';
+      document.getElementById('edit-customer-description').value = order.customerDescription || '';
+      document.getElementById('edit-order-remark').value = order.remark || '';
+      document.getElementById('edit-driver-salary').value = order.driverSalary || 30;
+      document.getElementById('edit-total-amount').value = order.totalAmount || 0;
+
+      // Get adjusted inventory for this order
+      const adjustedInventory = await this.getAdjustedInventoryForEdit(order.driverId, order);
+
+      // Clear and populate line items
+      const container = document.getElementById('edit-line-items-container');
+      container.innerHTML = '';
+
+      for (const item of order.lineItems) {
+        await this.addEditLineItem(item, adjustedInventory);
+      }
+
+      // Show modal
+      document.getElementById('edit-order-modal').style.display = 'flex';
+
+      // Bind modal event listeners (only once)
+      this.bindEditModalListeners();
+
+      // Re-bind line item listeners after form clone
+      const lineItems = document.querySelectorAll('#edit-line-items-container .line-item');
+      lineItems.forEach((item, idx) => {
+        this.bindEditLineItemListeners(parseInt(item.dataset.index));
+      });
+
+    } catch (error) {
+      console.error('Error opening edit modal:', error);
+      alert(`Failed to load order: ${error.message}`);
+    }
+  },
+
+  /**
+   * Get inventory adjusted for the order being edited
+   */
+  async getAdjustedInventoryForEdit(driverId, order) {
+    const inventory = await DB.getDriverInventory(driverId);
+
+    // Calculate quantities in the current order
+    const orderQuantities = {};
+    order.lineItems.forEach(item => {
+      orderQuantities[item.productId] = (orderQuantities[item.productId] || 0) + item.actualQuantity;
+    });
+
+    // Add back current order quantities to available inventory
+    return inventory.map(item => ({
+      ...item,
+      remaining: item.remaining + (orderQuantities[item.id] || 0)
+    }));
+  },
+
+  /**
+   * Add a line item to edit modal
+   */
+  async addEditLineItem(itemData = null, inventory = null) {
+    const index = this.editLineItemCounter++;
+    const container = document.getElementById('edit-line-items-container');
+
+    // If no inventory provided, get it
+    if (!inventory) {
+      const driverId = document.getElementById('edit-driver').value;
+      if (this.currentEditOrder) {
+        inventory = await this.getAdjustedInventoryForEdit(driverId, this.currentEditOrder);
+      } else {
+        inventory = await DB.getDriverInventory(driverId);
+      }
+    }
+
+    const lineItemDiv = document.createElement('div');
+    lineItemDiv.className = 'line-item';
+    lineItemDiv.dataset.index = index;
+
+    // Build product options
+    let productOptions = '<option value="">-- Select Product --</option>';
+    inventory.filter(item => item.remaining > 0).forEach(item => {
+      const selected = itemData && item.id === itemData.productId ? 'selected' : '';
+      productOptions += `<option value="${item.id}" ${selected}>${item.name} (${item.remaining} available)</option>`;
+    });
+
+    lineItemDiv.innerHTML = `
+      <div class="form-group">
+        <label for="edit-line-item-product-${index}">Product</label>
+        <select class="line-item-product" id="edit-line-item-product-${index}" required>
+          ${productOptions}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="edit-line-item-category-${index}">Quantity Type</label>
+        <select class="line-item-category" id="edit-line-item-category-${index}" required>
+          <option value="">-- Select Type --</option>
+          <option value="Q" ${itemData && itemData.category === 'Q' ? 'selected' : ''}>Q</option>
+          <option value="H" ${itemData && itemData.category === 'H' ? 'selected' : ''}>H</option>
+          <option value="Oz" ${itemData && itemData.category === 'Oz' ? 'selected' : ''}>Oz</option>
+          <option value="Quantity by pcs" ${itemData && itemData.category === 'Quantity by pcs' ? 'selected' : ''}>Quantity by pcs</option>
+        </select>
+      </div>
+      <div class="form-group" id="edit-custom-quantity-group-${index}" style="display: ${itemData && itemData.category === 'Quantity by pcs' ? 'block' : 'none'};">
+        <label for="edit-line-item-custom-quantity-${index}">Custom Quantity</label>
+        <input type="number" class="line-item-custom-quantity" id="edit-line-item-custom-quantity-${index}" min="1" value="${itemData && itemData.category === 'Quantity by pcs' ? itemData.actualQuantity : ''}">
+      </div>
+      <div class="form-group checkbox">
+        <label for="edit-line-item-gift-${index}">
+          <input type="checkbox" class="line-item-gift" id="edit-line-item-gift-${index}" ${itemData && itemData.isFreeGift ? 'checked' : ''}>
+          Free Gift
+        </label>
+      </div>
+      <button type="button" class="remove-line-item danger-button" data-index="${index}" style="display: ${container.children.length > 0 ? 'inline-block' : 'none'};">Remove</button>
+    `;
+
+    container.appendChild(lineItemDiv);
+
+    // Add event listeners for this line item
+    this.bindEditLineItemListeners(index);
+
+    // Update remove button visibility
+    this.updateEditRemoveButtons();
+  },
+
+  /**
+   * Bind event listeners for edit modal
+   */
+  bindEditModalListeners() {
+    // Remove old listeners by replacing elements (prevent duplicates)
+    const closeBtn = document.getElementById('close-edit-modal');
+    const form = document.getElementById('edit-order-form');
+
+    // Close modal button (outside form)
+    const newCloseBtn = closeBtn.cloneNode(true);
+    closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+    newCloseBtn.addEventListener('click', () => this.closeEditModal());
+
+    // Clone form first, then bind listeners to buttons inside the new form
+    const newForm = form.cloneNode(true);
+    form.parentNode.replaceChild(newForm, form);
+
+    // Now get buttons from the new form
+    const cancelBtn = document.getElementById('cancel-edit-btn');
+    const addLineBtn = document.getElementById('edit-add-line-item');
+
+    // Bind listeners to the new buttons
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this.closeEditModal());
+    }
+
+    if (addLineBtn) {
+      addLineBtn.addEventListener('click', () => this.addEditLineItem());
+    }
+
+    // Form submit
+    newForm.addEventListener('submit', async (e) => await this.handleEditOrderSubmit(e));
+  },
+
+  /**
+   * Bind event listeners for individual line item
+   */
+  bindEditLineItemListeners(index) {
+    const categorySelect = document.getElementById(`edit-line-item-category-${index}`);
+    const customQuantityGroup = document.getElementById(`edit-custom-quantity-group-${index}`);
+    const customQuantityInput = document.getElementById(`edit-line-item-custom-quantity-${index}`);
+    const removeButton = document.querySelector(`.remove-line-item[data-index="${index}"]`);
+
+    // Category change - show/hide custom quantity
+    if (categorySelect) {
+      categorySelect.addEventListener('change', () => {
+        if (categorySelect.value === 'Quantity by pcs') {
+          if (customQuantityGroup) customQuantityGroup.style.display = 'block';
+          if (customQuantityInput) customQuantityInput.required = true;
+        } else {
+          if (customQuantityGroup) customQuantityGroup.style.display = 'none';
+          if (customQuantityInput) {
+            customQuantityInput.required = false;
+            customQuantityInput.value = '';
+          }
+        }
+      });
+    }
+
+    // Remove button
+    if (removeButton) {
+      removeButton.addEventListener('click', () => {
+        const lineItem = document.querySelector(`.line-item[data-index="${index}"]`);
+        if (lineItem) lineItem.remove();
+        this.updateEditRemoveButtons();
+      });
+    }
+  },
+
+  /**
+   * Update remove button visibility for edit modal
+   */
+  updateEditRemoveButtons() {
+    const container = document.getElementById('edit-line-items-container');
+    const removeButtons = container.querySelectorAll('.remove-line-item');
+    const lineItems = container.querySelectorAll('.line-item');
+
+    removeButtons.forEach(button => {
+      button.style.display = lineItems.length > 1 ? 'inline-block' : 'none';
+    });
+  },
+
+  /**
+   * Handle edit order form submission
+   */
+  async handleEditOrderSubmit(event) {
+    event.preventDefault();
+
+    const submitButton = document.getElementById('save-edit-order-btn');
+    if (submitButton.disabled) return;
+
+    // Disable button
+    submitButton.disabled = true;
+    submitButton.textContent = 'Saving...';
+
+    try {
+      const driverId = document.getElementById('edit-driver').value;
+      const customerAddress = document.getElementById('edit-customer-address').value.trim();
+      const customerDescription = document.getElementById('edit-customer-description').value.trim();
+      const remark = document.getElementById('edit-order-remark').value.trim();
+      const driverSalary = parseFloat(document.getElementById('edit-driver-salary').value);
+      const totalAmount = parseFloat(document.getElementById('edit-total-amount').value);
+
+      // Validate
+      if (!driverId || !customerAddress) {
+        throw new Error('Please select a driver and enter customer address');
+      }
+
+      if (isNaN(driverSalary) || driverSalary < 0) {
+        throw new Error('Invalid driver salary');
+      }
+
+      if (isNaN(totalAmount) || totalAmount < 0) {
+        throw new Error('Invalid total amount');
+      }
+
+      // Collect line items
+      const lineItems = [];
+      const lineItemElements = document.querySelectorAll('#edit-line-items-container .line-item');
+
+      for (const element of lineItemElements) {
+        const index = element.dataset.index;
+        const productId = document.getElementById(`edit-line-item-product-${index}`).value;
+        const category = document.getElementById(`edit-line-item-category-${index}`).value;
+        const customQuantity = document.getElementById(`edit-line-item-custom-quantity-${index}`)?.value || 0;
+        const isFreeGift = document.getElementById(`edit-line-item-gift-${index}`).checked;
+
+        if (!productId || !category) {
+          throw new Error('Please fill in all line item fields');
+        }
+
+        if (category === 'Quantity by pcs' && (!customQuantity || customQuantity <= 0)) {
+          throw new Error('Please enter a valid custom quantity');
+        }
+
+        const product = await DB.getProductById(productId);
+        const actualQuantity = this.getDeductionAmount(category, customQuantity);
+
+        lineItems.push({
+          productId,
+          productName: product.name,
+          category,
+          actualQuantity,
+          isFreeGift
+        });
+      }
+
+      if (lineItems.length === 0) {
+        throw new Error('Please add at least one line item');
+      }
+
+      // Update order
+      const updates = {
+        driverId,
+        customerAddress,
+        customerDescription,
+        remark,
+        driverSalary,
+        totalAmount,
+        lineItems
+      };
+
+      await DB.updateOrder(this.currentEditOrder.id, updates);
+
+      // Success
+      this.showNotification('Order updated successfully');
+      this.closeEditModal();
+
+      // Real-time listener will update the list automatically
+
+    } catch (error) {
+      console.error('Error updating order:', error);
+      alert(`Failed to update order: ${error.message}`);
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = 'Save Changes';
+    }
+  },
+
+  /**
+   * Close edit modal
+   */
+  closeEditModal() {
+    document.getElementById('edit-order-modal').style.display = 'none';
+    document.getElementById('edit-order-form').reset();
+    document.getElementById('edit-line-items-container').innerHTML = '';
+    this.currentEditOrder = null;
+    this.editLineItemCounter = 0;
   },
 
 };

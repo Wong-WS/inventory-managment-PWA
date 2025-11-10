@@ -1811,9 +1811,49 @@ export const DB = {
 
       // Handle inventory changes if line items are updated
       if (updates.lineItems && currentOrder.status === this.ORDER_STATUS.PENDING) {
-        // This would require more complex inventory rollback logic
-        // For now, we'll prevent line item updates on existing orders
-        throw new Error('Line item updates not supported for existing orders. Cancel and create a new order instead.');
+        // Validate inventory availability for the new line items
+        const driverId = updates.driverId || currentOrder.driverId;
+        const driverInventory = await this.getDriverInventory(driverId);
+
+        // Calculate old quantities by product
+        const oldQuantities = {};
+        currentOrder.lineItems.forEach(item => {
+          oldQuantities[item.productId] = (oldQuantities[item.productId] || 0) + item.actualQuantity;
+        });
+
+        // Calculate new quantities by product
+        const newQuantities = {};
+        updates.lineItems.forEach(item => {
+          newQuantities[item.productId] = (newQuantities[item.productId] || 0) + item.actualQuantity;
+        });
+
+        // Find all products involved (old and new)
+        const allProductIds = new Set([...Object.keys(oldQuantities), ...Object.keys(newQuantities)]);
+
+        // Validate each product's inventory
+        for (const productId of allProductIds) {
+          const oldQty = oldQuantities[productId] || 0;
+          const newQty = newQuantities[productId] || 0;
+          const netChange = newQty - oldQty; // Positive = need more, Negative = freeing up
+
+          // Only validate if we need MORE inventory
+          if (netChange > 0) {
+            const productInventory = driverInventory.find(inv => inv.id === productId);
+
+            if (!productInventory) {
+              const product = await this.getProductById(productId);
+              throw new Error(`Driver does not have ${product?.name || 'this product'} in inventory`);
+            }
+
+            // Available = current remaining + what we're freeing from this order
+            const available = productInventory.remaining + oldQty;
+
+            if (newQty > available) {
+              const product = await this.getProductById(productId);
+              throw new Error(`Insufficient inventory for ${product?.name || 'product'}. Available: ${available}, Required: ${newQty}`);
+            }
+          }
+        }
       }
 
       const updateData = {
