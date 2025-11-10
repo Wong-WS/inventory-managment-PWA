@@ -1164,11 +1164,21 @@ const DashboardModule = {
 
   // Update recent activity display with real-time data
   async updateRecentActivityDisplay() {
+    // Prevent concurrent updates
+    if (this.isUpdatingActivity) return;
+    this.isUpdatingActivity = true;
+
     const activityList = document.getElementById("recent-activity-list");
-    if (!activityList) return;
+    if (!activityList) {
+      this.isUpdatingActivity = false;
+      return;
+    }
 
     const session = DB.getCurrentSession();
-    if (!session) return;
+    if (!session) {
+      this.isUpdatingActivity = false;
+      return;
+    }
 
     // Always clear the list first to prevent duplicates
     activityList.innerHTML = "";
@@ -1300,6 +1310,9 @@ const DashboardModule = {
     }
 
     this.addActivityListStyles();
+
+    // Release the lock
+    this.isUpdatingActivity = false;
   },
 };
 
