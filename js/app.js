@@ -717,6 +717,21 @@ const DashboardModule = {
       return;
     }
 
+    // Collect all unique product IDs for bulk fetching
+    const productIds = new Set();
+
+    recentActivities.forEach(activity => {
+      if (activity.type === "assignment") {
+        productIds.add(activity.data.productId);
+      }
+    });
+
+    // Bulk fetch all needed products in parallel
+    const products = await Promise.all([...productIds].map(id => DB.getProductById(id)));
+
+    // Create lookup map for instant access
+    const productMap = new Map(products.filter(p => p).map(p => [p.id, p]));
+
     // Display activities
     for (const activity of recentActivities) {
       const li = document.createElement("li");
@@ -739,7 +754,7 @@ const DashboardModule = {
         `;
       } else if (activity.type === "assignment") {
         const assignment = activity.data;
-        const product = await DB.getProductById(assignment.productId);
+        const product = productMap.get(assignment.productId);
 
         if (!product) continue;
 
@@ -807,6 +822,29 @@ const DashboardModule = {
       return;
     }
 
+    // Collect all unique driver and product IDs for bulk fetching
+    const driverIds = new Set();
+    const productIds = new Set();
+
+    recentActivities.forEach(activity => {
+      if (activity.type === "order") {
+        driverIds.add(activity.data.driverId);
+      } else if (activity.type === "assignment") {
+        driverIds.add(activity.data.driverId);
+        productIds.add(activity.data.productId);
+      }
+    });
+
+    // Bulk fetch all needed data in parallel (much faster than sequential queries)
+    const [drivers, products] = await Promise.all([
+      Promise.all([...driverIds].map(id => DB.getDriverById(id))),
+      Promise.all([...productIds].map(id => DB.getProductById(id)))
+    ]);
+
+    // Create lookup maps for instant access (O(1) vs O(n) database query)
+    const driverMap = new Map(drivers.filter(d => d).map(d => [d.id, d]));
+    const productMap = new Map(products.filter(p => p).map(p => [p.id, p]));
+
     // Display activities
     for (const activity of recentActivities) {
       const li = document.createElement("li");
@@ -815,7 +853,7 @@ const DashboardModule = {
 
       if (activity.type === "order") {
         const order = activity.data;
-        const driver = await DB.getDriverById(order.driverId);
+        const driver = driverMap.get(order.driverId);
         if (!driver) continue;
 
         li.innerHTML = `
@@ -831,8 +869,8 @@ const DashboardModule = {
         `;
       } else if (activity.type === "assignment") {
         const assignment = activity.data;
-        const driver = await DB.getDriverById(assignment.driverId);
-        const product = await DB.getProductById(assignment.productId);
+        const driver = driverMap.get(assignment.driverId);
+        const product = productMap.get(assignment.productId);
 
         if (!driver || !product) continue;
 
@@ -1234,13 +1272,45 @@ const DashboardModule = {
     // Sort by date, newest first
     activities.sort((a, b) => b.date - a.date);
 
-    // Take only the 10 most recent activities
-    const recentActivities = activities.slice(0, 10);
+    // Store all activities for load more functionality
+    this.allActivities = activities;
+
+    // Initialize displayed count if not set, or keep existing value
+    if (!this.displayedActivityCount || this.displayedActivityCount > activities.length) {
+      this.displayedActivityCount = Math.min(5, activities.length);
+    }
+
+    // Take only the activities to display based on displayedActivityCount
+    const recentActivities = activities.slice(0, this.displayedActivityCount);
 
     if (recentActivities.length === 0) {
       activityList.innerHTML = '<li class="empty-list">No recent activity.</li>';
+      this.isUpdatingActivity = false;
       return;
     }
+
+    // Collect all unique driver and product IDs for bulk fetching
+    const driverIds = new Set();
+    const productIds = new Set();
+
+    recentActivities.forEach(activity => {
+      if (activity.type === "order") {
+        driverIds.add(activity.data.driverId);
+      } else if (activity.type === "assignment") {
+        driverIds.add(activity.data.driverId);
+        productIds.add(activity.data.productId);
+      }
+    });
+
+    // Bulk fetch all needed data in parallel (much faster than sequential queries)
+    const [drivers, products] = await Promise.all([
+      Promise.all([...driverIds].map(id => DB.getDriverById(id))),
+      Promise.all([...productIds].map(id => DB.getProductById(id)))
+    ]);
+
+    // Create lookup maps for instant access (O(1) vs O(n) database query)
+    const driverMap = new Map(drivers.filter(d => d).map(d => [d.id, d]));
+    const productMap = new Map(products.filter(p => p).map(p => [p.id, p]));
 
     // Display activities
     for (const activity of recentActivities) {
@@ -1261,7 +1331,7 @@ const DashboardModule = {
             </div>
           `;
         } else {
-          const driver = await DB.getDriverById(order.driverId);
+          const driver = driverMap.get(order.driverId);
           if (driver) {
             li.innerHTML = `
               <i class="fas fa-clipboard-list activity-icon"></i>
@@ -1276,7 +1346,7 @@ const DashboardModule = {
         }
       } else if (activity.type === "assignment") {
         const assignment = activity.data;
-        const product = await DB.getProductById(assignment.productId);
+        const product = productMap.get(assignment.productId);
 
         if (product) {
           if (session.role === DB.ROLES.DRIVER) {
@@ -1289,7 +1359,7 @@ const DashboardModule = {
               </div>
             `;
           } else {
-            const driver = await DB.getDriverById(assignment.driverId);
+            const driver = driverMap.get(assignment.driverId);
             if (driver) {
               li.innerHTML = `
                 <i class="fas fa-truck-loading activity-icon"></i>
@@ -1308,6 +1378,9 @@ const DashboardModule = {
         activityList.appendChild(li);
       }
     }
+
+    // Show/hide load more button
+    this.updateLoadMoreButton();
 
     this.addActivityListStyles();
 
