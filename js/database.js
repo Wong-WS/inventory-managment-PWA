@@ -121,7 +121,8 @@ export const DB = {
   listenToOrders(callback, filters = {}) {
     const listenerId = 'orders' + (filters.driverId ? '_driver_' + filters.driverId : '') +
                       (filters.salesRepId ? '_salesrep_' + filters.salesRepId : '') +
-                      (filters.status ? '_status_' + filters.status : '');
+                      (filters.status ? '_status_' + filters.status : '') +
+                      (filters.todayOnly ? '_today' : '');
 
     this.cleanupListener(listenerId);
 
@@ -136,6 +137,13 @@ export const DB = {
     }
     if (filters.status) {
       q = query(q, where("status", "==", filters.status));
+    }
+
+    // Add date filter to only fetch today's orders (if requested)
+    if (filters.todayOnly) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Start of today
+      q = query(q, where("createdAt", ">=", today));
     }
 
     // Add ordering by creation date (newest first) - only if no other filters to avoid index issues
