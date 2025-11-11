@@ -2887,6 +2887,72 @@ export const DB = {
   },
 
   /**
+   * Create driver-to-boss payment by admin (auto-approved)
+   * This is used when admin submits payment on behalf of driver (e.g., cash payment in real life)
+   * @param {Object} paymentData - Payment details
+   * @returns {Promise<Object>} The created payment object
+   */
+  async createDriverToBossPaymentByAdmin(paymentData) {
+    const session = this.getCurrentSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+
+    // Validate required fields
+    if (!paymentData.driverId) {
+      throw new Error('Driver ID is required');
+    }
+    if (!paymentData.driverName) {
+      throw new Error('Driver name is required');
+    }
+    if (paymentData.amount === undefined || paymentData.amount === null || paymentData.amount <= 0) {
+      throw new Error('Amount must be greater than zero');
+    }
+    if (!paymentData.reason || paymentData.reason.trim().length < 5) {
+      throw new Error('Reason is required (minimum 5 characters)');
+    }
+
+    // Verify driver exists
+    const driver = await this.getDriverById(paymentData.driverId);
+    if (!driver) {
+      throw new Error('Driver not found');
+    }
+
+    try {
+      const now = serverTimestamp();
+      const newPaymentData = {
+        driverId: paymentData.driverId,
+        driverName: paymentData.driverName,
+        amount: parseFloat(paymentData.amount),
+        paymentType: 'Boss Payment', // Fixed type for driver-to-boss payments
+        reason: paymentData.reason.trim(),
+        direction: 'driver_to_boss', // Distinguish from admin-to-driver payments
+        status: 'approved',           // AUTO-APPROVED since admin is submitting
+        createdBy: session.userId,    // Admin who created it
+        createdAt: now,
+        approvedBy: session.userId,   // Same admin who created it
+        approvedAt: now,
+        date: now                     // Use current date
+      };
+
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.DIRECT_PAYMENTS), newPaymentData);
+      const newPayment = {
+        id: docRef.id,
+        ...newPaymentData,
+        createdAt: new Date().toISOString(),
+        approvedAt: new Date().toISOString(),
+        date: new Date().toISOString()
+      };
+
+      console.log('Admin created driver-to-boss payment (auto-approved):', newPayment);
+      return newPayment;
+    } catch (error) {
+      console.error('Error creating driver-to-boss payment by admin:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Get all pending driver-to-boss payments (for admin approval)
    * @param {string} driverId - Optional driver ID to filter by specific driver
    * @returns {Promise<Array>} Array of pending payment objects

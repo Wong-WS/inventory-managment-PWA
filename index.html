@@ -609,8 +609,50 @@
             </div>
 
             <div id="pending-payments-report" class="report-section">
+                <!-- Admin Submit Payment on Behalf of Driver -->
+                <div class="admin-payment-section">
+                    <h4>Submit Payment on Behalf of Driver</h4>
+                    <p class="section-helper-text">
+                        <i class="fas fa-info-circle"></i>
+                        For drivers who paid cash in real life but haven't recorded it in the app
+                    </p>
+                    <form id="admin-driver-payment-form" class="admin-payment-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="admin-payment-driver">Driver *</label>
+                                <select id="admin-payment-driver" required>
+                                    <option value="">-- Select Driver --</option>
+                                    <!-- Drivers will be loaded here -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <div class="holding-display">
+                                    <label>Current Holding:</label>
+                                    <span id="admin-payment-holding" class="holding-amount-text">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="admin-payment-amount">Amount ($) *</label>
+                                <input type="number" id="admin-payment-amount" step="0.01" min="0.01" placeholder="0.00" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-payment-reason">Reason *</label>
+                            <textarea id="admin-payment-reason" rows="3" placeholder="e.g., Paid cash to boss today..." required minlength="5"></textarea>
+                        </div>
+                        <button type="submit" id="submit-admin-payment" class="primary-button">
+                            <i class="fas fa-paper-plane"></i> Submit Payment
+                        </button>
+                    </form>
+                </div>
+
+                <div class="section-divider"></div>
+
                 <h3>Pending Driver Payments</h3>
                 <p class="section-description">Review and approve payments submitted by drivers</p>
+
                 <div id="pending-payments-results" class="report-results">
                     <!-- Pending payments will be loaded here -->
                 </div>
@@ -618,6 +660,36 @@
                     <i class="fas fa-check-circle"></i>
                     <p>No pending payments</p>
                     <small>Driver payment requests will appear here for approval</small>
+                </div>
+
+                <div class="section-divider"></div>
+
+                <!-- Payment History Section -->
+                <div class="payment-history-section">
+                    <h3>Payment History</h3>
+                    <p class="section-description">View all driver payment records</p>
+
+                    <div class="payment-history-filters">
+                        <div class="form-group">
+                            <label for="payment-history-driver">Filter by Driver</label>
+                            <select id="payment-history-driver">
+                                <option value="">All Drivers</option>
+                                <!-- Drivers will be loaded here -->
+                            </select>
+                        </div>
+                        <button id="refresh-payment-history" class="secondary-button">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+
+                    <div id="payment-history-results" class="payment-history-list">
+                        <!-- Payment history will be loaded here -->
+                    </div>
+                    <div id="no-payment-history-message" class="no-data-message" style="display: none;">
+                        <i class="fas fa-receipt"></i>
+                        <p>No payment history</p>
+                        <small>Driver payments will appear here</small>
+                    </div>
                 </div>
             </div>
         </div>

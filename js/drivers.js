@@ -386,6 +386,19 @@ const DriversModule = {
       if (paymentDriverSelect) {
         paymentDriverSelect.innerHTML = options;
       }
+
+      // Update admin payment driver dropdown (submit on behalf of driver)
+      const adminPaymentDriverSelect = document.getElementById('admin-payment-driver');
+      if (adminPaymentDriverSelect) {
+        adminPaymentDriverSelect.innerHTML = options;
+      }
+
+      // Update payment history driver dropdown
+      const paymentHistoryDriverSelect = document.getElementById('payment-history-driver');
+      if (paymentHistoryDriverSelect) {
+        paymentHistoryDriverSelect.innerHTML = '<option value="">All Drivers</option>' +
+          options.replace('<option value="">-- Select Driver --</option>', '');
+      }
     } catch (error) {
       console.error('Error updating driver dropdowns:', error);
     }
