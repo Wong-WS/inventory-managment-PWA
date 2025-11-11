@@ -386,16 +386,20 @@ const DashboardModule = {
       driverCount.textContent = drivers.length;
     }
 
-    // Update today's sales (temporarily disabled for Firebase migration)
+    // Update today's sales
     const todaySales = document.getElementById("today-sales");
     if (todaySales) {
-      todaySales.textContent = "$0.00";
+      const todayOrders = await this.getTodayCompletedOrders();
+      const totalSales = todayOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+      todaySales.textContent = `$${totalSales.toFixed(2)}`;
     }
 
-    // Update total inventory (temporarily disabled for Firebase migration)
+    // Update total inventory
     const totalInventory = document.getElementById("total-inventory");
     if (totalInventory) {
-      totalInventory.textContent = "0";
+      const products = await DB.getAllProducts();
+      const total = products.reduce((sum, product) => sum + (product.totalQuantity || 0), 0);
+      totalInventory.textContent = total;
     }
   },
 
@@ -487,6 +491,33 @@ const DashboardModule = {
         completed: { count: 0, totalAmount: 0 },
         cancelled: { count: 0 }
       };
+    }
+  },
+
+  // Get today's completed orders for admin dashboard
+  async getTodayCompletedOrders() {
+    try {
+      const allOrders = await DB.getAllOrders();
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+      // Filter to today's completed orders
+      const todayCompletedOrders = allOrders.filter(order => {
+        if (order.status !== DB.ORDER_STATUS.COMPLETED) return false;
+
+        // Use completedAt if available, otherwise createdAt
+        const orderDate = order.completedAt?.toDate ? order.completedAt.toDate() :
+                         (order.completedAt ? new Date(order.completedAt) :
+                         (order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt)));
+
+        return orderDate >= todayStart && orderDate < todayEnd;
+      });
+
+      return todayCompletedOrders;
+    } catch (error) {
+      console.error('Error getting today\'s completed orders:', error);
+      return [];
     }
   },
 
