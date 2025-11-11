@@ -1379,30 +1379,34 @@ const OrdersModule = {
   formatOrderDetails(order, driver) {
     const createdDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
     const formattedDate = `${createdDate.toLocaleDateString()} ${createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    
+
     // Format line items
     let itemsText = '';
     order.lineItems.forEach(item => {
-      const giftNote = item.isFreeGift ? ' (Free Gift)' : '';
+      const freePrefix = item.isFreeGift ? 'Free ' : '';
       let displayQuantity;
-      
+
       if (item.category) {
         displayQuantity = item.category === 'Quantity by pcs' ? `${item.actualQuantity} pcs` : item.category;
       } else {
         displayQuantity = item.quantity || item.actualQuantity;
       }
-      
-      itemsText += `• ${item.productName} x ${displayQuantity}${giftNote}\n`;
+
+      itemsText += `${freePrefix}${item.productName} - ${displayQuantity}\n`;
     });
 
-    // Build formatted text
-    const orderText = `🚚 ORDER DETAILS
-Address: ${order.customerAddress}${order.customerDescription ? `\nDescription: ${order.customerDescription}` : ''}${order.remark ? `\nRemark: ${order.remark}` : ''}
----
-Items:
-${itemsText}---
-Total: $${order.totalAmount.toFixed(2)}
-Order #${order.id.slice(-6).toUpperCase()}`;
+    // Build formatted text - simplified format
+    let orderText = `${order.customerAddress}\n${itemsText}${order.totalAmount.toFixed(2)}`;
+
+    // Add description if exists
+    if (order.customerDescription) {
+      orderText += `\n${order.customerDescription}`;
+    }
+
+    // Add remark if exists
+    if (order.remark) {
+      orderText += `\n${order.remark}`;
+    }
 
     return orderText;
   },
