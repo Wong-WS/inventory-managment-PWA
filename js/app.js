@@ -38,6 +38,15 @@ const AppModule = {
 
   // Load a specific tab
   async loadTab(tabId) {
+    // Cleanup listeners from previous tab (if leaving dashboard)
+    if (this.currentTab !== tabId && typeof DashboardModule !== "undefined") {
+      // Clean up all Firebase listeners to prevent memory leaks and unnecessary reads
+      DB.cleanupAllListeners();
+    }
+
+    // Store current tab
+    this.currentTab = tabId;
+
     // Update active tab button
     const tabButtons = document.querySelectorAll(".tab-button");
 
@@ -216,7 +225,11 @@ const DashboardModule = {
   // Initialize the dashboard
   async init() {
     await this.updateDashboard();
-    // Don't load recent activity manually - let real-time listeners handle it
+
+    // Setup real-time listeners for recent activity
+    await this.loadRecentActivity();
+
+    // Setup dashboard listeners (for stats)
     await this.setupDashboardListeners();
 
     // If listeners are already initialized (returning to dashboard tab),
@@ -715,7 +728,7 @@ const DashboardModule = {
     }
   },
 
-  // Load recent activity for drivers (their own orders and assignments)
+  // Load recent activity for drivers (their own orders and assignments) - using real-time listeners
   async loadDriverRecentActivity(activityList) {
     const user = await DB.getCurrentUser();
     const driverId = user ? user.driverId : null;
@@ -726,74 +739,118 @@ const DashboardModule = {
       return;
     }
 
-    // Get driver's recent orders and assignments (today only)
-    const driverOrders = await DB.getOrdersByDriver(driverId);
-    const allAssignments = await DB.getAllAssignments({ todayOnly: true });
-    const driverAssignments = allAssignments.filter(
-      (a) => a.driverId === driverId
-    );
+    // Temporary storage for orders and assignments
+    let ordersData = [];
+    let assignmentsData = [];
+    let updateTimeout = null;
 
-    // Combine and sort by date
-    const activities = [
-      ...driverOrders.map((order) => ({
-        type: "order",
-        date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
-        data: order,
-      })),
-      ...driverAssignments.map((assignment) => ({
-        type: "assignment",
-        date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
-        data: assignment,
-      })),
-    ];
+    // Function to combine and display activities (debounced)
+    const updateActivitiesDisplay = () => {
+      // Clear any pending update
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
 
-    // Sort by date, newest first
-    activities.sort((a, b) => b.date - a.date);
+      // Debounce to wait for both listeners to fire
+      updateTimeout = setTimeout(async () => {
+        const activities = [
+          ...ordersData.map((order) => ({
+            type: "order",
+            date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
+            data: order,
+          })),
+          ...assignmentsData.map((assignment) => ({
+            type: "assignment",
+            date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
+            data: assignment,
+          })),
+        ];
 
-    // Store all activities for load more functionality
-    this.allActivities = activities;
-    this.displayedActivityCount = Math.min(5, activities.length);
+        // Sort by date, newest first
+        activities.sort((a, b) => b.date - a.date);
 
-    // Use shared display method
-    await this.displayActivities(activityList, true);
+        // Store all activities for load more functionality
+        this.allActivities = activities;
+        this.displayedActivityCount = Math.min(5, activities.length);
+
+        // Use shared display method
+        await this.displayActivities(activityList, true);
+      }, 100); // Wait 100ms for both listeners to fire
+    };
+
+    // Setup real-time listener for driver orders
+    DB.listenToRecentDriverOrders(driverId, { recentDays: 3, limit: 30 }, (orders) => {
+      ordersData = orders;
+      updateActivitiesDisplay();
+    });
+
+    // Setup real-time listener for driver assignments
+    DB.listenToRecentAssignments({ recentDays: 3, driverId: driverId, limit: 30 }, (assignments) => {
+      assignmentsData = assignments;
+      updateActivitiesDisplay();
+    });
   },
 
-  // Load recent activity for admin/sales rep users (all activities)
+  // Load recent activity for admin/sales rep users (all activities) - using real-time listeners
   async loadAdminRecentActivity(activityList) {
-    // Get recent orders and assignments (today only for performance)
-    const orders = await DB.getAllOrders({ todayOnly: true });
-
-    // Sales reps only see orders, admins see orders + assignments
     const session = DB.getCurrentSession();
     const isAdmin = session && session.role === DB.ROLES.ADMIN;
 
-    const activities = [
-      ...orders.map((order) => ({
-        type: "order",
-        date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
-        data: order,
-      }))
-    ];
+    // Temporary storage for orders and assignments
+    let ordersData = [];
+    let assignmentsData = [];
+    let updateTimeout = null;
 
-    // Only admins see assignments in recent activity
+    // Function to combine and display activities (debounced)
+    const updateActivitiesDisplay = () => {
+      // Clear any pending update
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
+
+      // Debounce to wait for both listeners to fire
+      updateTimeout = setTimeout(async () => {
+        const activities = [
+          ...ordersData.map((order) => ({
+            type: "order",
+            date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
+            data: order,
+          }))
+        ];
+
+        if (isAdmin) {
+          activities.push(...assignmentsData.map((assignment) => ({
+            type: "assignment",
+            date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
+            data: assignment,
+          })));
+        }
+
+        // Sort by date, newest first
+        activities.sort((a, b) => b.date - a.date);
+
+        // Store all activities for load more functionality
+        this.allActivities = activities;
+        this.displayedActivityCount = Math.min(5, activities.length);
+
+        // Use shared display method
+        await this.displayActivities(activityList, false);
+      }, 100); // Wait 100ms for both listeners to fire
+    };
+
+    // Setup real-time listener for orders
+    DB.listenToRecentOrders({ recentDays: 3, limit: 50 }, (orders) => {
+      ordersData = orders;
+      updateActivitiesDisplay();
+    });
+
+    // Setup real-time listener for assignments (admins only)
     if (isAdmin) {
-      const assignments = await DB.getAllAssignments({ todayOnly: true });
-      activities.push(...assignments.map((assignment) => ({
-        type: "assignment",
-        date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
-        data: assignment,
-      })));
+      DB.listenToRecentAssignments({ recentDays: 3, limit: 50 }, (assignments) => {
+        assignmentsData = assignments;
+        updateActivitiesDisplay();
+      });
     }
-
-    // Sort by date, newest first
-    activities.sort((a, b) => b.date - a.date);
-
-    // Store all activities for load more functionality
-    this.allActivities = activities;
-    this.displayedActivityCount = Math.min(5, activities.length);
-
-    // Use shared display method
-    await this.displayActivities(activityList, false);
   },
 
   // Update load more button visibility and handler
@@ -883,12 +940,15 @@ const DashboardModule = {
       if (activity.type === "order") {
         const order = activity.data;
 
+        // Generate short order ID (last 6 characters)
+        const orderId = order.id.slice(-6).toUpperCase();
+
         if (isDriver) {
           // Driver view - show customer info
           li.innerHTML = `
             <i class="fas fa-clipboard-list activity-icon"></i>
             <div class="activity-details">
-              <strong>Order: $${order.totalAmount.toFixed(2)}</strong>
+              <strong>Order #${orderId}: $${order.totalAmount.toFixed(2)}</strong>
               <span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span><br>
               <span>Customer: ${order.customerAddress}</span><br>
               <small>${formattedDate}</small>
@@ -902,7 +962,7 @@ const DashboardModule = {
           li.innerHTML = `
             <i class="fas fa-clipboard-list activity-icon"></i>
             <div class="activity-details">
-              <strong>Order: $${order.totalAmount.toFixed(2)}</strong>
+              <strong>Order #${orderId}: $${order.totalAmount.toFixed(2)}</strong>
               <span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span><br>
               <span>Driver: ${driver.name}</span><br>
               <small>${formattedDate}</small>
@@ -1051,24 +1111,21 @@ const DashboardModule = {
     const session = DB.getCurrentSession();
     if (!session) return;
 
-    // Listen to orders for dashboard stats and recent activity
+    // Listen to orders for dashboard stats only
+    // NOTE: Recent activity now has its own dedicated listeners via loadRecentActivity()
     this.ordersListenerUnsubscribe = DB.listenToOrders(async (orders) => {
       // Cache orders data
       this.cachedOrders = orders;
 
       // Update dashboard stats when orders change
       await this.updateDashboardFromOrders(orders);
-
-      // Update recent activity with new orders
-      this.updateRecentActivityFromOrders(orders);
     });
 
-    // Listen to assignments for recent activity
+    // Listen to assignments for caching only
+    // NOTE: Recent activity now has its own dedicated listeners via loadRecentActivity()
     this.assignmentsListenerUnsubscribe = DB.listenToAssignments(async (assignments) => {
       // Cache assignments data
       this.cachedAssignments = assignments;
-
-      this.updateRecentActivityFromAssignments(assignments);
     });
 
     // For admin/sales rep dashboards, also listen to products and drivers

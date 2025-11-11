@@ -17,6 +17,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   serverTimestamp,
   writeBatch,
   onSnapshot
@@ -191,6 +192,141 @@ export const DB = {
     this.listeners.set(listenerId, unsubscribe);
 
     // Return a cleanup function that removes the listener from both Firebase and internal tracking
+    return () => {
+      this.cleanupListener(listenerId);
+    };
+  },
+
+  /**
+   * Listen to recent orders in real-time (for Recent Activity)
+   * @param {Object} options - Query options
+   * @param {number} options.recentDays - Number of recent days to fetch
+   * @param {number} options.limit - Maximum number of orders to fetch
+   * @param {Function} callback - Callback function to handle order updates
+   * @returns {Function} Unsubscribe function to cleanup the listener
+   */
+  listenToRecentOrders(options, callback) {
+    const listenerId = `recent_orders_${options.recentDays}_${options.limit}`;
+    this.cleanupListener(listenerId);
+
+    // Calculate date range
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - (options.recentDays - 1));
+    daysAgo.setHours(0, 0, 0, 0);
+
+    let q = query(
+      collection(db, this.COLLECTIONS.ORDERS),
+      where("createdAt", ">=", daysAgo),
+      orderBy("createdAt", "desc")
+    );
+
+    if (options.limit) {
+      q = query(q, limit(options.limit));
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(orders);
+    }, (error) => {
+      console.error('Error listening to recent orders:', error);
+      callback([]);
+    });
+
+    this.listeners.set(listenerId, unsubscribe);
+
+    return () => {
+      this.cleanupListener(listenerId);
+    };
+  },
+
+  /**
+   * Listen to recent assignments in real-time (for Recent Activity)
+   * @param {Object} options - Query options
+   * @param {number} options.recentDays - Number of recent days to fetch
+   * @param {string} options.driverId - Optional driver ID filter
+   * @param {number} options.limit - Maximum number of assignments to fetch
+   * @param {Function} callback - Callback function to handle assignment updates
+   * @returns {Function} Unsubscribe function to cleanup the listener
+   */
+  listenToRecentAssignments(options, callback) {
+    const listenerId = `recent_assignments_${options.recentDays}_${options.driverId || 'all'}_${options.limit}`;
+    this.cleanupListener(listenerId);
+
+    // Calculate date range
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - (options.recentDays - 1));
+    daysAgo.setHours(0, 0, 0, 0);
+
+    let q = query(
+      collection(db, this.COLLECTIONS.ASSIGNMENTS),
+      where("assignedAt", ">=", daysAgo)
+    );
+
+    // Add driver filter if specified
+    if (options.driverId) {
+      q = query(q, where("driverId", "==", options.driverId));
+    }
+
+    q = query(q, orderBy("assignedAt", "desc"));
+
+    if (options.limit) {
+      q = query(q, limit(options.limit));
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const assignments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(assignments);
+    }, (error) => {
+      console.error('Error listening to recent assignments:', error);
+      callback([]);
+    });
+
+    this.listeners.set(listenerId, unsubscribe);
+
+    return () => {
+      this.cleanupListener(listenerId);
+    };
+  },
+
+  /**
+   * Listen to recent driver orders in real-time (for Driver Recent Activity)
+   * @param {string} driverId - Driver ID
+   * @param {Object} options - Query options
+   * @param {number} options.recentDays - Number of recent days to fetch
+   * @param {number} options.limit - Maximum number of orders to fetch
+   * @param {Function} callback - Callback function to handle order updates
+   * @returns {Function} Unsubscribe function to cleanup the listener
+   */
+  listenToRecentDriverOrders(driverId, options, callback) {
+    const listenerId = `recent_driver_orders_${driverId}_${options.recentDays}_${options.limit}`;
+    this.cleanupListener(listenerId);
+
+    // Calculate date range
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - (options.recentDays - 1));
+    daysAgo.setHours(0, 0, 0, 0);
+
+    let q = query(
+      collection(db, this.COLLECTIONS.ORDERS),
+      where("driverId", "==", driverId),
+      where("createdAt", ">=", daysAgo),
+      orderBy("createdAt", "desc")
+    );
+
+    if (options.limit) {
+      q = query(q, limit(options.limit));
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(orders);
+    }, (error) => {
+      console.error('Error listening to recent driver orders:', error);
+      callback([]);
+    });
+
+    this.listeners.set(listenerId, unsubscribe);
+
     return () => {
       this.cleanupListener(listenerId);
     };
@@ -1297,6 +1433,37 @@ export const DB = {
 
   // Assignments (Firebase versions)
   async getAllAssignments(options = {}) {
+    // Support for recent days filter (e.g., last 3 days)
+    if (options.recentDays) {
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - (options.recentDays - 1)); // -1 because we include today
+      daysAgo.setHours(0, 0, 0, 0);
+
+      let q = query(
+        collection(db, this.COLLECTIONS.ASSIGNMENTS),
+        where("assignedAt", ">=", daysAgo)
+      );
+
+      // Add driver filter if specified
+      if (options.driverId) {
+        q = query(q, where("driverId", "==", options.driverId));
+      }
+
+      // Add ordering if requested
+      if (options.orderBy) {
+        q = query(q, orderBy("assignedAt", "desc"));
+      }
+
+      // Add limit if specified
+      if (options.limit) {
+        q = query(q, limit(options.limit));
+      }
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
+
+    // Legacy support for todayOnly
     if (options.todayOnly) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -1307,6 +1474,7 @@ export const DB = {
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     }
+
     return await this.getAll(this.COLLECTIONS.ASSIGNMENTS);
   },
 
@@ -1613,6 +1781,32 @@ export const DB = {
    * @returns {Array} Array of order objects
    */
   async getAllOrders(options = {}) {
+    // Support for recent days filter (e.g., last 3 days)
+    if (options.recentDays) {
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - (options.recentDays - 1)); // -1 because we include today
+      daysAgo.setHours(0, 0, 0, 0);
+
+      let q = query(
+        collection(db, this.COLLECTIONS.ORDERS),
+        where("createdAt", ">=", daysAgo)
+      );
+
+      // Add ordering if requested
+      if (options.orderBy) {
+        q = query(q, orderBy("createdAt", "desc"));
+      }
+
+      // Add limit if specified
+      if (options.limit) {
+        q = query(q, limit(options.limit));
+      }
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
+
+    // Legacy support for todayOnly
     if (options.todayOnly) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -1623,6 +1817,7 @@ export const DB = {
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     }
+
     return await this.getAll(this.COLLECTIONS.ORDERS);
   },
 
@@ -1645,14 +1840,34 @@ export const DB = {
   /**
    * Get orders by driver ID
    * @param {string} driverId - Driver ID
+   * @param {Object} options - Query options (recentDays, orderBy, limit)
    * @returns {Array} Array of orders for the driver
    */
-  async getOrdersByDriver(driverId) {
+  async getOrdersByDriver(driverId, options = {}) {
     try {
-      const q = query(
+      let q = query(
         collection(db, this.COLLECTIONS.ORDERS),
         where("driverId", "==", driverId)
       );
+
+      // Add date filter if recentDays specified
+      if (options.recentDays) {
+        const daysAgo = new Date();
+        daysAgo.setDate(daysAgo.getDate() - (options.recentDays - 1)); // -1 because we include today
+        daysAgo.setHours(0, 0, 0, 0);
+        q = query(q, where("createdAt", ">=", daysAgo));
+      }
+
+      // Add ordering if requested
+      if (options.orderBy) {
+        q = query(q, orderBy("createdAt", "desc"));
+      }
+
+      // Add limit if specified
+      if (options.limit) {
+        q = query(q, limit(options.limit));
+      }
+
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
