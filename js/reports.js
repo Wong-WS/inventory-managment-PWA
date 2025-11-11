@@ -49,9 +49,107 @@ const ReportsModule = {
     // Initialize cache for performance
     await this.initializeCache();
 
+    // Add report styles on init (not just when generating sales report)
+    this.addReportStyles();
+
     this.bindEvents();
     await this.updateDriverDropdowns();
     this.setDefaultDate();
+  },
+
+  // Add report styles to document head
+  addReportStyles() {
+    // Only add styles once
+    if (document.head.querySelector('style[data-report-styles]')) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.setAttribute('data-report-styles', 'true');
+    style.textContent = `
+      .report-summary {
+        margin-bottom: 1.5rem;
+      }
+      .report-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+      .stat-item {
+        background-color: var(--card-background);
+        padding: 1rem;
+        border-radius: var(--border-radius);
+        box-shadow: var(--box-shadow);
+        min-height: 80px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .stat-label {
+        font-weight: 500;
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        margin-bottom: 0.25rem;
+      }
+      .stat-value {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+      .stat-detail {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+      }
+      .report-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+        background-color: var(--card-background);
+        border-radius: var(--border-radius);
+        overflow: hidden;
+        box-shadow: var(--box-shadow);
+      }
+      @media (max-width: 768px) {
+      .report-table {
+        overflow-x: auto;
+        display: block;
+      }
+      .report-table thead,
+      .report-table tbody,
+      .report-table tr {
+        display: table;
+        width: 100%;
+        table-layout: fixed;
+      }
+      .report-table th, .report-table td {
+        padding: 0.8rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .report-table th {
+        background-color: rgba(0,0,0,0.05);
+        font-weight: 600;
+      }
+      .report-table tbody tr:nth-child(even) {
+        background-color: rgba(0,0,0,0.02);
+      }
+      .report-table tbody tr:hover {
+        background-color: rgba(0,0,0,0.05);
+      }
+      @media (max-width: 768px) {
+        .report-stats {
+          grid-template-columns: 1fr;
+        }
+        .stat-item {
+          padding: 0.75rem;
+          min-height: 60px;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
   },
 
   // Bind event listeners
@@ -107,7 +205,7 @@ const ReportsModule = {
         button.classList.remove('active');
       }
     });
-    
+
     // Update report sections
     const reportSections = document.querySelectorAll('.report-section');
     reportSections.forEach(section => {
@@ -117,6 +215,11 @@ const ReportsModule = {
         section.classList.remove('active');
       }
     });
+
+    // Load pending payments if that tab is selected
+    if (tabId === 'pending-payments') {
+      this.loadPendingPayments();
+    }
   },
 
   // Show loading indicator
@@ -352,91 +455,6 @@ const ReportsModule = {
 
     // Display the report
     resultsDiv.innerHTML = reportHTML;
-    
-    // Add some styles for the report
-    const style = document.createElement('style');
-    style.textContent = `
-      .report-summary {
-        margin-bottom: 1.5rem;
-      }
-      .report-stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-        margin-top: 1rem;
-      }
-      .stat-item {
-        background-color: var(--card-background);
-        padding: 1rem;
-        border-radius: var(--border-radius);
-        box-shadow: var(--box-shadow);
-        min-height: 80px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-      }
-      .stat-label {
-        font-weight: 500;
-        margin-bottom: 0.5rem;
-        display: block;
-        font-size: 0.9rem;
-        color: #666;
-      }
-      .stat-value {
-        font-weight: 700;
-        color: var(--primary-color);
-        font-size: 1.5rem;
-      }
-      .report-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 1rem;
-        margin-bottom: 1.5rem;
-        overflow-x: auto;
-        display: block;
-      }
-      .report-table thead,
-      .report-table tbody,
-      .report-table tr {
-        display: table;
-        width: 100%;
-        table-layout: fixed;
-      }
-      .report-table th, .report-table td {
-        padding: 0.8rem;
-        text-align: left;
-        border-bottom: 1px solid var(--border-color);
-      }
-      .report-table th {
-        background-color: rgba(0,0,0,0.05);
-        font-weight: 600;
-      }
-      .report-table tbody tr:nth-child(even) {
-        background-color: rgba(0,0,0,0.02);
-      }
-      .no-data {
-        padding: 1rem;
-        text-align: center;
-        color: #666;
-      }
-
-      /* Mobile optimization */
-      @media (max-width: 767px) {
-        .report-stats {
-          grid-template-columns: 1fr;
-          gap: 0.75rem;
-        }
-        .stat-item {
-          padding: 0.75rem;
-          min-height: 60px;
-        }
-      }
-    `;
-    
-    if (!document.head.querySelector('style[data-report-styles]')) {
-      style.setAttribute('data-report-styles', 'true');
-      document.head.appendChild(style);
-    }
   },
 
   // Generate inventory report
@@ -669,12 +687,40 @@ const ReportsModule = {
 
     // Calculate earnings for each driver in parallel
     const driverEarningsPromises = drivers.map(async (driver) => {
+      // Get period-based data for display
       const orders = await DB.getOrdersByPeriod(driver.id, period, date);
       const directPayments = await DB.getDirectPaymentsByPeriod(driver.id, period, date);
-      const earnings = this.calculateDriverEarnings(orders, directPayments);
+      const approvedBossPayments = await DB.getApprovedDriverPayments(driver.id, period, date);
+
+      // Get ALL-TIME data for holding calculation
+      const allTimeOrders = await DB.getOrdersByDriver(driver.id);
+      const allTimeDirectPayments = await DB.getDirectPaymentsByDriver(driver.id);
+      const allTimeApprovedBossPayments = await DB.getApprovedDriverPayments(driver.id, null, null);
+
+      // Filter all-time orders to only completed/cancelled paid ones
+      const allTimePaidOrders = allTimeOrders.filter(order => {
+        if (order.status === DB.ORDER_STATUS.COMPLETED) {
+          return true;
+        }
+        if (order.status === DB.ORDER_STATUS.CANCELLED) {
+          return order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery';
+        }
+        return false;
+      });
+
+      // Calculate period earnings for display
+      const earnings = this.calculateDriverEarnings(orders, directPayments, approvedBossPayments);
+
+      // Calculate all-time holding
+      const allTimeEarnings = this.calculateDriverEarnings(allTimePaidOrders, allTimeDirectPayments, allTimeApprovedBossPayments);
+
       return {
         driver,
-        ...earnings
+        ...earnings,
+        // Override with all-time holding
+        holdingAmount: allTimeEarnings.holdingAmount,
+        allTimeBossCollection: allTimeEarnings.bossCollection,
+        allTimeApprovedBossPayments: allTimeEarnings.approvedBossPaymentsTotal
       };
     });
 
@@ -687,6 +733,8 @@ const ReportsModule = {
       totalDirectPayments: driverEarnings.reduce((sum, d) => sum + d.directPaymentsTotal, 0),
       totalDriverEarnings: driverEarnings.reduce((sum, d) => sum + d.totalDriverEarnings, 0),
       totalBossCollection: driverEarnings.reduce((sum, d) => sum + d.bossCollection, 0),
+      totalApprovedBossPayments: driverEarnings.reduce((sum, d) => sum + d.allTimeApprovedBossPayments, 0),
+      totalHolding: driverEarnings.reduce((sum, d) => sum + d.holdingAmount, 0),
       totalOrders: driverEarnings.reduce((sum, d) => sum + d.totalOrders, 0),
       totalDeliveries: driverEarnings.reduce((sum, d) => sum + d.deliveryCount, 0)
     };
@@ -704,16 +752,44 @@ const ReportsModule = {
       return;
     }
 
+    // Get period-based data for display
     const orders = await DB.getOrdersByPeriod(driverId, period, date);
     const directPayments = await DB.getDirectPaymentsByPeriod(driverId, period, date);
-    const earnings = this.calculateDriverEarnings(orders, directPayments);
+    const approvedBossPayments = await DB.getApprovedDriverPayments(driverId, period, date);
+
+    // Get ALL-TIME data for holding calculation
+    const allTimeOrders = await DB.getOrdersByDriver(driverId);
+    const allTimeDirectPayments = await DB.getDirectPaymentsByDriver(driverId);
+    const allTimeApprovedBossPayments = await DB.getApprovedDriverPayments(driverId, null, null);
+
+    // Filter all-time orders to only completed/cancelled paid ones
+    const allTimePaidOrders = allTimeOrders.filter(order => {
+      if (order.status === DB.ORDER_STATUS.COMPLETED) {
+        return true;
+      }
+      if (order.status === DB.ORDER_STATUS.CANCELLED) {
+        return order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery';
+      }
+      return false;
+    });
+
+    // Calculate period earnings for display
+    const earnings = this.calculateDriverEarnings(orders, directPayments, approvedBossPayments);
+
+    // Calculate all-time holding
+    const allTimeEarnings = this.calculateDriverEarnings(allTimePaidOrders, allTimeDirectPayments, allTimeApprovedBossPayments);
+
+    // Override with all-time holding values
+    earnings.holdingAmount = allTimeEarnings.holdingAmount;
+    earnings.allTimeApprovedBossPaymentsTotal = allTimeEarnings.approvedBossPaymentsTotal;
+    earnings.allTimeBossCollection = allTimeEarnings.bossCollection;
 
     // Render the single-driver view
-    this.renderSingleDriverEarningsReport(driver, earnings, orders, directPayments, period, date);
+    this.renderSingleDriverEarningsReport(driver, earnings, orders, directPayments, allTimeApprovedBossPayments, period, date);
   },
 
   // Calculate driver earnings from orders and direct payments
-  calculateDriverEarnings(orders, directPayments = []) {
+  calculateDriverEarnings(orders, directPayments = [], approvedBossPayments = []) {
     // Separate completed and cancelled orders
     const completedOrders = orders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
     const cancelledOrders = orders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
@@ -738,7 +814,7 @@ const ReportsModule = {
       return sum + (order.driverSalary ?? DELIVERY_FEE);
     }, 0);
 
-    // Calculate direct payments total
+    // Calculate direct payments total (admin-to-driver)
     const directPaymentsTotal = directPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
     // Total driver earnings = order salary + direct payments
@@ -747,20 +823,29 @@ const ReportsModule = {
     // Boss collection = Total completed sales - ALL driver payments
     const bossCollection = totalSales - totalDriverEarnings;
 
+    // NEW: Calculate approved boss payments total (driver-to-boss)
+    const approvedBossPaymentsTotal = approvedBossPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+    // NEW: Holding amount = What driver currently has
+    const holdingAmount = bossCollection - approvedBossPaymentsTotal;
+
     return {
       totalSales,
       totalOrders: completedOrders.length,
       deliveryCount: paidCount,
       pickupCount: freeOrders.length,
       driverSalary,              // Salary from orders only
-      directPaymentsTotal,       // Total from direct payments
+      directPaymentsTotal,       // Total from direct payments (admin-to-driver)
       totalDriverEarnings,       // Combined total
       bossCollection,
+      approvedBossPaymentsTotal, // NEW: Total approved payments to boss
+      holdingAmount,             // NEW: Available amount driver has
       completedOrders,
       cancelledOrders,
       paidOrders,
       freeOrders,
-      directPayments             // Include for display
+      directPayments,            // Include for display
+      approvedBossPayments       // NEW: Include for display
     };
   },
 
@@ -820,6 +905,8 @@ const ReportsModule = {
               <th>Direct Payments</th>
               <th>Total Earnings</th>
               <th>Boss Gets</th>
+              <th>Boss Paid</th>
+              <th>Holding</th>
             </tr>
           </thead>
           <tbody>
@@ -832,6 +919,8 @@ const ReportsModule = {
                 <td data-label="Direct Payments" style="color: ${d.directPaymentsTotal >= 0 ? '#28a745' : '#dc3545'}">$${d.directPaymentsTotal.toFixed(2)}</td>
                 <td data-label="Total Earnings"><strong>$${d.totalDriverEarnings.toFixed(2)}</strong></td>
                 <td data-label="Boss Gets">$${d.bossCollection.toFixed(2)}</td>
+                <td data-label="Boss Paid (All-Time)" style="color: #dc3545">$${d.allTimeApprovedBossPayments.toFixed(2)}</td>
+                <td data-label="Holding (All-Time)" style="color: #28a745; font-weight: bold;">$${d.holdingAmount.toFixed(2)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -843,7 +932,7 @@ const ReportsModule = {
   },
 
   // Render single driver earnings report
-  renderSingleDriverEarningsReport(driver, earnings, orders, directPayments, period, date) {
+  renderSingleDriverEarningsReport(driver, earnings, orders, directPayments, approvedBossPayments, period, date) {
     const dateRange = this.formatDateRange(period, date);
 
     let html = `
@@ -874,6 +963,16 @@ const ReportsModule = {
             <span class="stat-label">Boss Collection:</span>
             <span class="stat-value">$${earnings.bossCollection.toFixed(2)}</span>
             <span class="stat-detail">${((earnings.bossCollection / earnings.totalSales * 100) || 0).toFixed(1)}% of sales</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Boss Paid:</span>
+            <span class="stat-value" style="color: #dc3545">$${earnings.allTimeApprovedBossPaymentsTotal.toFixed(2)}</span>
+            <span class="stat-detail">${approvedBossPayments.length} approved payments (all-time)</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Holding Amount:</span>
+            <span class="stat-value" style="color: #28a745">$${earnings.holdingAmount.toFixed(2)}</span>
+            <span class="stat-detail">All-time balance with driver</span>
           </div>
         </div>
       </div>
@@ -968,6 +1067,225 @@ const ReportsModule = {
         </tbody>
       </table>
     `;
+  },
+
+  // ==================== PENDING PAYMENTS METHODS ====================
+
+  /**
+   * Load and display pending driver-to-boss payments
+   */
+  async loadPendingPayments() {
+    const resultsDiv = document.getElementById('pending-payments-results');
+    const noDataMessage = document.getElementById('no-pending-payments-message');
+
+    if (!resultsDiv) return;
+
+    // Show loading
+    resultsDiv.innerHTML = `
+      <div class="loading-container">
+        <div class="loading-spinner"></div>
+        <p>Loading pending payments...</p>
+      </div>
+    `;
+
+    try {
+      // Get all pending driver-to-boss payments
+      const pendingPayments = await DB.getPendingDriverPayments();
+
+      if (pendingPayments.length === 0) {
+        resultsDiv.innerHTML = '';
+        if (noDataMessage) {
+          noDataMessage.style.display = 'block';
+        }
+        return;
+      }
+
+      if (noDataMessage) {
+        noDataMessage.style.display = 'none';
+      }
+
+      // Get driver info for each payment
+      const paymentsWithDrivers = await Promise.all(
+        pendingPayments.map(async payment => {
+          const driver = await this.getCachedDriver(payment.driverId);
+          return {
+            ...payment,
+            driverName: driver ? driver.name : 'Unknown Driver'
+          };
+        })
+      );
+
+      // Display payments
+      this.displayPendingPayments(paymentsWithDrivers);
+
+    } catch (error) {
+      console.error('Error loading pending payments:', error);
+      resultsDiv.innerHTML = `
+        <div class="error-message">
+          <i class="fas fa-exclamation-triangle"></i>
+          <p>Failed to load pending payments</p>
+        </div>
+      `;
+    }
+  },
+
+  /**
+   * Display pending payments in the UI
+   */
+  displayPendingPayments(payments) {
+    const resultsDiv = document.getElementById('pending-payments-results');
+    if (!resultsDiv) return;
+
+    resultsDiv.innerHTML = `
+      <div class="pending-payments-list">
+        ${payments.map(payment => this.createPendingPaymentCard(payment)).join('')}
+      </div>
+    `;
+
+    // Bind event listeners for approve/cancel buttons
+    payments.forEach(payment => {
+      const approveBtn = document.getElementById(`approve-payment-${payment.id}`);
+      const cancelBtn = document.getElementById(`cancel-payment-${payment.id}`);
+
+      if (approveBtn) {
+        approveBtn.addEventListener('click', () => this.handleApprovePayment(payment));
+      }
+
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => this.handleCancelPayment(payment));
+      }
+    });
+  },
+
+  /**
+   * Create HTML card for a pending payment
+   */
+  createPendingPaymentCard(payment) {
+    const paymentDate = payment.createdAt?.toDate ? payment.createdAt.toDate() : new Date(payment.createdAt);
+    const formattedDate = paymentDate.toLocaleDateString();
+    const formattedTime = paymentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    return `
+      <div class="pending-payment-card" id="payment-card-${payment.id}">
+        <div class="payment-card-header">
+          <div class="payment-card-info">
+            <h4>${payment.driverName}</h4>
+            <div class="payment-card-date">
+              <i class="fas fa-clock"></i>
+              <span>${formattedDate} at ${formattedTime}</span>
+            </div>
+          </div>
+          <div class="payment-card-amount">
+            $${payment.amount.toFixed(2)}
+          </div>
+        </div>
+        <div class="payment-card-body">
+          <div class="payment-card-reason">
+            <strong>Reason:</strong>
+            <p>${payment.reason}</p>
+          </div>
+        </div>
+        <div class="payment-card-actions">
+          <button id="approve-payment-${payment.id}" class="approve-button">
+            <i class="fas fa-check-circle"></i> Approve
+          </button>
+          <button id="cancel-payment-${payment.id}" class="cancel-button">
+            <i class="fas fa-times-circle"></i> Cancel
+          </button>
+        </div>
+      </div>
+    `;
+  },
+
+  /**
+   * Handle approving a payment
+   */
+  async handleApprovePayment(payment) {
+    const confirmed = confirm(
+      `Approve payment of $${payment.amount.toFixed(2)} from ${payment.driverName}?\n\n` +
+      `Reason: ${payment.reason}`
+    );
+
+    if (!confirmed) return;
+
+    const approveBtn = document.getElementById(`approve-payment-${payment.id}`);
+    const cancelBtn = document.getElementById(`cancel-payment-${payment.id}`);
+
+    // Disable buttons
+    if (approveBtn) {
+      approveBtn.disabled = true;
+      approveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Approving...';
+    }
+    if (cancelBtn) {
+      cancelBtn.disabled = true;
+    }
+
+    try {
+      await DB.approveDriverPayment(payment.id);
+      alert('Payment approved successfully!');
+
+      // Reload pending payments
+      await this.loadPendingPayments();
+
+    } catch (error) {
+      console.error('Error approving payment:', error);
+      alert('Failed to approve payment: ' + error.message);
+
+      // Re-enable buttons
+      if (approveBtn) {
+        approveBtn.disabled = false;
+        approveBtn.innerHTML = '<i class="fas fa-check-circle"></i> Approve';
+      }
+      if (cancelBtn) {
+        cancelBtn.disabled = false;
+      }
+    }
+  },
+
+  /**
+   * Handle cancelling a payment
+   */
+  async handleCancelPayment(payment) {
+    const confirmed = confirm(
+      `Cancel payment of $${payment.amount.toFixed(2)} from ${payment.driverName}?\n\n` +
+      `Original reason: ${payment.reason}\n\n` +
+      `This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    const approveBtn = document.getElementById(`approve-payment-${payment.id}`);
+    const cancelBtn = document.getElementById(`cancel-payment-${payment.id}`);
+
+    // Disable buttons
+    if (approveBtn) {
+      approveBtn.disabled = true;
+    }
+    if (cancelBtn) {
+      cancelBtn.disabled = true;
+      cancelBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cancelling...';
+    }
+
+    try {
+      await DB.cancelDriverPayment(payment.id);
+      alert('Payment cancelled successfully!');
+
+      // Reload pending payments
+      await this.loadPendingPayments();
+
+    } catch (error) {
+      console.error('Error cancelling payment:', error);
+      alert('Failed to cancel payment: ' + error.message);
+
+      // Re-enable buttons
+      if (approveBtn) {
+        approveBtn.disabled = false;
+      }
+      if (cancelBtn) {
+        cancelBtn.disabled = false;
+        cancelBtn.innerHTML = '<i class="fas fa-times-circle"></i> Cancel';
+      }
+    }
   }
 };
 

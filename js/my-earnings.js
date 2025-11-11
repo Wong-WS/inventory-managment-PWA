@@ -77,12 +77,18 @@ const MyEarningsModule = {
         // Update active tab
         earningsTabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        
+
         // Update filter and reload
         this.currentFilter = tab.dataset.filter;
         this.displayOrdersList();
       });
     });
+
+    // Driver to Boss payment form submission
+    const paymentForm = document.getElementById('driver-to-boss-payment-form');
+    if (paymentForm) {
+      paymentForm.addEventListener('submit', (event) => this.handleDriverPaymentSubmit(event));
+    }
   },
 
   // Load earnings data and update UI
@@ -104,21 +110,53 @@ const MyEarningsModule = {
       return;
     }
 
-    // Get filtered orders for the driver
+    // Store driver ID for later use
+    this.currentDriverId = driverId;
+
+    // Get filtered orders for the driver (for display based on selected period)
     const orders = await this.getFilteredOrders(driverId, this.currentPeriod, this.currentDate);
     console.log('Filtered orders:', orders);
 
-    // Get direct payments for the driver
+    // Get direct payments for the driver (admin-to-driver) for selected period
     const directPayments = await DB.getDirectPaymentsByPeriod(driverId, this.currentPeriod, this.currentDate);
     console.log('Direct payments:', directPayments);
 
-    // Calculate earnings (including direct payments)
-    const earnings = this.calculateEarnings(orders, directPayments);
-    console.log('Calculated earnings:', earnings);
+    // IMPORTANT: Get ALL-TIME data for holding calculation (not filtered by period)
+    const allTimeOrders = await DB.getOrdersByDriver(driverId);
+    const allTimeDirectPayments = await DB.getDirectPaymentsByDriver(driverId);
+    const allTimeApprovedBossPayments = await DB.getApprovedDriverPayments(driverId, null, null);
 
-    // Update UI
+    // Filter all-time orders to only completed/cancelled paid ones (same logic as getFilteredOrders)
+    const allTimePaidOrders = allTimeOrders.filter(order => {
+      if (order.status === DB.ORDER_STATUS.COMPLETED) {
+        return true;
+      }
+      if (order.status === DB.ORDER_STATUS.CANCELLED) {
+        return order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery';
+      }
+      return false;
+    });
+
+    // Calculate all-time holding
+    const allTimeEarnings = this.calculateEarnings(allTimePaidOrders, allTimeDirectPayments, allTimeApprovedBossPayments);
+    console.log('All-time holding:', allTimeEarnings.holdingAmount);
+
+    // Get approved boss payments for selected period (for display in breakdown)
+    const approvedBossPayments = await DB.getApprovedDriverPayments(driverId, this.currentPeriod, this.currentDate);
+    console.log('Approved boss payments (period):', approvedBossPayments);
+
+    // Calculate earnings for selected period (for display)
+    const earnings = this.calculateEarnings(orders, directPayments, approvedBossPayments);
+    console.log('Calculated earnings (period):', earnings);
+
+    // Update UI - use period earnings for display, but ALL-TIME holding
     this.displayEarningsSummary(earnings);
     this.displayOrdersList(orders);
+    this.displayHoldingAmount(allTimeEarnings.holdingAmount); // Use all-time holding!
+    await this.loadDriverPaymentHistory(driverId);
+
+    // Store all-time holding for payment validation
+    this.currentHoldingAmount = allTimeEarnings.holdingAmount;
   },
 
   // Get filtered orders based on period and date
@@ -170,7 +208,7 @@ const MyEarningsModule = {
   },
 
   // Calculate earnings from orders and direct payments
-  calculateEarnings(orders, directPayments = []) {
+  calculateEarnings(orders, directPayments = [], approvedBossPayments = []) {
     // Separate completed and cancelled orders
     const completedOrders = orders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
     const cancelledOrders = orders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
@@ -190,7 +228,7 @@ const MyEarningsModule = {
       return sum + (order.driverSalary ?? this.DELIVERY_FEE);
     }, 0);
 
-    // Calculate direct payments total
+    // Calculate direct payments total (admin-to-driver payments only)
     const directPaymentsTotal = directPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
     // Total driver earnings = order salary + direct payments
@@ -198,6 +236,12 @@ const MyEarningsModule = {
 
     // Boss collection = Total completed sales - ALL driver payments (orders + direct payments)
     const bossCollection = totalSales - totalDriverEarnings;
+
+    // NEW: Calculate approved boss payments total
+    const approvedBossPaymentsTotal = approvedBossPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+    // NEW: Holding amount = What driver currently has (bossCollection - approved payments to boss)
+    const holdingAmount = bossCollection - approvedBossPaymentsTotal;
 
     return {
       totalSales, // Only completed orders
@@ -208,12 +252,15 @@ const MyEarningsModule = {
       directPaymentsTotal, // Total from direct payments
       totalDriverEarnings, // Combined total
       bossCollection, // Based on completed sales only
+      approvedBossPaymentsTotal, // NEW: Total approved payments to boss
+      holdingAmount, // NEW: Available to pay to boss
       deliveryOrders: paidOrders, // Keep old property name for compatibility
       pickupOrders: freeOrders,
       allOrders: orders, // All orders for display purposes
       completedOrders,
       cancelledOrders,
-      directPayments // Include direct payments for display
+      directPayments, // Include direct payments for display
+      approvedBossPayments // NEW: Include approved boss payments
     };
   },
 
@@ -470,6 +517,208 @@ const MyEarningsModule = {
     return div;
   },
 
+  // Display holding amount in UI
+  displayHoldingAmount(holdingAmount) {
+    // Update the "Available to Pay" amount in the Pay Boss section
+    const holdingAmountValue = document.getElementById('holding-amount-value');
+    if (holdingAmountValue) {
+      const displayAmount = Math.max(0, holdingAmount); // Don't show negative
+      holdingAmountValue.textContent = `$${displayAmount.toFixed(2)}`;
+
+      // Color code based on amount
+      if (holdingAmount < 0) {
+        holdingAmountValue.style.color = '#dc3545'; // Red for negative
+      } else if (holdingAmount === 0) {
+        holdingAmountValue.style.color = '#6c757d'; // Gray for zero
+      } else {
+        holdingAmountValue.style.color = '#28a745'; // Green for positive
+      }
+    }
+
+    // Update the new Holding summary card
+    const holdingSummaryAmount = document.getElementById('holding-summary-amount');
+    if (holdingSummaryAmount) {
+      const displayAmount = Math.max(0, holdingAmount); // Don't show negative
+      holdingSummaryAmount.textContent = `$${displayAmount.toFixed(2)}`;
+    }
+  },
+
+  // Load and display driver payment history
+  async loadDriverPaymentHistory(driverId) {
+    try {
+      // Get all driver-to-boss payments (pending, approved, cancelled)
+      const allPayments = await DB.getDriverPaymentHistory(driverId);
+      this.displayDriverPaymentHistory(allPayments);
+    } catch (error) {
+      console.error('Error loading payment history:', error);
+    }
+  },
+
+  // Display driver payment history
+  displayDriverPaymentHistory(payments) {
+    const paymentList = document.getElementById('driver-payment-list');
+    const noPaymentsMessage = document.getElementById('no-payments-message');
+
+    if (!paymentList) return;
+
+    // Clear list
+    paymentList.innerHTML = '';
+
+    if (!payments || payments.length === 0) {
+      if (noPaymentsMessage) {
+        noPaymentsMessage.style.display = 'block';
+      }
+      return;
+    }
+
+    if (noPaymentsMessage) {
+      noPaymentsMessage.style.display = 'none';
+    }
+
+    // Sort by date, newest first
+    payments.sort((a, b) => {
+      const aDate = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+      const bDate = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+      return bDate - aDate;
+    });
+
+    // Display each payment
+    payments.forEach(payment => {
+      const paymentElement = this.createDriverPaymentElement(payment);
+      paymentList.appendChild(paymentElement);
+    });
+  },
+
+  // Create HTML element for driver payment
+  createDriverPaymentElement(payment) {
+    const div = document.createElement('div');
+    div.className = `payment-item payment-${payment.status}`;
+
+    const paymentDate = payment.createdAt?.toDate ? payment.createdAt.toDate() : new Date(payment.createdAt);
+    const formattedDate = paymentDate.toLocaleDateString();
+    const formattedTime = paymentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Status badge
+    let statusBadge = '';
+    let statusIcon = '';
+    if (payment.status === 'pending') {
+      statusBadge = '<span class="status-badge pending"><i class="fas fa-clock"></i> Pending</span>';
+      statusIcon = 'fa-clock';
+    } else if (payment.status === 'approved') {
+      statusBadge = '<span class="status-badge approved"><i class="fas fa-check-circle"></i> Approved</span>';
+      statusIcon = 'fa-check-circle';
+    } else if (payment.status === 'cancelled') {
+      statusBadge = '<span class="status-badge cancelled"><i class="fas fa-times-circle"></i> Cancelled</span>';
+      statusIcon = 'fa-times-circle';
+    }
+
+    div.innerHTML = `
+      <div class="payment-header">
+        <div class="payment-info">
+          <div class="payment-amount">$${payment.amount.toFixed(2)}</div>
+          <div class="payment-date">${formattedDate} at ${formattedTime}</div>
+        </div>
+        ${statusBadge}
+      </div>
+      <div class="payment-details">
+        <div class="payment-reason">
+          <i class="fas fa-comment"></i>
+          <span>${payment.reason}</span>
+        </div>
+      </div>
+    `;
+
+    return div;
+  },
+
+  // Handle driver payment submission
+  async handleDriverPaymentSubmit(event) {
+    event.preventDefault();
+
+    const amountInput = document.getElementById('boss-payment-amount');
+    const reasonInput = document.getElementById('boss-payment-reason');
+    const submitBtn = document.getElementById('submit-boss-payment');
+
+    const amount = parseFloat(amountInput.value);
+    const reason = reasonInput.value.trim();
+
+    // Validation
+    if (!amount || amount <= 0) {
+      alert('Please enter a valid amount greater than 0');
+      return;
+    }
+
+    if (!reason || reason.length < 5) {
+      alert('Please provide a reason (minimum 5 characters)');
+      return;
+    }
+
+    // Check if amount exceeds ALL-TIME holding amount
+    if (this.currentHoldingAmount !== undefined) {
+      const holdingAmount = this.currentHoldingAmount;
+      const displayHolding = Math.max(0, holdingAmount); // Show 0 if negative
+
+      if (amount > holdingAmount || holdingAmount <= 0) {
+        alert(`Cannot submit payment. Amount ($${amount.toFixed(2)}) exceeds available holding ($${displayHolding.toFixed(2)})`);
+        return;
+      }
+    }
+
+    // IMPORTANT: Check pending payments to prevent over-commitment
+    try {
+      const pendingPayments = await DB.getPendingDriverPayments(this.currentDriverId);
+      const totalPendingAmount = pendingPayments.reduce((sum, payment) => sum + payment.amount, 0);
+      const totalCommitment = amount + totalPendingAmount;
+      const availableAfterPending = this.currentHoldingAmount - totalPendingAmount;
+
+      if (totalCommitment > this.currentHoldingAmount) {
+        alert(
+          `Cannot submit payment.\n\n` +
+          `Current holding: $${this.currentHoldingAmount.toFixed(2)}\n` +
+          `Pending payments: $${totalPendingAmount.toFixed(2)}\n` +
+          `Available after pending: $${availableAfterPending.toFixed(2)}\n\n` +
+          `Your payment of $${amount.toFixed(2)} would exceed available amount.`
+        );
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking pending payments:', error);
+      alert('Failed to verify pending payments. Please try again.');
+      return;
+    }
+
+    // Disable submit button
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+
+    try {
+      // Create payment
+      await DB.createDriverToBossPayment({
+        driverId: this.currentDriverId,
+        amount: amount,
+        reason: reason
+      });
+
+      // Success
+      alert('Payment submitted successfully! Waiting for admin approval.');
+
+      // Clear form
+      amountInput.value = '';
+      reasonInput.value = '';
+
+      // Reload earnings and payment history
+      await this.loadEarnings();
+
+    } catch (error) {
+      console.error('Error submitting payment:', error);
+      alert('Failed to submit payment. Please try again.');
+    } finally {
+      // Re-enable submit button
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Payment';
+    }
+  },
+
   // Show error message
   showError(message) {
     const container = document.querySelector('.my-earnings-container');
@@ -541,6 +790,11 @@ const MyEarningsModule = {
 
       .summary-card.boss-collection {
         border-left-color: #6c757d;
+      }
+
+      .summary-card.holding-amount {
+        border-left-color: #17a2b8;
+        background: linear-gradient(135deg, #e0f7fa 0%, #ffffff 100%);
       }
 
       .summary-icon {
@@ -883,6 +1137,231 @@ const MyEarningsModule = {
         
         .earnings-item.free {
           border-left: 4px solid #6c757d;
+        }
+      }
+
+      /* Pay Boss Section Styles */
+      .pay-boss-section {
+        margin-top: 2rem;
+        background: white;
+        border-radius: var(--border-radius);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .pay-boss-section h3 {
+        padding: 1rem 1.5rem;
+        margin: 0;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        color: #333;
+      }
+
+      .holding-amount-display {
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #f0fff4 0%, #ffffff 100%);
+        border-bottom: 1px solid #e9ecef;
+      }
+
+      .holding-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+      }
+
+      .holding-info label {
+        font-size: 1rem;
+        font-weight: 500;
+        color: #666;
+      }
+
+      .holding-amount {
+        font-size: 1.75rem;
+        font-weight: bold;
+        color: #28a745;
+      }
+
+      .holding-formula {
+        display: block;
+        color: #888;
+        font-size: 0.85rem;
+        font-style: italic;
+      }
+
+      .payment-form {
+        padding: 1.5rem;
+        border-bottom: 1px solid #e9ecef;
+      }
+
+      .payment-form .form-group {
+        margin-bottom: 1rem;
+      }
+
+      .payment-form label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: #333;
+      }
+
+      .payment-form input,
+      .payment-form textarea {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #e9ecef;
+        border-radius: var(--border-radius);
+        font-size: 1rem;
+      }
+
+      .payment-form textarea {
+        resize: vertical;
+        font-family: inherit;
+      }
+
+      .payment-form button[type="submit"] {
+        width: 100%;
+        padding: 0.75rem;
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: var(--border-radius);
+        font-size: 1rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .payment-form button[type="submit"]:hover {
+        background: #0056b3;
+      }
+
+      .payment-form button[type="submit"]:disabled {
+        background: #6c757d;
+        cursor: not-allowed;
+      }
+
+      .payment-history {
+        padding: 1.5rem;
+      }
+
+      .payment-history h4 {
+        margin: 0 0 1rem 0;
+        color: #333;
+        font-size: 1rem;
+      }
+
+      .payment-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .payment-item {
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: var(--border-radius);
+        overflow: hidden;
+        transition: box-shadow 0.2s;
+      }
+
+      .payment-item:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .payment-item.payment-pending {
+        border-left: 4px solid #ffc107;
+      }
+
+      .payment-item.payment-approved {
+        border-left: 4px solid #28a745;
+      }
+
+      .payment-item.payment-cancelled {
+        border-left: 4px solid #dc3545;
+        opacity: 0.7;
+      }
+
+      .payment-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+      }
+
+      .payment-info {
+        flex-grow: 1;
+      }
+
+      .payment-amount {
+        font-size: 1.25rem;
+        font-weight: bold;
+        color: #333;
+      }
+
+      .payment-date {
+        font-size: 0.8rem;
+        color: #666;
+        margin-top: 0.25rem;
+      }
+
+      .status-badge {
+        padding: 0.5rem 1rem;
+        border-radius: var(--border-radius);
+        font-size: 0.85rem;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .status-badge.pending {
+        background: #fff3cd;
+        color: #856404;
+      }
+
+      .status-badge.approved {
+        background: #d4edda;
+        color: #155724;
+      }
+
+      .status-badge.cancelled {
+        background: #f8d7da;
+        color: #721c24;
+      }
+
+      .payment-details {
+        padding: 1rem;
+      }
+
+      .payment-reason {
+        display: flex;
+        align-items: start;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+        color: #666;
+      }
+
+      .payment-reason i {
+        color: #999;
+        width: 16px;
+        flex-shrink: 0;
+        margin-top: 0.25rem;
+      }
+
+      @media (max-width: 768px) {
+        .holding-info {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.5rem;
+        }
+
+        .payment-header {
+          flex-direction: column;
+          gap: 0.75rem;
+          align-items: flex-start;
         }
       }
     `;
