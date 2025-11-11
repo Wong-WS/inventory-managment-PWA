@@ -754,75 +754,8 @@ const DashboardModule = {
     this.allActivities = activities;
     this.displayedActivityCount = Math.min(5, activities.length);
 
-    // Take only the 5 most recent activities initially
-    const recentActivities = activities.slice(0, this.displayedActivityCount);
-
-    activityList.innerHTML = "";
-
-    if (recentActivities.length === 0) {
-      activityList.innerHTML =
-        '<li class="empty-list">No recent activity.</li>';
-      return;
-    }
-
-    // Collect all unique product IDs for bulk fetching
-    const productIds = new Set();
-
-    recentActivities.forEach(activity => {
-      if (activity.type === "assignment") {
-        productIds.add(activity.data.productId);
-      }
-    });
-
-    // Bulk fetch all needed products in parallel
-    const products = await Promise.all([...productIds].map(id => DB.getProductById(id)));
-
-    // Create lookup map for instant access
-    const productMap = new Map(products.filter(p => p).map(p => [p.id, p]));
-
-    // Display activities
-    for (const activity of recentActivities) {
-      const li = document.createElement("li");
-
-      const formattedDate = `${activity.date.toLocaleDateString()} ${activity.date.toLocaleTimeString()}`;
-
-      if (activity.type === "order") {
-        const order = activity.data;
-
-        li.innerHTML = `
-          <i class="fas fa-clipboard-list activity-icon"></i>
-          <div class="activity-details">
-            <strong>Order: $${order.totalAmount.toFixed(2)}</strong>
-            <span class="status-badge status-${
-              order.status
-            }">${order.status.toUpperCase()}</span><br>
-            <span>Customer: ${order.customerAddress}</span><br>
-            <small>${formattedDate}</small>
-          </div>
-        `;
-      } else if (activity.type === "assignment") {
-        const assignment = activity.data;
-        const product = productMap.get(assignment.productId);
-
-        if (!product) continue;
-
-        li.innerHTML = `
-          <i class="fas fa-truck-loading activity-icon"></i>
-          <div class="activity-details">
-            <strong>Received: ${product.name} (${assignment.quantity})</strong><br>
-            <span>Added to your inventory</span><br>
-            <small>${formattedDate}</small>
-          </div>
-        `;
-      }
-
-      activityList.appendChild(li);
-    }
-
-    // Show/hide load more button
-    this.updateLoadMoreButton();
-
-    this.addActivityListStyles();
+    // Use shared display method
+    await this.displayActivities(activityList, true);
   },
 
   // Load recent activity for admin/sales rep users (all activities)
@@ -859,86 +792,8 @@ const DashboardModule = {
     this.allActivities = activities;
     this.displayedActivityCount = Math.min(5, activities.length);
 
-    // Take only the 5 most recent activities initially
-    const recentActivities = activities.slice(0, this.displayedActivityCount);
-
-    activityList.innerHTML = "";
-
-    if (recentActivities.length === 0) {
-      activityList.innerHTML =
-        '<li class="empty-list">No recent activity.</li>';
-      return;
-    }
-
-    // Collect all unique driver and product IDs for bulk fetching
-    const driverIds = new Set();
-    const productIds = new Set();
-
-    recentActivities.forEach(activity => {
-      if (activity.type === "order") {
-        driverIds.add(activity.data.driverId);
-      } else if (activity.type === "assignment") {
-        driverIds.add(activity.data.driverId);
-        productIds.add(activity.data.productId);
-      }
-    });
-
-    // Bulk fetch all needed data in parallel (much faster than sequential queries)
-    const [drivers, products] = await Promise.all([
-      Promise.all([...driverIds].map(id => DB.getDriverById(id))),
-      Promise.all([...productIds].map(id => DB.getProductById(id)))
-    ]);
-
-    // Create lookup maps for instant access (O(1) vs O(n) database query)
-    const driverMap = new Map(drivers.filter(d => d).map(d => [d.id, d]));
-    const productMap = new Map(products.filter(p => p).map(p => [p.id, p]));
-
-    // Display activities
-    for (const activity of recentActivities) {
-      const li = document.createElement("li");
-
-      const formattedDate = `${activity.date.toLocaleDateString()} ${activity.date.toLocaleTimeString()}`;
-
-      if (activity.type === "order") {
-        const order = activity.data;
-        const driver = driverMap.get(order.driverId);
-        if (!driver) continue;
-
-        li.innerHTML = `
-          <i class="fas fa-clipboard-list activity-icon"></i>
-          <div class="activity-details">
-            <strong>Order: $${order.totalAmount.toFixed(2)}</strong>
-            <span class="status-badge status-${
-              order.status
-            }">${order.status.toUpperCase()}</span><br>
-            <span>Driver: ${driver.name}</span><br>
-            <small>${formattedDate}</small>
-          </div>
-        `;
-      } else if (activity.type === "assignment") {
-        const assignment = activity.data;
-        const driver = driverMap.get(assignment.driverId);
-        const product = productMap.get(assignment.productId);
-
-        if (!driver || !product) continue;
-
-        li.innerHTML = `
-          <i class="fas fa-truck-loading activity-icon"></i>
-          <div class="activity-details">
-            <strong>Assignment: ${product.name} (${assignment.quantity})</strong><br>
-            <span>Driver: ${driver.name}</span><br>
-            <small>${formattedDate}</small>
-          </div>
-        `;
-      }
-
-      activityList.appendChild(li);
-    }
-
-    // Show/hide load more button
-    this.updateLoadMoreButton();
-
-    this.addActivityListStyles();
+    // Use shared display method
+    await this.displayActivities(activityList, false);
   },
 
   // Update load more button visibility and handler
@@ -964,26 +819,133 @@ const DashboardModule = {
   },
 
   // Load more activities when button is clicked
-  loadMoreActivities() {
+  async loadMoreActivities() {
     if (!this.allActivities) return;
 
     // Increase displayed count by 10 (or remaining amount)
     const remainingCount = this.allActivities.length - this.displayedActivityCount;
     this.displayedActivityCount += Math.min(10, remainingCount);
 
-    // Re-render the activities
+    // Re-render the activities with updated count
     const activityList = document.getElementById('recent-activity-list');
     if (!activityList) return;
 
     const session = DB.getCurrentSession();
     if (!session) return;
 
-    // Determine if we need to reload driver or admin activities
-    if (session.role === DB.ROLES.DRIVER) {
-      this.loadDriverRecentActivity(activityList);
-    } else {
-      this.loadAdminRecentActivity(activityList);
+    // Re-display activities without resetting the count
+    await this.displayActivities(activityList, session.role === DB.ROLES.DRIVER);
+  },
+
+  // Display activities in the list (shared by driver and admin)
+  async displayActivities(activityList, isDriver = false) {
+    if (!this.allActivities || this.allActivities.length === 0) {
+      activityList.innerHTML = '<li class="empty-list">No recent activity.</li>';
+      this.updateLoadMoreButton();
+      return;
     }
+
+    // Slice activities based on current displayed count
+    const activitiesToShow = this.allActivities.slice(0, this.displayedActivityCount);
+
+    activityList.innerHTML = "";
+
+    // Collect all unique driver and product IDs for bulk fetching
+    const driverIds = new Set();
+    const productIds = new Set();
+
+    activitiesToShow.forEach(activity => {
+      if (activity.type === "order" && !isDriver) {
+        driverIds.add(activity.data.driverId);
+      } else if (activity.type === "assignment") {
+        productIds.add(activity.data.productId);
+        if (!isDriver) {
+          driverIds.add(activity.data.driverId);
+        }
+      }
+    });
+
+    // Bulk fetch all needed data in parallel
+    const [drivers, products] = await Promise.all([
+      driverIds.size > 0 ? Promise.all([...driverIds].map(id => DB.getDriverById(id))) : Promise.resolve([]),
+      productIds.size > 0 ? Promise.all([...productIds].map(id => DB.getProductById(id))) : Promise.resolve([])
+    ]);
+
+    // Create lookup maps for instant access
+    const driverMap = new Map(drivers.filter(d => d).map(d => [d.id, d]));
+    const productMap = new Map(products.filter(p => p).map(p => [p.id, p]));
+
+    // Display activities
+    for (const activity of activitiesToShow) {
+      const li = document.createElement("li");
+      const formattedDate = `${activity.date.toLocaleDateString()} ${activity.date.toLocaleTimeString()}`;
+
+      if (activity.type === "order") {
+        const order = activity.data;
+
+        if (isDriver) {
+          // Driver view - show customer info
+          li.innerHTML = `
+            <i class="fas fa-clipboard-list activity-icon"></i>
+            <div class="activity-details">
+              <strong>Order: $${order.totalAmount.toFixed(2)}</strong>
+              <span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span><br>
+              <span>Customer: ${order.customerAddress}</span><br>
+              <small>${formattedDate}</small>
+            </div>
+          `;
+        } else {
+          // Admin view - show driver info
+          const driver = driverMap.get(order.driverId);
+          if (!driver) continue;
+
+          li.innerHTML = `
+            <i class="fas fa-clipboard-list activity-icon"></i>
+            <div class="activity-details">
+              <strong>Order: $${order.totalAmount.toFixed(2)}</strong>
+              <span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span><br>
+              <span>Driver: ${driver.name}</span><br>
+              <small>${formattedDate}</small>
+            </div>
+          `;
+        }
+      } else if (activity.type === "assignment") {
+        const assignment = activity.data;
+        const product = productMap.get(assignment.productId);
+        if (!product) continue;
+
+        if (isDriver) {
+          // Driver view - show received items
+          li.innerHTML = `
+            <i class="fas fa-truck-loading activity-icon"></i>
+            <div class="activity-details">
+              <strong>Received: ${product.name} (${assignment.quantity})</strong><br>
+              <span>Added to your inventory</span><br>
+              <small>${formattedDate}</small>
+            </div>
+          `;
+        } else {
+          // Admin view - show driver and product
+          const driver = driverMap.get(assignment.driverId);
+          if (!driver) continue;
+
+          li.innerHTML = `
+            <i class="fas fa-truck-loading activity-icon"></i>
+            <div class="activity-details">
+              <strong>Assignment: ${product.name} (${assignment.quantity})</strong><br>
+              <span>Driver: ${driver.name}</span><br>
+              <small>${formattedDate}</small>
+            </div>
+          `;
+        }
+      }
+
+      activityList.appendChild(li);
+    }
+
+    // Update load more button
+    this.updateLoadMoreButton();
+    this.addActivityListStyles();
   },
 
   // Add styles for activity list
