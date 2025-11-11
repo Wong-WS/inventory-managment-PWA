@@ -202,11 +202,28 @@ const AppModule = {
  * Handles displaying summary information and recent activity
  */
 const DashboardModule = {
+  // Listener tracking variables
+  ordersListenerUnsubscribe: null,
+  assignmentsListenerUnsubscribe: null,
+  productsListenerUnsubscribe: null,
+  driversListenerUnsubscribe: null,
+  dashboardListenersInitialized: false,
+
+  // Cached data from listeners
+  cachedOrders: [],
+  cachedAssignments: [],
+
   // Initialize the dashboard
   async init() {
     await this.updateDashboard();
     // Don't load recent activity manually - let real-time listeners handle it
     await this.setupDashboardListeners();
+
+    // If listeners are already initialized (returning to dashboard tab),
+    // manually trigger recent activity update with cached data
+    if (this.dashboardListenersInitialized) {
+      await this.updateRecentActivityDisplay();
+    }
   },
 
   // Update dashboard statistics
@@ -1010,13 +1027,42 @@ const DashboardModule = {
     document.head.appendChild(styles);
   },
 
+  // Cleanup dashboard listeners
+  cleanupDashboardListeners() {
+    if (this.ordersListenerUnsubscribe) {
+      this.ordersListenerUnsubscribe();
+      this.ordersListenerUnsubscribe = null;
+    }
+    if (this.assignmentsListenerUnsubscribe) {
+      this.assignmentsListenerUnsubscribe();
+      this.assignmentsListenerUnsubscribe = null;
+    }
+    if (this.productsListenerUnsubscribe) {
+      this.productsListenerUnsubscribe();
+      this.productsListenerUnsubscribe = null;
+    }
+    if (this.driversListenerUnsubscribe) {
+      this.driversListenerUnsubscribe();
+      this.driversListenerUnsubscribe = null;
+    }
+    this.dashboardListenersInitialized = false;
+  },
+
   // Setup real-time dashboard listeners
   async setupDashboardListeners() {
+    // Guard: Only set up listeners once per session
+    if (this.dashboardListenersInitialized) {
+      return;
+    }
+
     const session = DB.getCurrentSession();
     if (!session) return;
 
     // Listen to orders for dashboard stats and recent activity
-    DB.listenToOrders(async (orders) => {
+    this.ordersListenerUnsubscribe = DB.listenToOrders(async (orders) => {
+      // Cache orders data
+      this.cachedOrders = orders;
+
       // Update dashboard stats when orders change
       await this.updateDashboardFromOrders(orders);
 
@@ -1025,20 +1071,26 @@ const DashboardModule = {
     });
 
     // Listen to assignments for recent activity
-    DB.listenToAssignments(async (assignments) => {
+    this.assignmentsListenerUnsubscribe = DB.listenToAssignments(async (assignments) => {
+      // Cache assignments data
+      this.cachedAssignments = assignments;
+
       this.updateRecentActivityFromAssignments(assignments);
     });
 
     // For admin/sales rep dashboards, also listen to products and drivers
     if (session.role !== DB.ROLES.DRIVER) {
-      DB.listenToProducts(async (products) => {
+      this.productsListenerUnsubscribe = DB.listenToProducts(async (products) => {
         this.updateProductCountFromProducts(products);
       });
 
-      DB.listenToDrivers(async (drivers) => {
+      this.driversListenerUnsubscribe = DB.listenToDrivers(async (drivers) => {
         this.updateDriverCountFromDrivers(drivers);
       });
     }
+
+    // Mark listeners as initialized
+    this.dashboardListenersInitialized = true;
   },
 
   // Update dashboard statistics from real-time orders data
@@ -1221,7 +1273,7 @@ const DashboardModule = {
     // Always clear the list first to prevent duplicates
     activityList.innerHTML = "";
 
-    // Get fresh data from Firebase (don't rely on cached realtimeOrders/realtimeAssignments)
+    // Use cached data from listeners (much faster than fetching from Firebase)
     let activities = [];
 
     if (session.role === DB.ROLES.DRIVER) {
@@ -1229,8 +1281,9 @@ const DashboardModule = {
       const driverId = user ? user.driverId : null;
 
       if (driverId) {
-        const driverOrders = await DB.getOrdersByDriver(driverId);
-        const driverAssignments = await DB.getAssignmentsByDriver(driverId);
+        // Filter cached data for this driver
+        const driverOrders = this.cachedOrders.filter(order => order.driverId === driverId);
+        const driverAssignments = this.cachedAssignments.filter(assignment => assignment.driverId === driverId);
 
         activities = [
           ...driverOrders.map((order) => ({
@@ -1247,11 +1300,20 @@ const DashboardModule = {
       }
     } else {
       // Admin/sales rep sees activities (sales reps: orders only, admins: orders + assignments)
-      const allOrders = await DB.getAllOrders({ todayOnly: true });
       const isAdmin = session.role === DB.ROLES.ADMIN;
 
+      // Filter cached orders for today only
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+      const todayOrders = this.cachedOrders.filter(order => {
+        const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+        return orderDate >= todayStart && orderDate < todayEnd;
+      });
+
       activities = [
-        ...allOrders.map((order) => ({
+        ...todayOrders.map((order) => ({
           type: "order",
           date: order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt),
           data: order,
@@ -1260,8 +1322,12 @@ const DashboardModule = {
 
       // Only admins see assignments in recent activity
       if (isAdmin) {
-        const allAssignments = await DB.getAllAssignments({ todayOnly: true });
-        activities.push(...allAssignments.map((assignment) => ({
+        const todayAssignments = this.cachedAssignments.filter(assignment => {
+          const assignmentDate = assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt);
+          return assignmentDate >= todayStart && assignmentDate < todayEnd;
+        });
+
+        activities.push(...todayAssignments.map((assignment) => ({
           type: "assignment",
           date: assignment.assignedAt?.toDate ? assignment.assignedAt.toDate() : new Date(assignment.assignedAt),
           data: assignment,
