@@ -140,7 +140,9 @@ export const DB = {
     }
 
     // Add date filter to only fetch today's orders (if requested)
-    if (filters.todayOnly) {
+    // BUT if showAllPending is true and no specific status filter, don't apply date filter
+    // (we'll filter client-side to show all pending + today's completed/cancelled)
+    if (filters.todayOnly && !(filters.showAllPending && !filters.status)) {
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Start of today
       q = query(q, where("createdAt", ">=", today));
@@ -153,6 +155,23 @@ export const DB = {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Filter client-side if showAllPending is enabled
+      if (filters.todayOnly && filters.showAllPending && !filters.status) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Start of today
+        const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+        orders = orders.filter(order => {
+          // Always show PENDING orders regardless of date
+          if (order.status === this.ORDER_STATUS.PENDING) {
+            return true;
+          }
+          // For COMPLETED/CANCELLED, only show today's
+          const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+          return orderDate >= today && orderDate < todayEnd;
+        });
+      }
 
       // Sort in memory if we couldn't sort in the query due to composite index requirements
       if (filters.driverId || filters.salesRepId || filters.status) {

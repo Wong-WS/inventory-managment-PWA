@@ -944,7 +944,9 @@ const OrdersModule = {
     }
 
     // Only fetch today's orders to improve performance
+    // BUT always show ALL pending orders regardless of date
     filters.todayOnly = true;
+    filters.showAllPending = true;
 
     // Setup real-time listener and store unsubscribe function
     this.ordersListenerUnsubscribe = DB.listenToOrders(async (orders) => {
@@ -1511,6 +1513,13 @@ Order #${order.id.slice(-6).toUpperCase()}`;
    * Get inventory adjusted for the order being edited
    */
   async getAdjustedInventoryForEdit(driverId, order) {
+    // Only adjust inventory if we're editing for the SAME driver
+    // If driver changed, return normal inventory (no adjustment needed)
+    if (driverId !== order.driverId) {
+      return await DB.getDriverInventory(driverId);
+    }
+
+    // Same driver - apply adjustment
     const inventory = await DB.getDriverInventory(driverId);
 
     // Calculate quantities in the current order
@@ -1613,6 +1622,7 @@ Order #${order.id.slice(-6).toUpperCase()}`;
     // Now get buttons from the new form
     const cancelBtn = document.getElementById('cancel-edit-btn');
     const addLineBtn = document.getElementById('edit-add-line-item');
+    const driverSelect = document.getElementById('edit-driver');
 
     // Bind listeners to the new buttons
     if (cancelBtn) {
@@ -1621,6 +1631,21 @@ Order #${order.id.slice(-6).toUpperCase()}`;
 
     if (addLineBtn) {
       addLineBtn.addEventListener('click', () => this.addEditLineItem());
+    }
+
+    // Driver change handler - clear line items and reset
+    if (driverSelect) {
+      driverSelect.addEventListener('change', () => {
+        // Clear all existing line items
+        const container = document.getElementById('edit-line-items-container');
+        if (container) {
+          container.innerHTML = '';
+        }
+        // Reset counter
+        this.editLineItemCounter = 0;
+        // Add one empty line item for new driver
+        this.addEditLineItem();
+      });
     }
 
     // Form submit
