@@ -1714,6 +1714,155 @@ button:disabled,
   color: #666 !important;
 }
 
+/* Pending Payment Cards */
+.pending-payments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pending-payment-card {
+  background: white;
+  border: 1px solid #e9ecef;
+  border-left: 4px solid #ffc107;
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s;
+}
+
+.pending-payment-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.payment-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.payment-card-info h4 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.payment-card-date {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.payment-card-date i {
+  color: #999;
+}
+
+.payment-card-amount {
+  font-size: 1.75rem;
+  font-weight: bold;
+  color: #28a745;
+}
+
+.payment-card-body {
+  padding: 1.5rem;
+}
+
+.payment-card-reason strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.payment-card-reason p {
+  margin: 0;
+  color: #666;
+  line-height: 1.5;
+}
+
+.payment-card-actions {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+}
+
+.payment-card-actions button {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: var(--border-radius);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.approve-button {
+  background: #28a745;
+  color: white;
+}
+
+.approve-button:hover {
+  background: #218838;
+}
+
+.approve-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.cancel-button {
+  background: #dc3545;
+  color: white;
+}
+
+.cancel-button:hover {
+  background: #c82333;
+}
+
+.cancel-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.section-description {
+  color: #666;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+/* Mobile responsiveness for payment cards */
+@media (max-width: 768px) {
+  .payment-card-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .payment-card-amount {
+    font-size: 1.5rem;
+  }
+
+  .payment-card-actions {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .payment-card-actions button {
+    width: 100%;
+  }
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   *,

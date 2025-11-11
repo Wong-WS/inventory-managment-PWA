@@ -528,6 +528,7 @@
                 <button class="report-tab active" data-report="sales">Sales Reports</button>
                 <button class="report-tab" data-report="inventory">Inventory Reports</button>
                 <button class="report-tab" data-report="earnings">Driver Earnings</button>
+                <button class="report-tab" data-report="pending-payments">Pending Payments</button>
             </div>
             
             <div id="sales-report" class="report-section active">
@@ -604,6 +605,19 @@
                 </div>
                 <div id="earnings-report-results" class="report-results">
                     <!-- Earnings report results will be loaded here -->
+                </div>
+            </div>
+
+            <div id="pending-payments-report" class="report-section">
+                <h3>Pending Driver Payments</h3>
+                <p class="section-description">Review and approve payments submitted by drivers</p>
+                <div id="pending-payments-results" class="report-results">
+                    <!-- Pending payments will be loaded here -->
+                </div>
+                <div id="no-pending-payments-message" class="no-data-message" style="display: none;">
+                    <i class="fas fa-check-circle"></i>
+                    <p>No pending payments</p>
+                    <small>Driver payment requests will appear here for approval</small>
                 </div>
             </div>
         </div>
@@ -820,6 +834,56 @@
                             <div class="summary-label">To Boss</div>
                             <div class="summary-detail" id="boss-collection-detail">Sales - Earnings</div>
                         </div>
+                    </div>
+                    <div class="summary-card holding-amount">
+                        <div class="summary-icon">
+                            <i class="fas fa-wallet"></i>
+                        </div>
+                        <div class="summary-content">
+                            <div class="summary-number" id="holding-summary-amount">$0.00</div>
+                            <div class="summary-label">Holding</div>
+                            <div class="summary-detail" id="holding-summary-detail">Currently with me</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pay Boss Section -->
+            <div class="pay-boss-section">
+                <h3>Pay Boss</h3>
+                <div class="holding-amount-display">
+                    <div class="holding-info">
+                        <label>Available to Pay:</label>
+                        <span id="holding-amount-value" class="holding-amount">$0.00</span>
+                    </div>
+                    <small class="holding-formula">Total Sales - My Earnings - Approved Boss Payments</small>
+                </div>
+
+                <form id="driver-to-boss-payment-form" class="payment-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="boss-payment-amount">Amount ($) *</label>
+                            <input type="number" id="boss-payment-amount" step="0.01" min="0.01" placeholder="0.00" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="boss-payment-reason">Reason *</label>
+                        <textarea id="boss-payment-reason" rows="3" placeholder="e.g., Daily sales collection, Weekly payment..." required minlength="5"></textarea>
+                    </div>
+                    <button type="submit" id="submit-boss-payment" class="primary-button">
+                        <i class="fas fa-paper-plane"></i> Submit Payment
+                    </button>
+                </form>
+
+                <div id="driver-payment-history" class="payment-history">
+                    <h4>My Payments to Boss</h4>
+                    <div id="driver-payment-list" class="payment-list">
+                        <!-- Payment history will be loaded here -->
+                    </div>
+                    <div id="no-payments-message" class="no-data-message" style="display: none;">
+                        <i class="fas fa-receipt"></i>
+                        <p>No payment history</p>
+                        <small>Payments you submit will appear here</small>
                     </div>
                 </div>
             </div>

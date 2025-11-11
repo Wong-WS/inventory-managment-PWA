@@ -89,6 +89,18 @@ The application uses a modular architecture with these main components:
 - **Mobile-First**: Responsive design optimized for mobile devices
 - **Dependencies**: Only Font Awesome CDN for icons
 
+## Git Workflow
+
+**IMPORTANT**: Do NOT automatically commit and push changes unless explicitly requested by the user.
+
+- Only commit and push when the user specifically asks with phrases like:
+  - "commit and push"
+  - "commit this"
+  - "push the changes"
+  - "git commit and push"
+- After completing work, inform the user that changes are ready and ask if they want to commit
+- Wait for explicit confirmation before running git commands
+
 ## Common Operations
 
 ### Adding New Features

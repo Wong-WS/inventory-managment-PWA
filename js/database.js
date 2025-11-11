@@ -2414,7 +2414,7 @@ export const DB = {
   },
 
   /**
-   * Get all direct payments for a driver
+   * Get all direct payments for a driver (ADMIN-TO-DRIVER only)
    * @param {string} driverId - Driver ID
    * @returns {Promise<Array>} Array of payment objects
    */
@@ -2426,7 +2426,10 @@ export const DB = {
       );
 
       const snapshot = await getDocs(paymentsQuery);
-      const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const allPayments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // IMPORTANT: Filter out driver-to-boss payments (only return admin-to-driver)
+      const payments = allPayments.filter(payment => payment.direction !== 'driver_to_boss');
 
       // Sort by date in JavaScript (descending)
       payments.sort((a, b) => {
@@ -2443,7 +2446,7 @@ export const DB = {
   },
 
   /**
-   * Get direct payments filtered by period
+   * Get direct payments filtered by period (ADMIN-TO-DRIVER only)
    * @param {string} driverId - Driver ID (optional, null for all drivers)
    * @param {string} period - Period type (day/week/month/year)
    * @param {string} date - Target date
@@ -2502,10 +2505,13 @@ export const DB = {
       const snapshot = await getDocs(paymentsQuery);
       const allPayments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // Filter by date range in JavaScript
+      // Filter by date range AND exclude driver-to-boss payments in JavaScript
       const payments = allPayments.filter(payment => {
         const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
-        return paymentDate >= startDate && paymentDate <= endDate;
+        const inDateRange = paymentDate >= startDate && paymentDate <= endDate;
+        // IMPORTANT: Only include admin-to-driver payments (exclude driver-to-boss)
+        const isAdminToDriver = payment.direction !== 'driver_to_boss';
+        return inDateRange && isAdminToDriver;
       });
 
       // Sort by date in JavaScript (descending)
@@ -2523,7 +2529,7 @@ export const DB = {
   },
 
   /**
-   * Get all direct payments (admin view)
+   * Get all direct payments (admin view, ADMIN-TO-DRIVER only)
    * @returns {Promise<Array>} Array of all payment objects
    */
   async getAllDirectPayments() {
@@ -2533,7 +2539,10 @@ export const DB = {
       );
 
       const snapshot = await getDocs(paymentsQuery);
-      const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const allPayments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // IMPORTANT: Filter out driver-to-boss payments (only return admin-to-driver)
+      const payments = allPayments.filter(payment => payment.direction !== 'driver_to_boss');
 
       // Sort by date in JavaScript (descending)
       payments.sort((a, b) => {
@@ -2565,7 +2574,7 @@ export const DB = {
   },
 
   /**
-   * Listen to direct payments changes
+   * Listen to direct payments changes (ADMIN-TO-DRIVER only)
    * @param {Function} callback - Callback function to handle updates
    * @param {Object} filters - Optional filters (driverId, etc.)
    * @returns {string} Listener ID
@@ -2588,7 +2597,9 @@ export const DB = {
       }
 
       const unsubscribe = onSnapshot(paymentsQuery, (snapshot) => {
-        const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const allPayments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // IMPORTANT: Filter out driver-to-boss payments (only return admin-to-driver)
+        const payments = allPayments.filter(payment => payment.direction !== 'driver_to_boss');
         callback(payments);
       });
 
@@ -2599,6 +2610,305 @@ export const DB = {
     } catch (error) {
       console.error('Error listening to direct payments:', error);
       throw error;
+    }
+  },
+
+  // ==================== DRIVER TO BOSS PAYMENT METHODS ====================
+
+  /**
+   * Create a driver-to-boss payment (driver-initiated, requires approval)
+   * @param {Object} paymentData - Payment data
+   * @returns {Promise<Object>} Created payment object
+   */
+  async createDriverToBossPayment(paymentData) {
+    const session = this.getCurrentSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+
+    // Validate required fields
+    if (!paymentData.driverId) {
+      throw new Error('Driver ID is required');
+    }
+    if (paymentData.amount === undefined || paymentData.amount === null || paymentData.amount <= 0) {
+      throw new Error('Amount must be greater than zero');
+    }
+    if (!paymentData.reason || paymentData.reason.trim().length < 5) {
+      throw new Error('Reason is required (minimum 5 characters)');
+    }
+
+    // Verify driver exists
+    const driver = await this.getDriverById(paymentData.driverId);
+    if (!driver) {
+      throw new Error('Driver not found');
+    }
+
+    try {
+      const newPaymentData = {
+        driverId: paymentData.driverId,
+        amount: parseFloat(paymentData.amount),
+        paymentType: 'Boss Payment', // Fixed type for driver-to-boss payments
+        reason: paymentData.reason.trim(),
+        direction: 'driver_to_boss', // NEW: Distinguish from admin-to-driver payments
+        status: 'pending',            // NEW: Requires approval
+        createdBy: session.userId,    // Driver who created it
+        createdAt: serverTimestamp(),
+        date: serverTimestamp()       // Use current date
+      };
+
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.DIRECT_PAYMENTS), newPaymentData);
+      const newPayment = {
+        id: docRef.id,
+        ...newPaymentData,
+        createdAt: new Date().toISOString(),
+        date: new Date().toISOString()
+      };
+
+      return newPayment;
+    } catch (error) {
+      console.error('Error creating driver-to-boss payment:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get all pending driver-to-boss payments (for admin approval)
+   * @param {string} driverId - Optional driver ID to filter by specific driver
+   * @returns {Promise<Array>} Array of pending payment objects
+   */
+  async getPendingDriverPayments(driverId = null) {
+    try {
+      let paymentsQuery;
+
+      if (driverId) {
+        // Get pending payments for specific driver
+        paymentsQuery = query(
+          collection(db, this.COLLECTIONS.DIRECT_PAYMENTS),
+          where('driverId', '==', driverId),
+          where('direction', '==', 'driver_to_boss'),
+          where('status', '==', 'pending')
+        );
+      } else {
+        // Get all pending payments (for admin)
+        paymentsQuery = query(
+          collection(db, this.COLLECTIONS.DIRECT_PAYMENTS),
+          where('direction', '==', 'driver_to_boss'),
+          where('status', '==', 'pending')
+        );
+      }
+
+      const snapshot = await getDocs(paymentsQuery);
+      const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Sort by creation date (newest first)
+      payments.sort((a, b) => {
+        const aDate = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+        const bDate = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return bDate - aDate;
+      });
+
+      return payments;
+    } catch (error) {
+      console.error('Error getting pending driver payments:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Get approved driver-to-boss payments for a period (for holding calculation)
+   * @param {string} driverId - Driver ID
+   * @param {string} period - Period type ('day', 'week', 'month', 'year', null for all-time)
+   * @param {Date} date - Target date (null for all-time)
+   * @returns {Promise<Array>} Array of approved payment objects
+   */
+  async getApprovedDriverPayments(driverId, period, date) {
+    try {
+      const paymentsQuery = query(
+        collection(db, this.COLLECTIONS.DIRECT_PAYMENTS),
+        where('driverId', '==', driverId),
+        where('direction', '==', 'driver_to_boss'),
+        where('status', '==', 'approved')
+      );
+
+      const snapshot = await getDocs(paymentsQuery);
+      const allPayments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // If no period/date specified, return all-time approved payments
+      if (!period || !date) {
+        return allPayments;
+      }
+
+      // Calculate date range based on period
+      const targetDate = new Date(date);
+      let startDate, endDate;
+
+      switch (period) {
+        case 'day':
+          startDate = new Date(targetDate);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(targetDate);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        case 'week': {
+          const dayOfWeek = targetDate.getDay();
+          startDate = new Date(targetDate);
+          startDate.setDate(targetDate.getDate() - dayOfWeek);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(startDate);
+          endDate.setDate(startDate.getDate() + 6);
+          endDate.setHours(23, 59, 59, 999);
+          break;
+        }
+        case 'month':
+          startDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+          endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59, 999);
+          break;
+        case 'year':
+          startDate = new Date(targetDate.getFullYear(), 0, 1);
+          endDate = new Date(targetDate.getFullYear(), 11, 31, 23, 59, 59, 999);
+          break;
+        default:
+          throw new Error('Invalid period');
+      }
+
+      // Filter by date range in JavaScript
+      const payments = allPayments.filter(payment => {
+        const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
+        return paymentDate >= startDate && paymentDate <= endDate;
+      });
+
+      return payments;
+    } catch (error) {
+      console.error('Error getting approved driver payments:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Approve a driver-to-boss payment
+   * @param {string} paymentId - Payment ID
+   * @returns {Promise<Object>} Updated payment object
+   */
+  async approveDriverPayment(paymentId) {
+    const session = this.getCurrentSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+
+    // Only admins can approve
+    if (session.role !== this.ROLES.ADMIN) {
+      throw new Error('Only admins can approve payments');
+    }
+
+    try {
+      const paymentRef = doc(db, this.COLLECTIONS.DIRECT_PAYMENTS, paymentId);
+      const paymentDoc = await getDoc(paymentRef);
+
+      if (!paymentDoc.exists()) {
+        throw new Error('Payment not found');
+      }
+
+      const payment = paymentDoc.data();
+      if (payment.status !== 'pending') {
+        throw new Error('Payment is not pending');
+      }
+
+      const updateData = {
+        status: 'approved',
+        approvedBy: session.userId,
+        approvedAt: serverTimestamp()
+      };
+
+      await updateDoc(paymentRef, updateData);
+
+      return {
+        id: paymentId,
+        ...payment,
+        ...updateData,
+        approvedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error approving driver payment:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Cancel a driver-to-boss payment
+   * @param {string} paymentId - Payment ID
+   * @returns {Promise<Object>} Updated payment object
+   */
+  async cancelDriverPayment(paymentId) {
+    const session = this.getCurrentSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+
+    // Only admins can cancel
+    if (session.role !== this.ROLES.ADMIN) {
+      throw new Error('Only admins can cancel payments');
+    }
+
+    try {
+      const paymentRef = doc(db, this.COLLECTIONS.DIRECT_PAYMENTS, paymentId);
+      const paymentDoc = await getDoc(paymentRef);
+
+      if (!paymentDoc.exists()) {
+        throw new Error('Payment not found');
+      }
+
+      const payment = paymentDoc.data();
+      if (payment.status !== 'pending') {
+        throw new Error('Payment is not pending');
+      }
+
+      const updateData = {
+        status: 'cancelled',
+        cancelledBy: session.userId,
+        cancelledAt: serverTimestamp()
+      };
+
+      await updateDoc(paymentRef, updateData);
+
+      return {
+        id: paymentId,
+        ...payment,
+        ...updateData,
+        cancelledAt: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error cancelling driver payment:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get all driver-to-boss payment history for a driver (all statuses)
+   * @param {string} driverId - Driver ID
+   * @returns {Promise<Array>} Array of payment objects
+   */
+  async getDriverPaymentHistory(driverId) {
+    try {
+      const paymentsQuery = query(
+        collection(db, this.COLLECTIONS.DIRECT_PAYMENTS),
+        where('driverId', '==', driverId),
+        where('direction', '==', 'driver_to_boss')
+      );
+
+      const snapshot = await getDocs(paymentsQuery);
+      const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Sort by creation date (newest first)
+      payments.sort((a, b) => {
+        const aDate = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+        const bDate = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return bDate - aDate;
+      });
+
+      return payments;
+    } catch (error) {
+      console.error('Error getting driver payment history:', error);
+      return [];
     }
   }
 };
