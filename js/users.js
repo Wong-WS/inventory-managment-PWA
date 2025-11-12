@@ -135,7 +135,13 @@ const UsersModule = {
       return;
     }
 
-    for (const user of users) {
+    // Sort users: active users first, then inactive users
+    const sortedUsers = users.sort((a, b) => {
+      if (a.isActive === b.isActive) return 0;
+      return a.isActive ? -1 : 1; // Active users (-1) come before inactive (1)
+    });
+
+    for (const user of sortedUsers) {
       const li = document.createElement('li');
 
       // Get driver name if user is linked to a driver
