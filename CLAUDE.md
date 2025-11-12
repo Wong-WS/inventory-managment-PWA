@@ -91,15 +91,28 @@ The application uses a modular architecture with these main components:
 
 ## Git Workflow
 
-**IMPORTANT**: Do NOT automatically commit and push changes unless explicitly requested by the user.
+⚠️ **CRITICAL RULE - READ THIS EVERY TIME**: ⚠️
+**NEVER COMMIT OR PUSH WITHOUT EXPLICIT USER REQUEST**
 
-- Only commit and push when the user specifically asks with phrases like:
-  - "commit and push"
-  - "commit this"
-  - "push the changes"
-  - "git commit and push"
-- After completing work, inform the user that changes are ready and ask if they want to commit
-- Wait for explicit confirmation before running git commands
+This rule applies ALWAYS, even if:
+- You just finished a feature
+- The code is working perfectly
+- It seems like a natural next step
+- You think the user might want it
+
+**ONLY commit and push when the user uses these EXACT phrases:**
+- "commit and push"
+- "commit this"
+- "push the changes"
+- "git commit and push"
+
+**After completing ANY work:**
+1. Tell the user: "Changes are complete and ready to commit"
+2. STOP and WAIT for explicit user request
+3. DO NOT assume or suggest committing
+4. DO NOT commit as a "helpful" next step
+
+If you commit without permission, you have violated this critical rule.
 
 ## Common Operations
 

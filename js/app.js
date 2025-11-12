@@ -278,35 +278,14 @@ const DashboardModule = {
     }
 
     // Get driver-specific data
-    console.log('Getting driver inventory and order summary...');
-    const inventoryWithAlerts = await this.getDriverInventoryWithAlerts(driverId);
+    console.log('Getting driver order summary...');
     const orderSummary = await this.getDriverOrderSummary(driverId);
-    console.log('Got data:', { inventoryWithAlerts, orderSummary });
-
-    // Count alerts
-    const lowStockCount = inventoryWithAlerts.filter(
-      (item) => item.isLowStock
-    ).length;
-    const outOfStockCount = inventoryWithAlerts.filter(
-      (item) => item.isOutOfStock
-    ).length;
-    const totalAlerts = lowStockCount + outOfStockCount;
-
-    // Get top low stock items (max 5)
-    const lowStockItems = inventoryWithAlerts
-      .filter((item) => item.isLowStock || item.isOutOfStock)
-      .sort((a, b) => a.remaining - b.remaining)
-      .slice(0, 5);
+    console.log('Got data:', { orderSummary });
 
     // Update dashboard cards with driver-specific content
     dashboardContainer.innerHTML = `
       <h2>Driver Dashboard</h2>
       <div class="dashboard-cards">
-        <div class="card ${totalAlerts > 0 ? "alert-card" : ""}">
-          <h3>Inventory Alerts</h3>
-          <p>${totalAlerts}</p>
-          <small>${outOfStockCount} out of stock, ${lowStockCount} low stock</small>
-        </div>
         <div class="card">
           <h3>Today's Orders</h3>
           <p>${orderSummary.total}</p>
@@ -327,43 +306,6 @@ const DashboardModule = {
           <small>From ${orderSummary.completed.count} orders</small>
         </div>
       </div>
-      
-      ${
-        lowStockItems.length > 0
-          ? `
-        <div class="low-stock-section">
-          <h3>
-            <i class="fas fa-exclamation-triangle"></i>
-            Items Needing Attention
-          </h3>
-          <div class="low-stock-items">
-            ${lowStockItems
-              .map(
-                (item) => `
-              <div class="low-stock-item ${item.alertLevel}">
-                <div class="item-info">
-                  <strong>${item.name}</strong>
-                  <span class="quantity-info">
-                    ${item.remaining} remaining
-                    ${item.isOutOfStock ? " (OUT OF STOCK)" : " (LOW STOCK)"}
-                  </span>
-                </div>
-                <div class="alert-indicator">
-                  <i class="fas ${
-                    item.isOutOfStock
-                      ? "fa-times-circle"
-                      : "fa-exclamation-circle"
-                  }"></i>
-                </div>
-              </div>
-            `
-              )
-              .join("")}
-          </div>
-        </div>
-      `
-          : ""
-      }
       
       <div class="delivery-status">
         <h3>Quick Delivery Summary</h3>
