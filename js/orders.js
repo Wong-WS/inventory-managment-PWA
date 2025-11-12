@@ -1387,7 +1387,7 @@ const OrdersModule = {
       let displayQuantity;
 
       if (item.category) {
-        displayQuantity = item.category === 'Quantity by pcs' ? `${item.actualQuantity} pcs` : item.category;
+        displayQuantity = item.category === 'Quantity by pcs' ? item.actualQuantity : item.category;
       } else {
         displayQuantity = item.quantity || item.actualQuantity;
       }
