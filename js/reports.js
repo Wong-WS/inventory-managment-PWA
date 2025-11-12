@@ -111,18 +111,6 @@ const ReportsModule = {
         overflow: hidden;
         box-shadow: var(--box-shadow);
       }
-      @media (max-width: 768px) {
-      .report-table {
-        overflow-x: auto;
-        display: block;
-      }
-      .report-table thead,
-      .report-table tbody,
-      .report-table tr {
-        display: table;
-        width: 100%;
-        table-layout: fixed;
-      }
       .report-table th, .report-table td {
         padding: 0.8rem;
         text-align: left;
@@ -138,6 +126,58 @@ const ReportsModule = {
       .report-table tbody tr:hover {
         background-color: rgba(0,0,0,0.05);
       }
+
+      /* Inventory table specific styles */
+      .inventory-table {
+        font-size: 0.95rem;
+        display: table;
+        width: 100%;
+      }
+      .inventory-table thead {
+        display: table-header-group;
+      }
+      .inventory-table tbody {
+        display: table-row-group;
+      }
+      .inventory-table tr {
+        display: table-row;
+      }
+      .inventory-table th,
+      .inventory-table td {
+        display: table-cell;
+      }
+      .inventory-table thead th {
+        background-color: #cfe2ff;
+        color: #052c65;
+        font-weight: 600;
+        text-align: center;
+        padding: 0.75rem 0.5rem;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+      .inventory-table tbody td {
+        text-align: center;
+        padding: 0.6rem 0.5rem;
+        white-space: nowrap;
+      }
+      .inventory-table tbody td:first-child {
+        text-align: left;
+        font-weight: 500;
+        white-space: normal;
+        min-width: 100px;
+      }
+      .inventory-table tbody tr:nth-child(odd) {
+        background-color: #ffffff;
+      }
+      .inventory-table tbody tr:nth-child(even) {
+        background-color: #f8f9fa;
+      }
+      .inventory-table tbody tr:hover {
+        background-color: #e3f2fd;
+      }
+
+      /* Mobile: Keep table horizontal and scrollable */
       @media (max-width: 768px) {
         .report-stats {
           grid-template-columns: 1fr;
@@ -145,6 +185,42 @@ const ReportsModule = {
         .stat-item {
           padding: 0.75rem;
           min-height: 60px;
+        }
+        .inventory-table {
+          font-size: 0.85rem;
+          display: block;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        .inventory-table thead {
+          display: table-header-group;
+        }
+        .inventory-table tbody {
+          display: table-row-group;
+        }
+        .inventory-table tr {
+          display: table-row;
+        }
+        .inventory-table th,
+        .inventory-table td {
+          display: table-cell;
+        }
+        .inventory-table thead th {
+          padding: 0.6rem 0.4rem;
+          font-size: 0.8rem;
+        }
+        .inventory-table tbody td {
+          padding: 0.5rem 0.4rem;
+          font-size: 0.85rem;
+        }
+        .inventory-table tbody td:first-child {
+          min-width: 80px;
+          max-width: 120px;
+        }
+        /* Remove data-label display for inventory table */
+        .inventory-table td:before {
+          content: none !important;
+          display: none !important;
         }
       }
 
@@ -685,17 +761,17 @@ const ReportsModule = {
 
       // Build report HTML for a specific driver
       const driver = await this.getCachedDriver(driverId);
-      
+
       let reportHTML = `
         <div class="report-summary">
-          <h4>Inventory Report for ${driver.name}</h4>
+          <h4>${driver.name} Stock List</h4>
         </div>
-        <table class="report-table">
+        <table class="report-table inventory-table">
           <thead>
             <tr>
               <th>Product</th>
-              <th>Sold</th>
-              <th>Remaining</th>
+              <th>Sale</th>
+              <th>Remaining stock</th>
             </tr>
           </thead>
           <tbody>
@@ -705,8 +781,8 @@ const ReportsModule = {
         reportHTML += `
           <tr>
             <td data-label="Product">${item.name}</td>
-            <td data-label="Sold">${item.sold}</td>
-            <td data-label="Remaining">${item.remaining}</td>
+            <td data-label="Sale">${item.sold}</td>
+            <td data-label="Remaining stock">${item.remaining}</td>
           </tr>
         `;
       });
@@ -766,16 +842,16 @@ const ReportsModule = {
 
       // Per driver inventory
       for (const { driver, inventory: driverInventory } of driverInventories) {
-        
+
         if (driverInventory.length > 0) {
           reportHTML += `
-            <h4>${driver.name}'s Inventory</h4>
-            <table class="report-table">
+            <h4>${driver.name} Stock List</h4>
+            <table class="report-table inventory-table">
               <thead>
                 <tr>
                   <th>Product</th>
-                  <th>Sold</th>
-                  <th>Remaining</th>
+                  <th>Sale</th>
+                  <th>Remaining stock</th>
                 </tr>
               </thead>
               <tbody>
@@ -785,8 +861,8 @@ const ReportsModule = {
             reportHTML += `
               <tr>
                 <td data-label="Product">${item.name}</td>
-                <td data-label="Sold">${item.sold}</td>
-                <td data-label="Remaining">${item.remaining}</td>
+                <td data-label="Sale">${item.sold}</td>
+                <td data-label="Remaining stock">${item.remaining}</td>
               </tr>
             `;
           });
@@ -794,7 +870,7 @@ const ReportsModule = {
           reportHTML += '</tbody></table>';
         } else {
           reportHTML += `
-            <h4>${driver.name}'s Inventory</h4>
+            <h4>${driver.name} Stock List</h4>
             <p class="no-data">No inventory assigned to this driver.</p>
           `;
         }
