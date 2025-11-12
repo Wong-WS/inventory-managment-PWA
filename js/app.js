@@ -9,9 +9,17 @@ import { DB } from "./database.js";
 const AppModule = {
   // Initialize the application
   init() {
-    // Load the default tab (dashboard)
-    this.loadTab("dashboard").catch((error) => {
-      console.error("Error loading dashboard:", error);
+    // Get user session to determine default tab
+    const session = DB.getCurrentSession();
+    let defaultTab = 'dashboard';
+
+    if (session && typeof AuthModule !== 'undefined') {
+      defaultTab = AuthModule.getDefaultTab(session.role);
+    }
+
+    // Load the appropriate default tab based on user role
+    this.loadTab(defaultTab).catch((error) => {
+      console.error("Error loading default tab:", error);
     });
 
     // Bind event listeners

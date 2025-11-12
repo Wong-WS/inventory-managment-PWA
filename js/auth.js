@@ -297,8 +297,8 @@ const AuthModule = {
         return !['my-orders', 'my-inventory', 'my-earnings'].includes(tabId);
         
       case DB.ROLES.SALES_REP:
-        // Sales rep can only access dashboard and orders
-        return ['dashboard', 'orders'].includes(tabId);
+        // Sales rep can only access orders
+        return ['orders'].includes(tabId);
         
       case DB.ROLES.DRIVER:
         // Driver can access dashboard, my-orders, and my-earnings
@@ -315,7 +315,7 @@ const AuthModule = {
       case DB.ROLES.ADMIN:
         return 'dashboard';
       case DB.ROLES.SALES_REP:
-        return 'dashboard';
+        return 'orders';
       case DB.ROLES.DRIVER:
         return 'dashboard';
       default:
