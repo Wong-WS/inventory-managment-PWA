@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventory-manager-v21';
+const CACHE_NAME = 'inventory-manager-v22';
 
 // Core application files to cache
 const filesToCache = [
@@ -21,6 +21,7 @@ const filesToCache = [
   '/js/my-orders.js',
   '/js/my-inventory.js',
   '/js/my-earnings.js',
+  '/js/driver-inventory.js',
   '/js/sales.js',
   // External dependencies
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
