@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Check Duplicate Admin Accounts</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.danger {
+            background: #e74c3c;
+        }
+        button.danger:hover {
+            background: #c0392b;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+        .active-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .active-yes {
+            background: #d4edda;
+            color: #155724;
+        }
+        .active-no {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .primary-badge {
+            background: #4CAF50;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .instructions {
+            background: #fff3cd;
+            padding: 20px;
+            border-radius: 4px;
+            margin-top: 20px;
+            border-left: 4px solid #856404;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #856404;
+        }
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Check Duplicate Admin Accounts</h1>
+        <p>This tool will identify all admin accounts with username "admin" and tell you which one to keep active.</p>
+
+        <button onclick="checkDuplicateAdmins()">🔍 Check Admin Accounts</button>
+
+        <div id="result"></div>
+    </div>
+
+    <!-- Load Firebase config first -->
+    <script type="module">
+        import { DB } from './js/database.js';
+
+        window.checkDuplicateAdmins = async function() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="info result">Checking admin accounts...</div>';
+
+            try {
+                // Get ALL users to find all admin accounts
+                const allUsers = await DB.getAll(DB.COLLECTIONS.USERS);
+                const adminAccounts = allUsers.filter(u => u.username === 'admin');
+
+                if (adminAccounts.length === 0) {
+                    resultDiv.innerHTML = '<div class="error result"><strong>No admin accounts found!</strong><br>You need to create an admin account first.</div>';
+                    return;
+                }
+
+                if (adminAccounts.length === 1) {
+                    resultDiv.innerHTML = '<div class="success result"><strong>✅ No duplicates found!</strong><br>You have exactly 1 admin account. Everything is good!</div>';
+                    return;
+                }
+
+                // Multiple admins found - show details
+                resultDiv.innerHTML = `<div class="warning result"><strong>⚠️ Found ${adminAccounts.length} admin accounts with username "admin"</strong></div>`;
+
+                // Now check which one will be used for login (first result from query)
+                const primaryAdmin = await DB.getUserByUsername('admin');
+
+                // Build table
+                let table = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Priority</th>
+                                <th>User ID</th>
+                                <th>Created At</th>
+                                <th>Last Login</th>
+                                <th>Status</th>
+                                <th>Orders Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                // Get order counts for each admin
+                const orders = await DB.getAll(DB.COLLECTIONS.ORDERS);
+
+                for (const admin of adminAccounts) {
+                    const isPrimary = admin.id === primaryAdmin.id;
+                    const orderCount = orders.filter(o => o.salesRepId === admin.id).length;
+
+                    const createdAt = admin.createdAt?.toDate ?
+                        admin.createdAt.toDate().toLocaleString() :
+                        new Date(admin.createdAt).toLocaleString();
+
+                    const lastLogin = admin.lastLoginAt ?
+                        (admin.lastLoginAt?.toDate ?
+                            admin.lastLoginAt.toDate().toLocaleString() :
+                            new Date(admin.lastLoginAt).toLocaleString()) :
+                        'Never';
+
+                    const activeStatus = admin.isActive ?
+                        '<span class="active-badge active-yes">Active</span>' :
+                        '<span class="active-badge active-no">Inactive</span>';
+
+                    const primaryBadge = isPrimary ?
+                        '<span class="primary-badge">PRIMARY - USED FOR LOGIN</span>' :
+                        '<span style="color: #999;">Secondary</span>';
+
+                    table += `
+                        <tr style="${isPrimary ? 'background: #e8f5e9;' : ''}">
+                            <td>${primaryBadge}</td>
+                            <td><code>${admin.id}</code></td>
+                            <td>${createdAt}</td>
+                            <td>${lastLogin}</td>
+                            <td>${activeStatus}</td>
+                            <td>${orderCount} orders</td>
+                        </tr>
+                    `;
+                }
+
+                table += `
+                        </tbody>
+                    </table>
+                `;
+
+                resultDiv.innerHTML += table;
+
+                // Add instructions
+                const instructions = `
+                    <div class="instructions">
+                        <h3>📋 What To Do:</h3>
+                        <ol>
+                            <li><strong>Keep the PRIMARY admin ACTIVE</strong> (highlighted in green above)</li>
+                            <li><strong>Deactivate all Secondary admins</strong> using the Users management page</li>
+                            <li>The PRIMARY admin is the one that Firebase returns first - this is the one used for login</li>
+                            <li>After deactivating the others, you'll still be able to login with <code>admin</code> / <code>Admin123!</code></li>
+                            <li>Orders created by deactivated admins will remain intact and visible</li>
+                        </ol>
+                        <p><strong>Note:</strong> Deactivating is SAFE and REVERSIBLE. No data will be lost!</p>
+                    </div>
+                `;
+
+                resultDiv.innerHTML += instructions;
+
+                // Add button to go to Users page
+                resultDiv.innerHTML += `
+                    <div style="margin-top: 20px;">
+                        <a href="index.html#users" style="text-decoration: none;">
+                            <button>Go to Users Management Page</button>
+                        </a>
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error('Error checking admin accounts:', error);
+                resultDiv.innerHTML = `<div class="error result"><strong>Error:</strong><br>${error.message}<br><br>Check the browser console for more details.</div>`;
+            }
+        };
+
+        // Auto-check on load
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await window.checkDuplicateAdmins();
+            } catch (error) {
+                console.error('Error on auto-check:', error);
+                document.getElementById('result').innerHTML = `<div class="error result">Error connecting to database: ${error.message}</div>`;
+            }
+        });
+    </script>
+</body>
+</html>
