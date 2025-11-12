@@ -78,8 +78,8 @@ export const DB = {
         localStorage.setItem('inventory_session', JSON.stringify(null));
       }
 
-      // Create default admin user if no users exist
-      await this.createDefaultAdmin();
+      // Note: Default admin user should be created manually using create-admin.html
+      // Removed automatic admin creation to prevent race condition duplicates
     } catch (error) {
       console.error('Database initialization failed:', error);
       throw error;
