@@ -1878,3 +1878,265 @@ button:disabled,
     border-top-color: var(--primary-color);
   }
 }
+
+/* ===================================
+   DRIVER INVENTORY (ADMIN VIEW)
+   =================================== */
+
+.driver-inventory-container {
+  padding: 1rem;
+}
+
+.driver-inventory-container h2 {
+  margin-bottom: 1.5rem;
+  color: var(--primary-color);
+}
+
+/* Driver Inventory Cards */
+.drivers-inventory-list {
+  margin-top: 2rem;
+}
+
+.driver-inventory-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.driver-inventory-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Driver Card Header */
+.driver-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.driver-card-header:hover {
+  background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+}
+
+.driver-card-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.driver-card-title h3 {
+  margin: 0;
+  color: var(--text-color);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.driver-card-summary {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.summary-item {
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  background: white;
+}
+
+.summary-item.normal {
+  color: var(--success-color);
+  border: 1px solid var(--success-color);
+}
+
+.summary-item.warning {
+  color: var(--warning-color);
+  border: 1px solid var(--warning-color);
+}
+
+.summary-item.critical {
+  color: var(--danger-color);
+  border: 1px solid var(--danger-color);
+}
+
+.driver-card-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-color);
+  font-size: 1.25rem;
+  padding: 0.5rem;
+  transition: transform 0.3s ease;
+}
+
+.driver-inventory-card.expanded .driver-card-toggle {
+  transform: rotate(180deg);
+}
+
+/* Driver Card Body */
+.driver-card-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  padding: 0 1.5rem;
+}
+
+.driver-inventory-card.expanded .driver-card-body {
+  max-height: 2000px;
+  padding: 1rem 1.5rem 1.5rem;
+  border-top: 1px solid #e9ecef;
+}
+
+/* Inventory Items within Driver Card */
+.inventory-item {
+  background: white;
+  border: 1px solid #e9ecef;
+  border-left: 4px solid var(--success-color);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.inventory-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.inventory-item.alert-warning {
+  border-left-color: var(--warning-color);
+  background: rgba(240, 173, 78, 0.05);
+}
+
+.inventory-item.alert-critical {
+  border-left-color: var(--danger-color);
+  background: rgba(217, 83, 79, 0.05);
+}
+
+.inventory-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.inventory-item-header .product-name {
+  font-weight: 600;
+  color: var(--text-color);
+  font-size: 1.1rem;
+}
+
+.inventory-item-details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.inventory-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.stat-value.remaining {
+  color: var(--primary-color);
+}
+
+.alert-message {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.alert-message.warning {
+  background: rgba(240, 173, 78, 0.1);
+  color: #856404;
+  border: 1px solid rgba(240, 173, 78, 0.3);
+}
+
+.alert-message.critical {
+  background: rgba(217, 83, 79, 0.1);
+  color: #721c24;
+  border: 1px solid rgba(217, 83, 79, 0.3);
+}
+
+/* Loading and Error States */
+.loading-message,
+.error-message {
+  text-align: center;
+  padding: 2rem;
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+}
+
+.error-message {
+  color: var(--danger-color);
+}
+
+/* Mobile Responsive */
+@media (max-width: 767px) {
+  .driver-card-summary {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .inventory-item-details {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .driver-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .driver-card-toggle {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .driver-inventory-container {
+    padding: 0.5rem;
+  }
+
+  .driver-card-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .driver-card-body {
+    padding: 0 1rem;
+  }
+
+  .driver-inventory-card.expanded .driver-card-body {
+    padding: 0.75rem 1rem 1rem;
+  }
+
+  .inventory-item {
+    padding: 0.75rem;
+  }
+}

@@ -1396,7 +1396,7 @@ const OrdersModule = {
     });
 
     // Build formatted text - simplified format
-    let orderText = `${order.customerAddress}\n${itemsText}${order.totalAmount.toFixed(2)}`;
+    let orderText = `${order.customerAddress}\n${itemsText}${order.totalAmount.toFixed(0)}`;
 
     // Add description if exists
     if (order.customerDescription) {

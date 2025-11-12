@@ -2304,6 +2304,22 @@ export const DB = {
   },
 
   /**
+   * Get inventory for all drivers with alert flags
+   * @param {number} threshold - Low stock threshold (default: 5)
+   * @returns {Array} Array of {driver, inventory} objects with alert flags
+   */
+  async getAllDriversInventory(threshold = 5) {
+    const drivers = await this.getAllDrivers();
+
+    const inventoryPromises = drivers.map(async driver => ({
+      driver: driver,
+      inventory: await this.getDriverInventoryWithAlerts(driver.id, threshold)
+    }));
+
+    return await Promise.all(inventoryPromises);
+  },
+
+  /**
    * Get summary of driver's orders for today
    * @param {string} driverId - Driver ID
    * @returns {Object} Order summary with counts and totals

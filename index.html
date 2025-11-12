@@ -50,6 +50,10 @@
                 <i class="fas fa-truck-loading"></i>
                 <span>Assign</span>
             </button>
+            <button id="driver-inventory-tab" class="tab-button" data-tab="driver-inventory" style="display: none;">
+                <i class="fas fa-warehouse"></i>
+                <span>Driver Inventory</span>
+            </button>
             <button id="orders-tab" class="tab-button" data-tab="orders">
                 <i class="fas fa-clipboard-list"></i>
                 <span>Orders</span>
@@ -854,6 +858,58 @@
         </div>
     </template>
 
+    <!-- Driver Inventory Template (Admin View) -->
+    <template id="driver-inventory-template">
+        <div class="driver-inventory-container">
+            <h2>Driver Inventory Overview</h2>
+
+            <div class="inventory-filters">
+                <div class="form-group">
+                    <label for="driver-filter">Filter by Driver</label>
+                    <select id="driver-filter">
+                        <option value="">All Drivers</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="inventory-summary">
+                <div class="summary-cards">
+                    <div class="summary-card normal">
+                        <div class="summary-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="summary-content">
+                            <div class="summary-number">0</div>
+                            <div class="summary-label">Normal Stock</div>
+                        </div>
+                    </div>
+                    <div class="summary-card warning">
+                        <div class="summary-icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="summary-content">
+                            <div class="summary-number">0</div>
+                            <div class="summary-label">Low Stock</div>
+                        </div>
+                    </div>
+                    <div class="summary-card critical">
+                        <div class="summary-icon">
+                            <i class="fas fa-times-circle"></i>
+                        </div>
+                        <div class="summary-content">
+                            <div class="summary-number">0</div>
+                            <div class="summary-label">Out of Stock</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="drivers-inventory-container" class="drivers-inventory-list">
+                <!-- Driver inventory cards will be loaded here -->
+            </div>
+        </div>
+    </template>
+
     <!-- My Earnings Template (Driver View) -->
     <template id="my-earnings-template">
         <div class="my-earnings-container">
@@ -996,6 +1052,7 @@
     <script type="module" src="js/my-orders.js"></script>
     <script type="module" src="js/my-inventory.js"></script>
     <script type="module" src="js/my-earnings.js"></script>
+    <script type="module" src="js/driver-inventory.js"></script>
     <script type="module" src="js/reports.js"></script>
     <script type="module" src="js/users.js"></script>
     <script type="module" src="js/auth.js"></script>

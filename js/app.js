@@ -136,6 +136,11 @@ const AppModule = {
             await MyEarningsModule.init();
           }
           break;
+        case "driver-inventory":
+          if (typeof DriverInventoryModule !== "undefined") {
+            await DriverInventoryModule.init();
+          }
+          break;
         case "reports":
           if (typeof ReportsModule !== "undefined") {
             await ReportsModule.init();
