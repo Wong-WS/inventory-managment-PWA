@@ -1073,12 +1073,14 @@ const ReportsModule = {
     // For sales metrics, only count completed orders
     const totalSales = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
 
-    // For driver salary, count paid orders from both completed and cancelled
+    // For driver salary, count paid orders from ONLY completed and cancelled (not pending)
     const paidOrders = orders.filter(order =>
-      order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery'
+      (order.status === DB.ORDER_STATUS.COMPLETED || order.status === DB.ORDER_STATUS.CANCELLED) &&
+      (order.deliveryMethod === 'Paid' || order.deliveryMethod === 'Delivery')
     );
     const freeOrders = orders.filter(order =>
-      order.deliveryMethod === 'Free' || order.deliveryMethod === 'Pick up'
+      (order.status === DB.ORDER_STATUS.COMPLETED || order.status === DB.ORDER_STATUS.CANCELLED) &&
+      (order.deliveryMethod === 'Free' || order.deliveryMethod === 'Pick up')
     );
 
     const paidCount = paidOrders.length;
