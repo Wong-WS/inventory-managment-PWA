@@ -1438,10 +1438,7 @@ export const DB = {
       await updateDoc(docRef, {
         productOrder: productOrder // Array of product IDs in custom order
       });
-
-      // Return updated driver
-      const updatedDoc = await getDoc(docRef);
-      return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } : null;
+      // No need to fetch document again - just return success
     } catch (error) {
       console.error('Error updating driver product order:', error);
       throw error;
