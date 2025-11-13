@@ -1649,7 +1649,7 @@ export const DB = {
     let inventoryArray = Object.values(inventory).filter(item => item.assigned > 0);
 
     // Get driver's custom product order if available
-    const driver = await this.getDriver(driverId);
+    const driver = await this.getDriverById(driverId);
     if (driver && driver.productOrder && driver.productOrder.length > 0) {
       // Sort by custom product order
       inventoryArray.sort((a, b) => {
