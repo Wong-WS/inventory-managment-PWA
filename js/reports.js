@@ -1205,9 +1205,7 @@ const ReportsModule = {
       // Save to Firebase
       await DB.updateDriverProductOrder(this.currentDriverId, productOrder);
 
-      alert('Product order saved successfully!');
-
-      // Exit edit mode
+      // Exit edit mode (no alert popup)
       this.isEditOrderMode = false;
       this.toggleEditOrderMode();
 
