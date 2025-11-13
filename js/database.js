@@ -19,6 +19,7 @@ import {
   orderBy,
   limit,
   serverTimestamp,
+  Timestamp,
   writeBatch,
   onSnapshot
 } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js';
@@ -2903,6 +2904,54 @@ export const DB = {
   },
 
   /**
+   * Update an existing payment
+   * @param {string} paymentId - Payment ID to update
+   * @param {Object} updates - Fields to update (date, amount, reason)
+   * @returns {Promise<void>}
+   */
+  async updatePayment(paymentId, updates) {
+    const session = this.getCurrentSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+
+    try {
+      const updateData = {};
+
+      // Update date if provided
+      if (updates.date) {
+        updateData.date = Timestamp.fromDate(new Date(updates.date));
+      }
+
+      // Update amount if provided
+      if (updates.amount !== undefined) {
+        if (updates.amount <= 0) {
+          throw new Error('Amount must be greater than zero');
+        }
+        updateData.amount = parseFloat(updates.amount);
+      }
+
+      // Update reason if provided
+      if (updates.reason) {
+        if (updates.reason.trim().length < 5) {
+          throw new Error('Reason must be at least 5 characters');
+        }
+        updateData.reason = updates.reason.trim();
+      }
+
+      // Add update timestamp
+      updateData.updatedAt = serverTimestamp();
+      updateData.updatedBy = session.userId;
+
+      await updateDoc(doc(db, this.COLLECTIONS.DIRECT_PAYMENTS, paymentId), updateData);
+
+    } catch (error) {
+      console.error('Error updating payment:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Create driver-to-boss payment by admin (auto-approved)
    * This is used when admin submits payment on behalf of driver (e.g., cash payment in real life)
    * @param {Object} paymentData - Payment details
@@ -2936,6 +2985,11 @@ export const DB = {
 
     try {
       const now = serverTimestamp();
+      // Use provided payment date or default to now
+      const paymentDate = paymentData.paymentDate
+        ? Timestamp.fromDate(new Date(paymentData.paymentDate))
+        : now;
+
       const newPaymentData = {
         driverId: paymentData.driverId,
         driverName: paymentData.driverName,
@@ -2945,10 +2999,10 @@ export const DB = {
         direction: 'driver_to_boss', // Distinguish from admin-to-driver payments
         status: 'approved',           // AUTO-APPROVED since admin is submitting
         createdBy: session.userId,    // Admin who created it
-        createdAt: now,
+        createdAt: now,              // When entered into system
         approvedBy: session.userId,   // Same admin who created it
         approvedAt: now,
-        date: now                     // Use current date
+        date: paymentDate            // Actual payment date (can be backdated)
       };
 
       const docRef = await addDoc(collection(db, this.COLLECTIONS.DIRECT_PAYMENTS), newPaymentData);

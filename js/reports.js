@@ -299,6 +299,54 @@ const ReportsModule = {
         margin-top: 2rem;
       }
 
+      /* Payment Edit Form Styles */
+      .payment-edit-form {
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: var(--border-radius);
+        margin-top: 0.5rem;
+      }
+
+      .edit-form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .edit-form-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+      }
+
+      .icon-button {
+        background: none;
+        border: none;
+        color: #007bff;
+        cursor: pointer;
+        padding: 0.5rem;
+        font-size: 1.1rem;
+        border-radius: 4px;
+        transition: all 0.2s;
+      }
+
+      .icon-button:hover {
+        background: rgba(0, 123, 255, 0.1);
+        color: #0056b3;
+      }
+
+      .icon-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      @media (max-width: 768px) {
+        .edit-form-row {
+          grid-template-columns: 1fr;
+        }
+      }
+
       .payment-history-filters {
         display: flex;
         gap: 1rem;
@@ -1635,6 +1683,13 @@ const ReportsModule = {
   bindAdminPaymentForm() {
     const form = document.getElementById('admin-driver-payment-form');
     const driverSelect = document.getElementById('admin-payment-driver');
+    const dateInput = document.getElementById('admin-payment-date');
+
+    // Set default date to today
+    if (dateInput) {
+      const today = new Date().toISOString().split('T')[0];
+      dateInput.value = today;
+    }
 
     if (form) {
       form.addEventListener('submit', (event) => this.handleAdminPaymentSubmit(event));
@@ -1735,11 +1790,13 @@ const ReportsModule = {
     const driverSelect = document.getElementById('admin-payment-driver');
     const amountInput = document.getElementById('admin-payment-amount');
     const reasonInput = document.getElementById('admin-payment-reason');
+    const dateInput = document.getElementById('admin-payment-date');
     const submitBtn = document.getElementById('submit-admin-payment');
 
     const driverId = driverSelect.value;
     const amount = parseFloat(amountInput.value);
     const reason = reasonInput.value.trim();
+    const paymentDate = dateInput.value;
 
     // Validation
     if (!driverId) {
@@ -1749,6 +1806,11 @@ const ReportsModule = {
 
     if (!amount || amount <= 0) {
       alert('Please enter a valid amount greater than 0');
+      return;
+    }
+
+    if (!paymentDate) {
+      alert('Please select a payment date');
       return;
     }
 
@@ -1807,7 +1869,8 @@ const ReportsModule = {
         driverId: driverId,
         driverName: driver.name,
         amount: amount,
-        reason: reason
+        reason: reason,
+        paymentDate: paymentDate
       });
 
       // Success
@@ -1817,6 +1880,8 @@ const ReportsModule = {
       driverSelect.value = '';
       amountInput.value = '';
       reasonInput.value = '';
+      const today = new Date().toISOString().split('T')[0];
+      dateInput.value = today; // Reset to today
       document.getElementById('admin-payment-holding').textContent = '-';
       document.getElementById('admin-payment-holding').style.color = '';
       this.currentDriverHolding = undefined;
@@ -1944,24 +2009,131 @@ const ReportsModule = {
       statusBadge = '<span class="status-badge cancelled"><i class="fas fa-times-circle"></i> CANCELLED</span>';
     }
 
+    // Edit button only for approved payments
+    const editButton = payment.status === 'approved'
+      ? `<button class="icon-button edit-payment-btn" data-payment-id="${payment.id}" title="Edit Payment">
+           <i class="fas fa-edit"></i>
+         </button>`
+      : '';
+
     card.innerHTML = `
       <div class="payment-header">
         <div class="payment-info">
           <div class="payment-driver-name">${driverName}</div>
-          <div class="payment-amount">$${payment.amount.toFixed(2)}</div>
-          <div class="payment-date">${formattedDate} at ${formattedTime}</div>
+          <div class="payment-amount" data-field="amount">$${payment.amount.toFixed(2)}</div>
+          <div class="payment-date" data-field="date">${formattedDate} at ${formattedTime}</div>
         </div>
-        ${statusBadge}
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          ${statusBadge}
+          ${editButton}
+        </div>
       </div>
       <div class="payment-details">
-        <div class="payment-reason">
+        <div class="payment-reason" data-field="reason">
           <i class="fas fa-comment"></i>
           <span>${payment.reason}</span>
         </div>
       </div>
     `;
 
+    // Add edit button click handler
+    if (payment.status === 'approved') {
+      const editBtn = card.querySelector('.edit-payment-btn');
+      if (editBtn) {
+        editBtn.addEventListener('click', () => this.handleEditPayment(payment, card));
+      }
+    }
+
     return card;
+  },
+
+  /**
+   * Handle editing a payment inline
+   */
+  async handleEditPayment(payment, card) {
+    // Get current values
+    const paymentDateObj = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
+    const currentDate = paymentDateObj.toISOString().split('T')[0];
+    const currentAmount = payment.amount;
+    const currentReason = payment.reason;
+
+    // Create inline edit form
+    const editForm = document.createElement('div');
+    editForm.className = 'payment-edit-form';
+    editForm.innerHTML = `
+      <div class="edit-form-row">
+        <div class="form-group">
+          <label>Payment Date</label>
+          <input type="date" id="edit-date-${payment.id}" value="${currentDate}" required>
+        </div>
+        <div class="form-group">
+          <label>Amount ($)</label>
+          <input type="number" id="edit-amount-${payment.id}" value="${currentAmount}" step="0.01" min="0.01" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Reason</label>
+        <textarea id="edit-reason-${payment.id}" rows="2" required minlength="5">${currentReason}</textarea>
+      </div>
+      <div class="edit-form-actions">
+        <button class="primary-button save-edit-btn" data-payment-id="${payment.id}">
+          <i class="fas fa-save"></i> Save
+        </button>
+        <button class="secondary-button cancel-edit-btn">
+          <i class="fas fa-times"></i> Cancel
+        </button>
+      </div>
+    `;
+
+    // Replace payment details with edit form
+    const paymentDetails = card.querySelector('.payment-details');
+    const originalContent = paymentDetails.innerHTML;
+    paymentDetails.innerHTML = '';
+    paymentDetails.appendChild(editForm);
+
+    // Disable edit button while editing
+    const editBtn = card.querySelector('.edit-payment-btn');
+    if (editBtn) editBtn.disabled = true;
+
+    // Handle save
+    const saveBtn = editForm.querySelector('.save-edit-btn');
+    saveBtn.addEventListener('click', async () => {
+      const newDate = document.getElementById(`edit-date-${payment.id}`).value;
+      const newAmount = parseFloat(document.getElementById(`edit-amount-${payment.id}`).value);
+      const newReason = document.getElementById(`edit-reason-${payment.id}`).value.trim();
+
+      if (!newDate || !newAmount || newAmount <= 0 || !newReason || newReason.length < 5) {
+        alert('Please fill in all fields correctly');
+        return;
+      }
+
+      try {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        await DB.updatePayment(payment.id, {
+          date: newDate,
+          amount: newAmount,
+          reason: newReason
+        });
+
+        alert('Payment updated successfully!');
+        await this.loadPaymentHistory(); // Reload to show updated data
+
+      } catch (error) {
+        console.error('Error updating payment:', error);
+        alert('Failed to update payment: ' + error.message);
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save';
+      }
+    });
+
+    // Handle cancel
+    const cancelBtn = editForm.querySelector('.cancel-edit-btn');
+    cancelBtn.addEventListener('click', () => {
+      paymentDetails.innerHTML = originalContent;
+      if (editBtn) editBtn.disabled = false;
+    });
   }
 };
 
