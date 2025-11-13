@@ -1120,7 +1120,15 @@ const ReportsModule = {
 
   toggleEditOrderMode() {
     this.isEditOrderMode = !this.isEditOrderMode;
+    this.updateEditModeUI();
+  },
 
+  exitEditOrderMode() {
+    this.isEditOrderMode = false;
+    this.updateEditModeUI();
+  },
+
+  updateEditModeUI() {
     const toggleBtn = document.getElementById('toggle-edit-order');
     const saveBtn = document.getElementById('save-order');
     const cancelBtn = document.getElementById('cancel-order');
@@ -1206,8 +1214,7 @@ const ReportsModule = {
       await DB.updateDriverProductOrder(this.currentDriverId, productOrder);
 
       // Exit edit mode (no alert popup)
-      this.isEditOrderMode = false;
-      this.toggleEditOrderMode();
+      this.exitEditOrderMode();
 
     } catch (error) {
       console.error('Error saving product order:', error);
