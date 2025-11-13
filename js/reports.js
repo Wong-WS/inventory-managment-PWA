@@ -224,6 +224,106 @@ const ReportsModule = {
         }
       }
 
+      /* Inventory Reorder Buttons */
+      .btn-edit-order,
+      .btn-save-order,
+      .btn-cancel-order {
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: var(--border-radius);
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+
+      .btn-edit-order {
+        background-color: #007bff;
+        color: white;
+      }
+
+      .btn-edit-order:hover {
+        background-color: #0056b3;
+      }
+
+      .btn-save-order {
+        background-color: #28a745;
+        color: white;
+        margin-right: 0.5rem;
+      }
+
+      .btn-save-order:hover {
+        background-color: #218838;
+      }
+
+      .btn-cancel-order {
+        background-color: #6c757d;
+        color: white;
+      }
+
+      .btn-cancel-order:hover {
+        background-color: #5a6268;
+      }
+
+      .reorder-controls {
+        text-align: center !important;
+        padding: 0.5rem !important;
+        white-space: nowrap !important;
+      }
+
+      .btn-move-up,
+      .btn-move-down {
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        width: 32px;
+        height: 32px;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin: 0 2px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .btn-move-up:hover:not(:disabled),
+      .btn-move-down:hover:not(:disabled) {
+        background: #0056b3;
+      }
+
+      .btn-move-up:disabled,
+      .btn-move-down:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+
+      .btn-move-up i,
+      .btn-move-down i {
+        font-size: 0.9rem;
+      }
+
+      @media (max-width: 768px) {
+        .btn-edit-order,
+        .btn-save-order,
+        .btn-cancel-order {
+          padding: 0.4rem 0.8rem;
+          font-size: 0.85rem;
+        }
+
+        .btn-move-up,
+        .btn-move-down {
+          width: 28px;
+          height: 28px;
+        }
+
+        .btn-move-up i,
+        .btn-move-down i {
+          font-size: 0.8rem;
+        }
+      }
+
       /* Admin Payment Form Styles */
       .admin-payment-section {
         background: white;
@@ -804,19 +904,36 @@ const ReportsModule = {
         return;
       }
 
-      // Sort by product name
-      inventoryData.sort((a, b) => a.name.localeCompare(b.name));
+      // Sorting is now handled in getDriverInventory() based on custom productOrder
+      // No need to sort here anymore
 
       // Build report HTML for a specific driver
       const driver = await this.getCachedDriver(driverId);
 
+      // Store current state for reordering
+      this.currentInventoryData = inventoryData;
+      this.currentDriverId = driverId;
+      this.isEditOrderMode = false;
+
       let reportHTML = `
-        <div class="report-summary">
+        <div class="report-summary" style="display: flex; justify-content: space-between; align-items: center;">
           <h4>${driver.name} Stock List</h4>
+          <button id="toggle-edit-order" class="btn-edit-order">
+            <i class="fas fa-edit"></i> Edit Order
+          </button>
         </div>
-        <table class="report-table inventory-table">
+        <div id="edit-order-actions" style="display: none; margin-bottom: 1rem; text-align: right;">
+          <button id="save-order" class="btn-save-order">
+            <i class="fas fa-save"></i> Save Order
+          </button>
+          <button id="cancel-order" class="btn-cancel-order">
+            <i class="fas fa-times"></i> Cancel
+          </button>
+        </div>
+        <table class="report-table inventory-table" id="inventory-order-table">
           <thead>
             <tr>
+              <th class="reorder-controls-col" style="display: none;"></th>
               <th>Product</th>
               <th>Sale</th>
               <th>Remaining stock</th>
@@ -825,9 +942,17 @@ const ReportsModule = {
           <tbody>
       `;
 
-      inventoryData.forEach(item => {
+      inventoryData.forEach((item, index) => {
         reportHTML += `
-          <tr>
+          <tr data-product-id="${item.id}" data-index="${index}">
+            <td class="reorder-controls" style="display: none;">
+              <button class="btn-move-up" data-index="${index}" ${index === 0 ? 'disabled' : ''}>
+                <i class="fas fa-arrow-up"></i>
+              </button>
+              <button class="btn-move-down" data-index="${index}" ${index === inventoryData.length - 1 ? 'disabled' : ''}>
+                <i class="fas fa-arrow-down"></i>
+              </button>
+            </td>
             <td data-label="Product">${item.name}</td>
             <td data-label="Sale">${item.sold}</td>
             <td data-label="Remaining stock">${item.remaining}</td>
@@ -837,6 +962,9 @@ const ReportsModule = {
 
       reportHTML += '</tbody></table>';
       resultsDiv.innerHTML = reportHTML;
+
+      // Bind event listeners
+      this.bindInventoryReorderEvents();
       
     } else {
       // Get inventory for all drivers
@@ -905,7 +1033,8 @@ const ReportsModule = {
               <tbody>
           `;
 
-          driverInventory.sort((a, b) => a.name.localeCompare(b.name)).forEach(item => {
+          // Sorting is already handled in getDriverInventory()
+          driverInventory.forEach(item => {
             reportHTML += `
               <tr>
                 <td data-label="Product">${item.name}</td>
@@ -936,6 +1065,145 @@ const ReportsModule = {
     if (typeof DriversModule !== 'undefined') {
       await DriversModule.updateDriverDropdowns();
     }
+  },
+
+  // ===== INVENTORY PRODUCT ORDER MANAGEMENT =====
+
+  bindInventoryReorderEvents() {
+    const toggleBtn = document.getElementById('toggle-edit-order');
+    const saveBtn = document.getElementById('save-order');
+    const cancelBtn = document.getElementById('cancel-order');
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => this.toggleEditOrderMode());
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => this.saveProductOrder());
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this.cancelEditOrderMode());
+    }
+
+    // Bind move buttons
+    const moveUpButtons = document.querySelectorAll('.btn-move-up');
+    const moveDownButtons = document.querySelectorAll('.btn-move-down');
+
+    moveUpButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt(e.currentTarget.getAttribute('data-index'));
+        this.moveProductUp(index);
+      });
+    });
+
+    moveDownButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt(e.currentTarget.getAttribute('data-index'));
+        this.moveProductDown(index);
+      });
+    });
+  },
+
+  toggleEditOrderMode() {
+    this.isEditOrderMode = !this.isEditOrderMode;
+
+    const toggleBtn = document.getElementById('toggle-edit-order');
+    const editActions = document.getElementById('edit-order-actions');
+    const reorderControls = document.querySelectorAll('.reorder-controls');
+    const reorderControlsCol = document.querySelector('.reorder-controls-col');
+
+    if (this.isEditOrderMode) {
+      // Enter edit mode
+      toggleBtn.innerHTML = '<i class="fas fa-times"></i> Cancel';
+      editActions.style.display = 'block';
+      reorderControlsCol.style.display = 'table-cell';
+      reorderControls.forEach(cell => cell.style.display = 'table-cell');
+    } else {
+      // Exit edit mode
+      toggleBtn.innerHTML = '<i class="fas fa-edit"></i> Edit Order';
+      editActions.style.display = 'none';
+      reorderControlsCol.style.display = 'none';
+      reorderControls.forEach(cell => cell.style.display = 'none');
+    }
+  },
+
+  moveProductUp(index) {
+    if (index <= 0) return; // Already at top
+
+    // Swap with previous item
+    const temp = this.currentInventoryData[index];
+    this.currentInventoryData[index] = this.currentInventoryData[index - 1];
+    this.currentInventoryData[index - 1] = temp;
+
+    // Re-render table
+    this.rerenderInventoryTable();
+  },
+
+  moveProductDown(index) {
+    if (index >= this.currentInventoryData.length - 1) return; // Already at bottom
+
+    // Swap with next item
+    const temp = this.currentInventoryData[index];
+    this.currentInventoryData[index] = this.currentInventoryData[index + 1];
+    this.currentInventoryData[index + 1] = temp;
+
+    // Re-render table
+    this.rerenderInventoryTable();
+  },
+
+  rerenderInventoryTable() {
+    const tbody = document.querySelector('#inventory-order-table tbody');
+    if (!tbody) return;
+
+    let tbodyHTML = '';
+    this.currentInventoryData.forEach((item, index) => {
+      tbodyHTML += `
+        <tr data-product-id="${item.id}" data-index="${index}">
+          <td class="reorder-controls" style="${this.isEditOrderMode ? 'display: table-cell;' : 'display: none;'}">
+            <button class="btn-move-up" data-index="${index}" ${index === 0 ? 'disabled' : ''}>
+              <i class="fas fa-arrow-up"></i>
+            </button>
+            <button class="btn-move-down" data-index="${index}" ${index === this.currentInventoryData.length - 1 ? 'disabled' : ''}>
+              <i class="fas fa-arrow-down"></i>
+            </button>
+          </td>
+          <td data-label="Product">${item.name}</td>
+          <td data-label="Sale">${item.sold}</td>
+          <td data-label="Remaining stock">${item.remaining}</td>
+        </tr>
+      `;
+    });
+
+    tbody.innerHTML = tbodyHTML;
+
+    // Re-bind events
+    this.bindInventoryReorderEvents();
+  },
+
+  async saveProductOrder() {
+    try {
+      // Extract product IDs in current order
+      const productOrder = this.currentInventoryData.map(item => item.id);
+
+      // Save to Firebase
+      await DB.updateDriverProductOrder(this.currentDriverId, productOrder);
+
+      alert('Product order saved successfully!');
+
+      // Exit edit mode
+      this.isEditOrderMode = false;
+      this.toggleEditOrderMode();
+
+    } catch (error) {
+      console.error('Error saving product order:', error);
+      alert('Failed to save product order. Please try again.');
+    }
+  },
+
+  cancelEditOrderMode() {
+    // Reload the report to reset changes
+    this.generateInventoryReport();
   },
 
   // ===== DRIVER EARNINGS REPORT METHODS =====

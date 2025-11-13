@@ -1419,15 +1419,31 @@ export const DB = {
   async deleteDriver(id) {
     try {
       const docRef = doc(db, this.COLLECTIONS.DRIVERS, id);
-      
+
       // Get the driver before deleting
       const docSnap = await getDoc(docRef);
       const deletedDriver = docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
-      
+
       await deleteDoc(docRef);
       return deletedDriver;
     } catch (error) {
       console.error('Error deleting driver:', error);
+      throw error;
+    }
+  },
+
+  async updateDriverProductOrder(driverId, productOrder) {
+    try {
+      const docRef = doc(db, this.COLLECTIONS.DRIVERS, driverId);
+      await updateDoc(docRef, {
+        productOrder: productOrder // Array of product IDs in custom order
+      });
+
+      // Return updated driver
+      const updatedDoc = await getDoc(docRef);
+      return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } : null;
+    } catch (error) {
+      console.error('Error updating driver product order:', error);
       throw error;
     }
   },
@@ -1630,7 +1646,33 @@ export const DB = {
         inventory[productId].assigned - inventory[productId].sold - inventory[productId].transferred;
     });
 
-    return Object.values(inventory).filter(item => item.assigned > 0);
+    let inventoryArray = Object.values(inventory).filter(item => item.assigned > 0);
+
+    // Get driver's custom product order if available
+    const driver = await this.getDriver(driverId);
+    if (driver && driver.productOrder && driver.productOrder.length > 0) {
+      // Sort by custom product order
+      inventoryArray.sort((a, b) => {
+        const indexA = driver.productOrder.indexOf(a.id);
+        const indexB = driver.productOrder.indexOf(b.id);
+
+        // Items in custom order come first, sorted by their position
+        if (indexA !== -1 && indexB !== -1) {
+          return indexA - indexB;
+        }
+        // Items in custom order come before items not in order
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+
+        // Items not in custom order fall back to alphabetical
+        return a.name.localeCompare(b.name);
+      });
+    } else {
+      // Default alphabetical sort
+      inventoryArray.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return inventoryArray;
   },
   
   async getTotalInventory() {
