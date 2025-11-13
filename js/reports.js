@@ -1943,10 +1943,10 @@ const ReportsModule = {
         const paymentArrays = await Promise.all(paymentPromises);
         allPayments = paymentArrays.flat();
 
-        // Sort by date (newest first)
+        // Sort by payment date (newest first)
         allPayments.sort((a, b) => {
-          const aDate = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
-          const bDate = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+          const aDate = a.date?.toDate ? a.date.toDate() : new Date(a.date);
+          const bDate = b.date?.toDate ? b.date.toDate() : new Date(b.date);
           return bDate - aDate;
         });
       }
@@ -1984,7 +1984,8 @@ const ReportsModule = {
     const card = document.createElement('div');
     card.className = `payment-item payment-${payment.status}`;
 
-    const paymentDate = payment.createdAt?.toDate ? payment.createdAt.toDate() : new Date(payment.createdAt);
+    // Use payment date (actual payment date) instead of createdAt (when entered in system)
+    const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
     const formattedDate = paymentDate.toLocaleDateString();
     const formattedTime = paymentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
