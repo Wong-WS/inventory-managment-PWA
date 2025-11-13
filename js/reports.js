@@ -892,6 +892,70 @@ const ReportsModule = {
 
   // ===== DRIVER EARNINGS REPORT METHODS =====
 
+  // Helper: Get orders up to end of period (cumulative)
+  async getOrdersUpToDate(driverId, period, date) {
+    const allOrders = await DB.getOrdersByDriver(driverId);
+    const endDate = this.getEndOfPeriod(period, date);
+
+    return allOrders.filter(order => {
+      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+      return orderDate <= endDate;
+    });
+  },
+
+  // Helper: Get direct payments up to end of period (cumulative)
+  async getDirectPaymentsUpToDate(driverId, period, date) {
+    const allPayments = await DB.getDirectPaymentsByDriver(driverId);
+    const endDate = this.getEndOfPeriod(period, date);
+
+    return allPayments.filter(payment => {
+      const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
+      return paymentDate <= endDate;
+    });
+  },
+
+  // Helper: Get approved boss payments up to end of period (cumulative)
+  async getApprovedBossPaymentsUpToDate(driverId, period, date) {
+    // Get all approved boss payments (driver-to-boss)
+    const allPayments = await DB.getApprovedDriverPayments(driverId, null, null);
+    const endDate = this.getEndOfPeriod(period, date);
+
+    return allPayments.filter(payment => {
+      const paymentDate = payment.createdAt?.toDate ? payment.createdAt.toDate() : new Date(payment.createdAt);
+      return paymentDate <= endDate;
+    });
+  },
+
+  // Helper: Get end of period date
+  getEndOfPeriod(period, date) {
+    const targetDate = new Date(date);
+    let endDate;
+
+    switch(period) {
+      case 'day':
+        endDate = new Date(targetDate);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case 'week': {
+        const dayOfWeek = targetDate.getDay();
+        endDate = new Date(targetDate);
+        endDate.setDate(targetDate.getDate() - dayOfWeek + 6);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      }
+      case 'month':
+        endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59, 999);
+        break;
+      case 'year':
+        endDate = new Date(targetDate.getFullYear(), 11, 31, 23, 59, 59, 999);
+        break;
+      default:
+        endDate = new Date(); // Default to now
+    }
+
+    return endDate;
+  },
+
   // Helper: Format date range for display
   formatDateRange(period, date) {
     const displayDate = new Date(date);
@@ -968,13 +1032,13 @@ const ReportsModule = {
       const directPayments = await DB.getDirectPaymentsByPeriod(driver.id, period, date);
       const approvedBossPayments = await DB.getApprovedDriverPayments(driver.id, period, date);
 
-      // Get ALL-TIME data for holding calculation
-      const allTimeOrders = await DB.getOrdersByDriver(driver.id);
-      const allTimeDirectPayments = await DB.getDirectPaymentsByDriver(driver.id);
-      const allTimeApprovedBossPayments = await DB.getApprovedDriverPayments(driver.id, null, null);
+      // Get UP-TO-END-OF-PERIOD data for holding calculation
+      const upToEndOrders = await this.getOrdersUpToDate(driver.id, period, date);
+      const upToEndDirectPayments = await this.getDirectPaymentsUpToDate(driver.id, period, date);
+      const upToEndApprovedBossPayments = await this.getApprovedBossPaymentsUpToDate(driver.id, period, date);
 
-      // Filter all-time orders to only completed/cancelled paid ones
-      const allTimePaidOrders = allTimeOrders.filter(order => {
+      // Filter orders to only completed/cancelled paid ones
+      const upToEndPaidOrders = upToEndOrders.filter(order => {
         if (order.status === DB.ORDER_STATUS.COMPLETED) {
           return true;
         }
@@ -984,19 +1048,18 @@ const ReportsModule = {
         return false;
       });
 
-      // Calculate period earnings for display
+      // Calculate period earnings for display (including period-only Boss Paid)
       const earnings = this.calculateDriverEarnings(orders, directPayments, approvedBossPayments);
 
-      // Calculate all-time holding
-      const allTimeEarnings = this.calculateDriverEarnings(allTimePaidOrders, allTimeDirectPayments, allTimeApprovedBossPayments);
+      // Calculate holding as of end of selected period (cumulative)
+      const upToEndEarnings = this.calculateDriverEarnings(upToEndPaidOrders, upToEndDirectPayments, upToEndApprovedBossPayments);
 
       return {
         driver,
         ...earnings,
-        // Override with all-time holding
-        holdingAmount: allTimeEarnings.holdingAmount,
-        allTimeBossCollection: allTimeEarnings.bossCollection,
-        allTimeApprovedBossPayments: allTimeEarnings.approvedBossPaymentsTotal
+        // Override ONLY holding amount with cumulative value (keep Boss Paid as period-only)
+        holdingAmount: upToEndEarnings.holdingAmount,
+        allTimeBossCollection: upToEndEarnings.bossCollection
       };
     });
 
@@ -1009,7 +1072,7 @@ const ReportsModule = {
       totalDirectPayments: driverEarnings.reduce((sum, d) => sum + d.directPaymentsTotal, 0),
       totalDriverEarnings: driverEarnings.reduce((sum, d) => sum + d.totalDriverEarnings, 0),
       totalBossCollection: driverEarnings.reduce((sum, d) => sum + d.bossCollection, 0),
-      totalApprovedBossPayments: driverEarnings.reduce((sum, d) => sum + d.allTimeApprovedBossPayments, 0),
+      totalApprovedBossPayments: driverEarnings.reduce((sum, d) => sum + d.approvedBossPaymentsTotal, 0),
       totalHolding: driverEarnings.reduce((sum, d) => sum + d.holdingAmount, 0),
       totalOrders: driverEarnings.reduce((sum, d) => sum + d.totalOrders, 0),
       totalDeliveries: driverEarnings.reduce((sum, d) => sum + d.deliveryCount, 0)
@@ -1033,13 +1096,14 @@ const ReportsModule = {
     const directPayments = await DB.getDirectPaymentsByPeriod(driverId, period, date);
     const approvedBossPayments = await DB.getApprovedDriverPayments(driverId, period, date);
 
-    // Get ALL-TIME data for holding calculation
-    const allTimeOrders = await DB.getOrdersByDriver(driverId);
-    const allTimeDirectPayments = await DB.getDirectPaymentsByDriver(driverId);
-    const allTimeApprovedBossPayments = await DB.getApprovedDriverPayments(driverId, null, null);
+    // Get UP-TO-END-OF-PERIOD data for holding calculation
+    // This gives us cumulative data from beginning of time up to the end of selected period
+    const upToEndOrders = await this.getOrdersUpToDate(driverId, period, date);
+    const upToEndDirectPayments = await this.getDirectPaymentsUpToDate(driverId, period, date);
+    const upToEndApprovedBossPayments = await this.getApprovedBossPaymentsUpToDate(driverId, period, date);
 
-    // Filter all-time orders to only completed/cancelled paid ones
-    const allTimePaidOrders = allTimeOrders.filter(order => {
+    // Filter orders to only completed/cancelled paid ones
+    const upToEndPaidOrders = upToEndOrders.filter(order => {
       if (order.status === DB.ORDER_STATUS.COMPLETED) {
         return true;
       }
@@ -1049,19 +1113,18 @@ const ReportsModule = {
       return false;
     });
 
-    // Calculate period earnings for display
+    // Calculate period earnings for display (including period-only Boss Paid)
     const earnings = this.calculateDriverEarnings(orders, directPayments, approvedBossPayments);
 
-    // Calculate all-time holding
-    const allTimeEarnings = this.calculateDriverEarnings(allTimePaidOrders, allTimeDirectPayments, allTimeApprovedBossPayments);
+    // Calculate holding as of end of selected period (cumulative)
+    const upToEndEarnings = this.calculateDriverEarnings(upToEndPaidOrders, upToEndDirectPayments, upToEndApprovedBossPayments);
 
-    // Override with all-time holding values
-    earnings.holdingAmount = allTimeEarnings.holdingAmount;
-    earnings.allTimeApprovedBossPaymentsTotal = allTimeEarnings.approvedBossPaymentsTotal;
-    earnings.allTimeBossCollection = allTimeEarnings.bossCollection;
+    // Override ONLY holding amount with cumulative value (keep Boss Paid as period-only)
+    earnings.holdingAmount = upToEndEarnings.holdingAmount;
+    earnings.allTimeBossCollection = upToEndEarnings.bossCollection;
 
-    // Render the single-driver view
-    this.renderSingleDriverEarningsReport(driver, earnings, orders, directPayments, allTimeApprovedBossPayments, period, date);
+    // Render the single-driver view (Boss Paid will be period-only from approvedBossPayments)
+    this.renderSingleDriverEarningsReport(driver, earnings, orders, directPayments, approvedBossPayments, period, date);
   },
 
   // Calculate driver earnings from orders and direct payments
@@ -1197,8 +1260,8 @@ const ReportsModule = {
                 <td data-label="Direct Payments" style="color: ${d.directPaymentsTotal >= 0 ? '#28a745' : '#dc3545'}">$${d.directPaymentsTotal.toFixed(2)}</td>
                 <td data-label="Total Earnings"><strong>$${d.totalDriverEarnings.toFixed(2)}</strong></td>
                 <td data-label="Boss Gets">$${d.bossCollection.toFixed(2)}</td>
-                <td data-label="Boss Paid (All-Time)" style="color: #dc3545">$${d.allTimeApprovedBossPayments.toFixed(2)}</td>
-                <td data-label="Holding (All-Time)" style="color: #28a745; font-weight: bold;">$${d.holdingAmount.toFixed(2)}</td>
+                <td data-label="Boss Paid" style="color: #dc3545">$${d.approvedBossPaymentsTotal.toFixed(2)}</td>
+                <td data-label="Holding" style="color: #28a745; font-weight: bold;">$${d.holdingAmount.toFixed(2)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -1244,8 +1307,8 @@ const ReportsModule = {
           </div>
           <div class="stat-item">
             <span class="stat-label">Boss Paid:</span>
-            <span class="stat-value" style="color: #dc3545">$${earnings.allTimeApprovedBossPaymentsTotal.toFixed(2)}</span>
-            <span class="stat-detail">${approvedBossPayments.length} approved payments (all-time)</span>
+            <span class="stat-value" style="color: #dc3545">$${earnings.approvedBossPaymentsTotal.toFixed(2)}</span>
+            <span class="stat-detail">${approvedBossPayments.length} approved payments</span>
           </div>
           <div class="stat-item">
             <span class="stat-label">Holding Amount:</span>
