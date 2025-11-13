@@ -225,6 +225,12 @@ const ReportsModule = {
       }
 
       /* Inventory Reorder Buttons */
+      #edit-order-controls {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
       .btn-edit-order,
       .btn-save-order,
       .btn-cancel-order {
@@ -918,17 +924,17 @@ const ReportsModule = {
       let reportHTML = `
         <div class="report-summary" style="display: flex; justify-content: space-between; align-items: center;">
           <h4>${driver.name} Stock List</h4>
-          <button id="toggle-edit-order" class="btn-edit-order">
-            <i class="fas fa-edit"></i> Edit Order
-          </button>
-        </div>
-        <div id="edit-order-actions" style="display: none; margin-bottom: 1rem; text-align: right;">
-          <button id="save-order" class="btn-save-order">
-            <i class="fas fa-save"></i> Save Order
-          </button>
-          <button id="cancel-order" class="btn-cancel-order">
-            <i class="fas fa-times"></i> Cancel
-          </button>
+          <div id="edit-order-controls">
+            <button id="toggle-edit-order" class="btn-edit-order">
+              <i class="fas fa-edit"></i> Edit Order
+            </button>
+            <button id="save-order" class="btn-save-order" style="display: none;">
+              <i class="fas fa-save"></i> Save Order
+            </button>
+            <button id="cancel-order" class="btn-cancel-order" style="display: none;">
+              <i class="fas fa-times"></i> Cancel
+            </button>
+          </div>
         </div>
         <table class="report-table inventory-table" id="inventory-order-table">
           <thead>
@@ -1074,16 +1080,23 @@ const ReportsModule = {
     const saveBtn = document.getElementById('save-order');
     const cancelBtn = document.getElementById('cancel-order');
 
+    // Remove old event listeners by cloning and replacing (prevents duplicate events)
     if (toggleBtn) {
-      toggleBtn.addEventListener('click', () => this.toggleEditOrderMode());
+      const newToggleBtn = toggleBtn.cloneNode(true);
+      toggleBtn.parentNode.replaceChild(newToggleBtn, toggleBtn);
+      newToggleBtn.addEventListener('click', () => this.toggleEditOrderMode());
     }
 
     if (saveBtn) {
-      saveBtn.addEventListener('click', () => this.saveProductOrder());
+      const newSaveBtn = saveBtn.cloneNode(true);
+      saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+      newSaveBtn.addEventListener('click', () => this.saveProductOrder());
     }
 
     if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => this.cancelEditOrderMode());
+      const newCancelBtn = cancelBtn.cloneNode(true);
+      cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+      newCancelBtn.addEventListener('click', () => this.cancelEditOrderMode());
     }
 
     // Bind move buttons
@@ -1109,20 +1122,23 @@ const ReportsModule = {
     this.isEditOrderMode = !this.isEditOrderMode;
 
     const toggleBtn = document.getElementById('toggle-edit-order');
-    const editActions = document.getElementById('edit-order-actions');
+    const saveBtn = document.getElementById('save-order');
+    const cancelBtn = document.getElementById('cancel-order');
     const reorderControls = document.querySelectorAll('.reorder-controls');
     const reorderControlsCol = document.querySelector('.reorder-controls-col');
 
     if (this.isEditOrderMode) {
       // Enter edit mode
-      toggleBtn.innerHTML = '<i class="fas fa-times"></i> Cancel';
-      editActions.style.display = 'block';
+      toggleBtn.style.display = 'none';
+      saveBtn.style.display = 'inline-block';
+      cancelBtn.style.display = 'inline-block';
       reorderControlsCol.style.display = 'table-cell';
       reorderControls.forEach(cell => cell.style.display = 'table-cell');
     } else {
       // Exit edit mode
-      toggleBtn.innerHTML = '<i class="fas fa-edit"></i> Edit Order';
-      editActions.style.display = 'none';
+      toggleBtn.style.display = 'inline-block';
+      saveBtn.style.display = 'none';
+      cancelBtn.style.display = 'none';
       reorderControlsCol.style.display = 'none';
       reorderControls.forEach(cell => cell.style.display = 'none');
     }
