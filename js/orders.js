@@ -249,6 +249,14 @@ const OrdersModule = {
       });
     }
 
+    // Date range filter
+    const dateRangeFilter = document.getElementById('order-date-range-filter');
+    if (dateRangeFilter) {
+      dateRangeFilter.addEventListener('change', () => {
+        this.setupOrdersListener();
+      });
+    }
+
     // Payment form
     const paymentForm = document.getElementById('pay-driver-form');
     if (paymentForm) {
@@ -930,6 +938,9 @@ const OrdersModule = {
     const statusFilter = document.getElementById('order-status-filter');
     const selectedStatus = statusFilter ? statusFilter.value : '';
 
+    const dateRangeFilter = document.getElementById('order-date-range-filter');
+    const selectedDateRange = dateRangeFilter ? dateRangeFilter.value : 'today';
+
     // Determine filters based on user role
     const filters = {};
 
@@ -943,10 +954,34 @@ const OrdersModule = {
       filters.status = selectedStatus;
     }
 
-    // Only fetch today's orders to improve performance
-    // BUT always show ALL pending orders regardless of date
-    filters.todayOnly = true;
-    filters.showAllPending = true;
+    // Apply date range filter
+    switch (selectedDateRange) {
+      case 'today':
+        // Only fetch today's orders to improve performance
+        // BUT always show ALL pending orders regardless of date
+        filters.todayOnly = true;
+        filters.showAllPending = true;
+        break;
+      case '3days':
+        // Fetch last 3 days including today
+        filters.daysBack = 3;
+        filters.showAllPending = true;
+        break;
+      case '7days':
+        // Fetch last 7 days including today
+        filters.daysBack = 7;
+        filters.showAllPending = true;
+        break;
+      case 'all':
+        // Fetch all orders (no date filter)
+        filters.todayOnly = false;
+        filters.showAllPending = false;
+        break;
+      default:
+        // Default to today only
+        filters.todayOnly = true;
+        filters.showAllPending = true;
+    }
 
     // Setup real-time listener and store unsubscribe function
     this.ordersListenerUnsubscribe = DB.listenToOrders(async (orders) => {

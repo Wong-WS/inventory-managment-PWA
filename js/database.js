@@ -124,7 +124,8 @@ export const DB = {
     const listenerId = 'orders' + (filters.driverId ? '_driver_' + filters.driverId : '') +
                       (filters.salesRepId ? '_salesrep_' + filters.salesRepId : '') +
                       (filters.status ? '_status_' + filters.status : '') +
-                      (filters.todayOnly ? '_today' : '');
+                      (filters.todayOnly ? '_today' : '') +
+                      (filters.daysBack ? '_daysback_' + filters.daysBack : '');
 
     this.cleanupListener(listenerId);
 
@@ -141,10 +142,17 @@ export const DB = {
       q = query(q, where("status", "==", filters.status));
     }
 
+    // Add date filter for daysBack (last N days)
+    if (filters.daysBack) {
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - (filters.daysBack - 1)); // -1 to include today
+      daysAgo.setHours(0, 0, 0, 0); // Start of that day
+      q = query(q, where("createdAt", ">=", daysAgo));
+    }
     // Add date filter to only fetch today's orders (if requested)
     // BUT if showAllPending is true and no specific status filter, don't apply date filter
     // (we'll filter client-side to show all pending + today's completed/cancelled)
-    if (filters.todayOnly && !(filters.showAllPending && !filters.status)) {
+    else if (filters.todayOnly && !(filters.showAllPending && !filters.status)) {
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Start of today
       q = query(q, where("createdAt", ">=", today));
@@ -158,21 +166,39 @@ export const DB = {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // Filter client-side if showAllPending is enabled
-      if (filters.todayOnly && filters.showAllPending && !filters.status) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Start of today
-        const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+      // Filter client-side if showAllPending is enabled (for todayOnly or daysBack)
+      if (filters.showAllPending && !filters.status) {
+        if (filters.todayOnly) {
+          // Today only: show all pending + today's completed/cancelled
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // Start of today
+          const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
-        orders = orders.filter(order => {
-          // Always show PENDING orders regardless of date
-          if (order.status === this.ORDER_STATUS.PENDING) {
-            return true;
-          }
-          // For COMPLETED/CANCELLED, only show today's
-          const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
-          return orderDate >= today && orderDate < todayEnd;
-        });
+          orders = orders.filter(order => {
+            // Always show PENDING orders regardless of date
+            if (order.status === this.ORDER_STATUS.PENDING) {
+              return true;
+            }
+            // For COMPLETED/CANCELLED, only show today's
+            const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+            return orderDate >= today && orderDate < todayEnd;
+          });
+        } else if (filters.daysBack) {
+          // Last N days: show all pending + last N days completed/cancelled
+          const daysAgo = new Date();
+          daysAgo.setDate(daysAgo.getDate() - (filters.daysBack - 1)); // -1 to include today
+          daysAgo.setHours(0, 0, 0, 0); // Start of that day
+
+          orders = orders.filter(order => {
+            // Always show PENDING orders regardless of date
+            if (order.status === this.ORDER_STATUS.PENDING) {
+              return true;
+            }
+            // For COMPLETED/CANCELLED, only show orders within date range
+            const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+            return orderDate >= daysAgo;
+          });
+        }
       }
 
       // Sort in memory if we couldn't sort in the query due to composite index requirements

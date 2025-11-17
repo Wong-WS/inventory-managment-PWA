@@ -413,6 +413,15 @@
                 <h3>Manage Orders</h3>
                 <div class="orders-filters">
                     <div class="form-group">
+                        <label for="order-date-range-filter">Date Range</label>
+                        <select id="order-date-range-filter">
+                            <option value="today">Today Only</option>
+                            <option value="3days">Last 3 Days</option>
+                            <option value="7days">Last 7 Days</option>
+                            <option value="all">All Time</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label for="order-status-filter">Filter by Status</label>
                         <select id="order-status-filter">
                             <option value="">All Orders</option>
