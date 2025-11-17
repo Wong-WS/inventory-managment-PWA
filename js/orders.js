@@ -3,6 +3,9 @@
  * Handles creating, managing, and tracking orders with status workflow
  */
 
+// Import BusinessDayModule
+import { BusinessDayModule } from './business-day.js';
+
 const OrdersModule = {
   // Cache for drivers and users to avoid N+1 queries
   driversCache: new Map(),
@@ -186,6 +189,12 @@ const OrdersModule = {
     this.lineItemCounter = 1; // Start at 1 because HTML already has line-item with data-index="0"
     this.currentView = 'create'; // 'create' or 'manage'
     this.ordersListenerUnsubscribe = null; // Track listener for cleanup
+
+    // Render business day status banner
+    const bannerContainer = document.getElementById('orders-day-status-container');
+    if (bannerContainer) {
+      BusinessDayModule.renderDayStatusBanner(bannerContainer);
+    }
 
     // Initialize caches immediately for performance
     await this.initializeCaches();

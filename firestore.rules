@@ -53,5 +53,24 @@ service cloud.firestore {
     //   allow read: if request.auth != null;
     //   allow write: if request.auth != null;
     // }
+    //
+    // BUSINESS DAY MANAGEMENT RULES (if using Firebase Auth):
+    //
+    // match /businessDays/{dayId} {
+    //   allow read: if request.auth != null;
+    //   allow create: if request.auth != null &&
+    //                   (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+    //                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'sales_rep');
+    //   allow update: if request.auth != null &&
+    //                   (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+    //                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'sales_rep');
+    // }
+    //
+    // match /settings/{settingId} {
+    //   allow read: if request.auth != null &&
+    //                 get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    //   allow write: if request.auth != null &&
+    //                  get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // }
   }
 }
