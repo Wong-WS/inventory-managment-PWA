@@ -193,6 +193,7 @@ const OrdersModule = {
     this.bindEvents();
     // Don't setup listener immediately - only when manage view is shown
     await this.updateDriverDropdown();
+    await this.updateDriverFilterDropdown();
     await this.updateLineItemProductOptions();
     this.showCreateOrderView(); // Default to create view
   },
@@ -253,6 +254,14 @@ const OrdersModule = {
     const dateRangeFilter = document.getElementById('order-date-range-filter');
     if (dateRangeFilter) {
       dateRangeFilter.addEventListener('change', () => {
+        this.setupOrdersListener();
+      });
+    }
+
+    // Driver filter
+    const driverFilter = document.getElementById('order-driver-filter');
+    if (driverFilter) {
+      driverFilter.addEventListener('change', () => {
         this.setupOrdersListener();
       });
     }
@@ -941,6 +950,9 @@ const OrdersModule = {
     const dateRangeFilter = document.getElementById('order-date-range-filter');
     const selectedDateRange = dateRangeFilter ? dateRangeFilter.value : 'today';
 
+    const driverFilter = document.getElementById('order-driver-filter');
+    const selectedDriver = driverFilter ? driverFilter.value : '';
+
     // Determine filters based on user role
     const filters = {};
 
@@ -952,6 +964,10 @@ const OrdersModule = {
 
     if (selectedStatus) {
       filters.status = selectedStatus;
+    }
+
+    if (selectedDriver) {
+      filters.driverId = selectedDriver;
     }
 
     // Apply date range filter
@@ -1257,7 +1273,27 @@ const OrdersModule = {
       await DriversModule.updateDriverDropdowns();
     }
   },
-  
+
+  // Update driver filter dropdown in Manage Orders
+  async updateDriverFilterDropdown() {
+    const driverFilter = document.getElementById('order-driver-filter');
+    if (!driverFilter) return;
+
+    const drivers = await DB.getAllDrivers();
+
+    // Clear existing options except the first one
+    driverFilter.innerHTML = '<option value="">All Drivers</option>';
+
+    drivers
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(driver => {
+        const option = document.createElement('option');
+        option.value = driver.id;
+        option.textContent = `${driver.name} (${driver.phone})`;
+        driverFilter.appendChild(option);
+      });
+  },
+
   // Get product options filtered by driver's inventory
   async getDriverProductOptions(driverId) {
     if (!driverId) {
