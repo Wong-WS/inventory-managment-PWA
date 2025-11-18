@@ -1466,8 +1466,11 @@ const OrdersModule = {
       itemsText += `${freePrefix}${item.productName} - ${displayQuantity}\n`;
     });
 
-    // Build formatted text - simplified format
-    let orderText = `${order.customerAddress}\n${itemsText}${order.totalAmount.toFixed(0)}`;
+    // Generate short order ID (last 6 characters, uppercase)
+    const orderNumber = `#${order.id.slice(-6).toUpperCase()}`;
+
+    // Build formatted text - Order ID at top with space, then original format
+    let orderText = `Order ${orderNumber}\n\n${order.customerAddress}\n${itemsText}${order.totalAmount.toFixed(0)}`;
 
     // Add description if exists
     if (order.customerDescription) {
