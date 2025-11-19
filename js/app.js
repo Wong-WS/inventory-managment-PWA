@@ -9,13 +9,18 @@ import { BusinessDayModule } from "./business-day.js";
 
 const AppModule = {
   // Initialize the application
-  init() {
+  async init() {
     // Get user session to determine default tab
     const session = DB.getCurrentSession();
     let defaultTab = 'dashboard';
 
     if (session && typeof AuthModule !== 'undefined') {
       defaultTab = AuthModule.getDefaultTab(session.role);
+    }
+
+    // Initialize Business Day Module globally (needs to run across all tabs)
+    if (typeof BusinessDayModule !== 'undefined') {
+      await BusinessDayModule.init();
     }
 
     // Load the appropriate default tab based on user role
