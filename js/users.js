@@ -15,6 +15,8 @@ const UsersModule = {
     this.bindEvents();
     await this.loadUsers();
     await this.updateDriverDropdown();
+    await this.loadPinStatus();
+    await this.loadBusinessDayHistory();
   },
 
   // Bind event listeners
@@ -34,6 +36,12 @@ const UsersModule = {
     const resetDatabaseBtn = document.getElementById('reset-database-btn');
     if (resetDatabaseBtn) {
       resetDatabaseBtn.addEventListener('click', this.handleResetDatabase.bind(this));
+    }
+
+    // Business Day PIN form
+    const setPinForm = document.getElementById('set-pin-form');
+    if (setPinForm) {
+      setPinForm.addEventListener('submit', this.handleSetPin.bind(this));
     }
   },
 
@@ -455,6 +463,176 @@ const UsersModule = {
         resetBtn.disabled = false;
         resetBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Reset Database';
       }
+    }
+  },
+
+  // ===============================
+  // BUSINESS DAY PIN MANAGEMENT
+  // ===============================
+
+  /**
+   * Load PIN configuration status
+   */
+  async loadPinStatus() {
+    const statusDiv = document.getElementById('pin-status-message');
+    if (!statusDiv) return;
+
+    try {
+      const isPinConfigured = await DB.isBusinessDayPinConfigured();
+
+      if (isPinConfigured) {
+        statusDiv.innerHTML = `
+          <div style="padding: 0.75rem; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; color: #155724;">
+            <i class="fas fa-check-circle"></i> PIN is configured and active
+          </div>
+        `;
+      } else {
+        statusDiv.innerHTML = `
+          <div style="padding: 0.75rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404;">
+            <i class="fas fa-exclamation-triangle"></i> PIN not configured. Please set a PIN to enable business day management.
+          </div>
+        `;
+      }
+    } catch (error) {
+      console.error('Error loading PIN status:', error);
+      statusDiv.innerHTML = `
+        <div style="padding: 0.75rem; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 6px; color: #721c24;">
+          <i class="fas fa-times-circle"></i> Error loading PIN status
+        </div>
+      `;
+    }
+  },
+
+  /**
+   * Handle PIN form submission
+   */
+  async handleSetPin(event) {
+    event.preventDefault();
+
+    const newPinInput = document.getElementById('new-pin');
+    const confirmPinInput = document.getElementById('confirm-pin');
+
+    if (!newPinInput || !confirmPinInput) return;
+
+    const newPin = newPinInput.value.trim();
+    const confirmPin = confirmPinInput.value.trim();
+
+    // Validate PIN format
+    if (!/^\d{4}$/.test(newPin)) {
+      alert('PIN must be exactly 4 digits (0-9)');
+      return;
+    }
+
+    // Validate PIN confirmation
+    if (newPin !== confirmPin) {
+      alert('PINs do not match. Please try again.');
+      confirmPinInput.value = '';
+      confirmPinInput.focus();
+      return;
+    }
+
+    // Confirm action
+    if (!confirm('Are you sure you want to set/change the business day PIN? This will affect all users who can open/close business days.')) {
+      return;
+    }
+
+    try {
+      const session = DB.getCurrentSession();
+      if (!session) {
+        alert('Session expired. Please login again.');
+        return;
+      }
+
+      // Set the PIN
+      await DB.setBusinessDayPin(newPin, session.userId);
+
+      alert('Business day PIN has been set successfully!');
+
+      // Clear form
+      newPinInput.value = '';
+      confirmPinInput.value = '';
+
+      // Reload PIN status
+      await this.loadPinStatus();
+
+    } catch (error) {
+      console.error('Error setting PIN:', error);
+      alert(`Failed to set PIN: ${error.message}`);
+    }
+  },
+
+  /**
+   * Load business day history
+   */
+  async loadBusinessDayHistory() {
+    const historyList = document.getElementById('business-day-history-list');
+    if (!historyList) return;
+
+    try {
+      const businessDays = await DB.getAllBusinessDays();
+
+      if (businessDays.length === 0) {
+        historyList.innerHTML = '<li class="empty-list">No business days yet</li>';
+        return;
+      }
+
+      // Show only last 10 days
+      const recentDays = businessDays.slice(0, 10);
+
+      historyList.innerHTML = recentDays.map(day => {
+        const openedDate = day.openedAt?.toDate ? day.openedAt.toDate() : new Date(day.openedAt);
+        const closedDate = day.closedAt ? (day.closedAt.toDate ? day.closedAt.toDate() : new Date(day.closedAt)) : null;
+
+        const statusClass = day.status === 'active' ? 'status-active' : 'status-closed';
+        const statusIcon = day.status === 'active' ? 'fa-check-circle' : 'fa-lock';
+
+        return `
+          <li>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <strong>${day.displayLabel}</strong>
+                <span class="badge ${statusClass}" style="margin-left: 0.5rem;">
+                  <i class="fas ${statusIcon}"></i> ${day.status.toUpperCase()}
+                </span>
+                <div style="font-size: 0.85rem; color: #666; margin-top: 0.25rem;">
+                  Opened: ${openedDate.toLocaleString()} by ${day.openedByName}
+                  ${closedDate ? `<br>Closed: ${closedDate.toLocaleString()} by ${day.closedByName}` : ''}
+                </div>
+              </div>
+            </div>
+          </li>
+        `;
+      }).join('');
+
+      // Add CSS for status badges if not exists
+      if (!document.getElementById('business-day-history-styles')) {
+        const styles = document.createElement('style');
+        styles.id = 'business-day-history-styles';
+        styles.textContent = `
+          .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+          }
+          .status-active {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+          }
+          .status-closed {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+          }
+        `;
+        document.head.appendChild(styles);
+      }
+
+    } catch (error) {
+      console.error('Error loading business day history:', error);
+      historyList.innerHTML = '<li class="empty-list">Error loading history</li>';
     }
   }
 };

@@ -5,6 +5,7 @@
 
 // Import database
 import { DB } from "./database.js";
+import { BusinessDayModule } from "./business-day.js";
 
 const AppModule = {
   // Initialize the application
@@ -237,6 +238,12 @@ const DashboardModule = {
 
   // Initialize the dashboard
   async init() {
+    // Render business day status banner
+    const bannerContainer = document.getElementById('dashboard-day-status-container');
+    if (bannerContainer) {
+      BusinessDayModule.renderDayStatusBanner(bannerContainer);
+    }
+
     await this.updateDashboard();
 
     // Setup real-time listeners for recent activity

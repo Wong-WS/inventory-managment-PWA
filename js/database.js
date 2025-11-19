@@ -12,6 +12,7 @@ import {
   getDocs,
   doc,
   getDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -36,6 +37,8 @@ export const DB = {
     SESSIONS: 'sessions',
     STOCK_TRANSFERS: 'stock_transfers',
     DIRECT_PAYMENTS: 'directPayments',
+    BUSINESS_DAYS: 'businessDays',
+    SETTINGS: 'settings',
   },
 
 
@@ -1992,12 +1995,23 @@ export const DB = {
       orders = orders.filter(order => order.status === filters.status);
     }
 
-    // Handle period and date filtering (takes precedence over startDate/endDate)
-    if (filters.period && filters.date) {
+    // PRIORITY 1: Business Day filtering (new system)
+    if (filters.businessDayId) {
+      orders = orders.filter(order => order.businessDayId === filters.businessDayId);
+    }
+    // PRIORITY 2: Period and date filtering (legacy + new hybrid)
+    else if (filters.period && filters.date) {
       const dateRange = this.calculateDateRange(filters.period, filters.date);
 
       if (dateRange) {
         orders = orders.filter(order => {
+          // Orders WITH businessDayId - filter by business day's date
+          if (order.businessDayId) {
+            // Skip for now - will be filtered by specific businessDayId when needed
+            return false;
+          }
+
+          // Orders WITHOUT businessDayId (legacy) - filter by createdAt timestamp
           const orderDate = this.toDate(order.createdAt);
           if (!orderDate) return false;
 
@@ -2009,6 +2023,9 @@ export const DB = {
       if (filters.startDate) {
         const startDate = new Date(filters.startDate);
         orders = orders.filter(order => {
+          // Only apply to legacy orders without businessDayId
+          if (order.businessDayId) return false;
+
           const orderDate = this.toDate(order.createdAt);
           return orderDate && orderDate >= startDate;
         });
@@ -2017,6 +2034,9 @@ export const DB = {
       if (filters.endDate) {
         const endDate = new Date(filters.endDate);
         orders = orders.filter(order => {
+          // Only apply to legacy orders without businessDayId
+          if (order.businessDayId) return false;
+
           const orderDate = this.toDate(order.createdAt);
           return orderDate && orderDate <= endDate;
         });
@@ -2035,6 +2055,12 @@ export const DB = {
     const session = this.getCurrentSession();
     if (!session) {
       throw new Error('No active session found');
+    }
+
+    // Check if business day is active
+    const activeBusinessDay = await this.getActiveBusinessDay();
+    if (!activeBusinessDay) {
+      throw new Error('No active business day. Please open a business day first.');
     }
 
     // Validate required fields
@@ -2066,6 +2092,7 @@ export const DB = {
         totalAmount: parseFloat(orderData.totalAmount) || 0,
         status: this.ORDER_STATUS.PENDING,
         lineItems: orderData.lineItems || [],
+        businessDayId: activeBusinessDay.id, // Assign to current active business day
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         completedAt: null
@@ -3326,6 +3353,399 @@ export const DB = {
       console.error('Error getting driver payment history:', error);
       return [];
     }
+  },
+
+  // ===============================
+  // BUSINESS DAY MANAGEMENT
+  // ===============================
+
+  /**
+   * Hash a PIN using PBKDF2 (same as password hashing)
+   * @param {string} pin - 4-digit PIN to hash
+   * @returns {Promise<string>} Hashed PIN
+   */
+  async hashPin(pin) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(pin + appConfig.security.hashSalt);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  },
+
+  /**
+   * Get the current active business day
+   * @returns {Promise<Object|null>} Active business day or null
+   */
+  async getActiveBusinessDay() {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.BUSINESS_DAYS),
+        where('status', '==', 'active'),
+        limit(1)
+      );
+
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        return null;
+      }
+
+      const doc = snapshot.docs[0];
+      return { id: doc.id, ...doc.data() };
+    } catch (error) {
+      console.error('Error getting active business day:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get business day by date string
+   * @param {string} dateStr - Date in YYYY-MM-DD format
+   * @returns {Promise<Object|null>} Business day or null
+   */
+  async getBusinessDayByDate(dateStr) {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.BUSINESS_DAYS),
+        where('date', '==', dateStr),
+        limit(1)
+      );
+
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        return null;
+      }
+
+      const doc = snapshot.docs[0];
+      return { id: doc.id, ...doc.data() };
+    } catch (error) {
+      console.error('Error getting business day by date:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get all business days ordered by day number
+   * @returns {Promise<Array>} Array of business days
+   */
+  async getAllBusinessDays() {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.BUSINESS_DAYS),
+        orderBy('dayNumber', 'desc')
+      );
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('Error getting all business days:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Get business days up to a specific date (for cumulative calculations)
+   * @param {string} dateStr - Date in YYYY-MM-DD format
+   * @returns {Promise<Array>} Array of business days up to date
+   */
+  async getBusinessDaysUpToDate(dateStr) {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.BUSINESS_DAYS),
+        where('date', '<=', dateStr),
+        orderBy('date', 'asc')
+      );
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('Error getting business days up to date:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Verify business day PIN
+   * @param {string} pin - PIN to verify
+   * @returns {Promise<boolean>} True if PIN is correct
+   */
+  async verifyBusinessDayPin(pin) {
+    try {
+      // Check rate limiting
+      const failedAttempts = parseInt(sessionStorage.getItem('pinFailedAttempts') || '0');
+      const lockoutUntil = parseInt(sessionStorage.getItem('pinLockoutUntil') || '0');
+
+      if (Date.now() < lockoutUntil) {
+        const remainingSeconds = Math.ceil((lockoutUntil - Date.now()) / 1000);
+        throw new Error(`Too many failed attempts. Try again in ${remainingSeconds} seconds.`);
+      }
+
+      // Get stored PIN hash
+      const settingsRef = doc(db, this.COLLECTIONS.SETTINGS, 'businessDayPin');
+      const settingsDoc = await getDoc(settingsRef);
+
+      if (!settingsDoc.exists()) {
+        throw new Error('PIN not configured. Contact administrator.');
+      }
+
+      const storedHash = settingsDoc.data().pinHash;
+      const inputHash = await this.hashPin(pin);
+
+      if (inputHash === storedHash) {
+        // Success - reset attempts
+        sessionStorage.setItem('pinFailedAttempts', '0');
+        sessionStorage.removeItem('pinLockoutUntil');
+        return true;
+      } else {
+        // Failed - increment attempts
+        const newFailedAttempts = failedAttempts + 1;
+        sessionStorage.setItem('pinFailedAttempts', newFailedAttempts.toString());
+
+        if (newFailedAttempts >= 3) {
+          // Lockout for 5 minutes
+          const lockout = Date.now() + (5 * 60 * 1000);
+          sessionStorage.setItem('pinLockoutUntil', lockout.toString());
+          throw new Error('Too many failed attempts. Locked out for 5 minutes.');
+        }
+
+        throw new Error(`Invalid PIN. ${3 - newFailedAttempts} attempts remaining.`);
+      }
+    } catch (error) {
+      console.error('Error verifying PIN:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Set or update business day PIN (admin only)
+   * @param {string} newPin - New 4-digit PIN
+   * @param {string} adminUserId - Admin user ID
+   * @returns {Promise<void>}
+   */
+  async setBusinessDayPin(newPin, adminUserId) {
+    try {
+      // Verify user is admin
+      const session = this.getCurrentSession();
+      if (!session || session.role !== this.ROLES.ADMIN) {
+        throw new Error('Only administrators can set PIN');
+      }
+
+      // Validate PIN format
+      if (!/^\d{4}$/.test(newPin)) {
+        throw new Error('PIN must be exactly 4 digits');
+      }
+
+      // Hash the PIN
+      const pinHash = await this.hashPin(newPin);
+
+      // Store in settings collection with fixed document ID
+      const settingsRef = doc(db, this.COLLECTIONS.SETTINGS, 'businessDayPin');
+
+      // Use setDoc with merge to create or update
+      await setDoc(settingsRef, {
+        pinHash: pinHash,
+        updatedAt: serverTimestamp(),
+        updatedBy: adminUserId
+      }, { merge: true });
+
+      console.log('Business day PIN set successfully');
+    } catch (error) {
+      console.error('Error setting PIN:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Check if business day PIN has been configured
+   * @returns {Promise<boolean>} True if PIN is set
+   */
+  async isBusinessDayPinConfigured() {
+    try {
+      const settingsRef = doc(db, this.COLLECTIONS.SETTINGS, 'businessDayPin');
+      const settingsDoc = await getDoc(settingsRef);
+      return settingsDoc.exists();
+    } catch (error) {
+      console.error('Error checking PIN configuration:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Open a new business day
+   * @param {string} userId - User ID opening the day
+   * @param {string} userName - User name opening the day
+   * @param {string} pin - 4-digit PIN for authorization
+   * @returns {Promise<Object>} Created business day
+   */
+  async openBusinessDay(userId, userName, pin) {
+    try {
+      // 1. Verify PIN
+      await this.verifyBusinessDayPin(pin);
+
+      // 2. Check for existing active day
+      const existingActive = await this.getActiveBusinessDay();
+      if (existingActive) {
+        throw new Error(`Day #${existingActive.dayNumber} is already active. Close it first.`);
+      }
+
+      // 3. Get next day number
+      const allDays = await this.getAllBusinessDays();
+      const dayNumber = allDays.length + 1;
+
+      // 4. Create new business day
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0]; // "2025-01-16"
+
+      const businessDayData = {
+        dayNumber: dayNumber,
+        date: dateStr,
+        displayLabel: `Day #${dayNumber} (${today.toLocaleDateString()})`,
+        status: 'active',
+        openedAt: serverTimestamp(),
+        openedBy: userId,
+        openedByName: userName,
+        closedAt: null,
+        closedBy: null,
+        closedByName: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      const docRef = await addDoc(collection(db, this.COLLECTIONS.BUSINESS_DAYS), businessDayData);
+
+      console.log(`Business day #${dayNumber} opened successfully`);
+      return { id: docRef.id, ...businessDayData };
+    } catch (error) {
+      console.error('Error opening business day:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Close the current active business day
+   * @param {string} userId - User ID closing the day
+   * @param {string} userName - User name closing the day
+   * @param {string} pin - 4-digit PIN for authorization
+   * @returns {Promise<Object>} Closed business day
+   */
+  async closeBusinessDay(userId, userName, pin) {
+    try {
+      // 1. Verify PIN
+      await this.verifyBusinessDayPin(pin);
+
+      // 2. Get active business day
+      const activeDay = await this.getActiveBusinessDay();
+      if (!activeDay) {
+        throw new Error('No active business day to close');
+      }
+
+      // 3. Update business day to closed
+      const dayRef = doc(db, this.COLLECTIONS.BUSINESS_DAYS, activeDay.id);
+      await updateDoc(dayRef, {
+        status: 'closed',
+        closedAt: serverTimestamp(),
+        closedBy: userId,
+        closedByName: userName,
+        updatedAt: serverTimestamp()
+      });
+
+      console.log(`Business day #${activeDay.dayNumber} closed successfully`);
+      return { ...activeDay, status: 'closed', closedBy: userId, closedByName: userName };
+    } catch (error) {
+      console.error('Error closing business day:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get orders for a specific business day
+   * @param {string} businessDayId - Business day ID
+   * @returns {Promise<Array>} Array of orders
+   */
+  async getBusinessDayOrders(businessDayId) {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.ORDERS),
+        where('businessDayId', '==', businessDayId)
+      );
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('Error getting business day orders:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Get orders by period (intelligently uses business day or legacy date filtering)
+   * @param {string} driverId - Optional driver ID
+   * @param {string} period - Period type (day, week, month, year)
+   * @param {string|Date} date - Target date
+   * @returns {Promise<Array>} Filtered orders
+   */
+  async getOrdersByPeriod(driverId, period, date) {
+    try {
+      // For 'day' period, check if there's a business day for this date
+      if (period === 'day') {
+        const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+        const businessDay = await this.getBusinessDayByDate(dateStr);
+
+        if (businessDay) {
+          // Use business day filtering
+          return await this.getOrdersWithFilters({
+            driverId: driverId || undefined,
+            businessDayId: businessDay.id
+          });
+        }
+      }
+
+      // Fall back to legacy timestamp filtering
+      return await this.getOrdersWithFilters({
+        driverId: driverId || undefined,
+        period: period,
+        date: date
+      });
+    } catch (error) {
+      console.error('Error getting orders by period:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Listen to active business day changes
+   * @param {Function} callback - Callback function to handle updates
+   * @returns {Function} Unsubscribe function
+   */
+  listenToActiveBusinessDay(callback) {
+    const listenerId = 'activeBusinessDay';
+
+    // Cleanup existing listener if any
+    this.cleanupListener(listenerId);
+
+    const q = query(
+      collection(db, this.COLLECTIONS.BUSINESS_DAYS),
+      where('status', '==', 'active'),
+      limit(1)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (snapshot.empty) {
+        callback(null);
+      } else {
+        const doc = snapshot.docs[0];
+        callback({ id: doc.id, ...doc.data() });
+      }
+    }, (error) => {
+      console.error('Error in active business day listener:', error);
+      callback(null);
+    });
+
+    // Store listener
+    this.listeners.set(listenerId, unsubscribe);
+
+    return unsubscribe;
   }
 };
 

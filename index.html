@@ -106,6 +106,9 @@
     <!-- Dashboard Template -->
     <template id="dashboard-template">
         <div class="dashboard-container">
+            <!-- Business Day Status Banner -->
+            <div id="dashboard-day-status-container"></div>
+
             <h2>Dashboard</h2>
             <div class="dashboard-cards">
                 <div class="card">
@@ -325,6 +328,9 @@
     <!-- Orders Template -->
     <template id="orders-template">
         <div class="orders-container">
+            <!-- Business Day Status Banner -->
+            <div id="orders-day-status-container"></div>
+
             <div class="orders-header">
                 <h2>Order Management</h2>
                 <div class="view-switcher">
@@ -772,6 +778,42 @@
                 </ul>
             </div>
 
+            <!-- Business Day PIN Settings -->
+            <div class="business-day-settings" style="margin-top: 2rem; padding: 1.5rem; border: 2px solid #4A90E2; border-radius: 8px; background-color: #f0f7ff;">
+                <h3 style="color: #4A90E2; margin-top: 0;">
+                    <i class="fas fa-lock"></i> Business Day PIN Settings
+                </h3>
+                <p style="margin-bottom: 1rem; color: #666;">
+                    Set or change the 4-digit PIN used to open and close business days. This PIN is shared by all authorized users (Admin and Sales Reps).
+                </p>
+
+                <div id="pin-status-message" style="margin-bottom: 1rem;">
+                    <!-- PIN status will be displayed here -->
+                </div>
+
+                <form id="set-pin-form" class="action-form">
+                    <div class="form-group">
+                        <label for="new-pin">New 4-Digit PIN</label>
+                        <input type="password" id="new-pin" maxlength="4" pattern="[0-9]{4}" placeholder="Enter 4 digits" required autocomplete="new-password" inputmode="numeric">
+                        <small>Enter exactly 4 digits (0-9)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-pin">Confirm PIN</label>
+                        <input type="password" id="confirm-pin" maxlength="4" pattern="[0-9]{4}" placeholder="Re-enter 4 digits" required autocomplete="new-password" inputmode="numeric">
+                    </div>
+                    <button type="submit" class="primary-button">
+                        <i class="fas fa-save"></i> Set PIN
+                    </button>
+                </form>
+
+                <div class="business-day-history" style="margin-top: 2rem;">
+                    <h4>Recent Business Days</h4>
+                    <ul id="business-day-history-list" class="data-list">
+                        <!-- History items will be loaded here -->
+                    </ul>
+                </div>
+            </div>
+
             <div class="danger-zone" style="margin-top: 2rem; padding: 1.5rem; border: 2px solid #e74c3c; border-radius: 8px; background-color: #ffe6e6;">
                 <h3 style="color: #e74c3c; margin-top: 0;">Danger Zone</h3>
                 <p style="margin-bottom: 1rem;">This action is irreversible and will delete all data from the system.</p>
@@ -1064,6 +1106,7 @@
     
     <!-- Application Scripts (ES Modules) -->
     <script type="module" src="js/database.js"></script>
+    <script type="module" src="js/business-day.js"></script>
     <script type="module" src="js/app.js"></script>
     <script type="module" src="js/products.js"></script>
     <script type="module" src="js/drivers.js"></script>
