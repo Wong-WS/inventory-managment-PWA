@@ -56,6 +56,11 @@ const AppModule = {
     if (this.currentTab !== tabId && typeof DashboardModule !== "undefined") {
       // Clean up all Firebase listeners to prevent memory leaks and unnecessary reads
       DB.cleanupAllListeners();
+
+      // Re-register business day listener (it's global and needs to persist across tabs)
+      if (typeof BusinessDayModule !== 'undefined') {
+        BusinessDayModule.setupActiveBusinessDayListener();
+      }
     }
 
     // Store current tab

@@ -131,8 +131,6 @@ const BusinessDayModule = {
    * Update all rendered banners (when business day changes)
    */
   updateAllBanners() {
-    console.log('Updating all banners. Active business day:', this.activeBusinessDay);
-
     // Update all banner containers
     const dashboardContainer = document.getElementById('dashboard-day-status-container');
     const ordersContainer = document.getElementById('orders-day-status-container');
