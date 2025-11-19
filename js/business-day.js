@@ -313,6 +313,3 @@ export { BusinessDayModule };
 
 // Make module globally accessible for backward compatibility
 window.BusinessDayModule = BusinessDayModule;
-
-// Initialize the module when script loads
-BusinessDayModule.init();
