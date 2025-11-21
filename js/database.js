@@ -128,7 +128,8 @@ export const DB = {
                       (filters.salesRepId ? '_salesrep_' + filters.salesRepId : '') +
                       (filters.status ? '_status_' + filters.status : '') +
                       (filters.todayOnly ? '_today' : '') +
-                      (filters.daysBack ? '_daysback_' + filters.daysBack : '');
+                      (filters.daysBack ? '_daysback_' + filters.daysBack : '') +
+                      (filters.businessDayId ? '_bizday_' + filters.businessDayId : '');
 
     this.cleanupListener(listenerId);
 
@@ -144,9 +145,12 @@ export const DB = {
     if (filters.status) {
       q = query(q, where("status", "==", filters.status));
     }
-
+    // Business day filter (takes priority over date filters)
+    if (filters.businessDayId) {
+      q = query(q, where("businessDayId", "==", filters.businessDayId));
+    }
     // Add date filter for daysBack (last N days)
-    if (filters.daysBack) {
+    else if (filters.daysBack) {
       const daysAgo = new Date();
       daysAgo.setDate(daysAgo.getDate() - (filters.daysBack - 1)); // -1 to include today
       daysAgo.setHours(0, 0, 0, 0); // Start of that day
@@ -162,7 +166,7 @@ export const DB = {
     }
 
     // Add ordering by creation date (newest first) - only if no other filters to avoid index issues
-    if (!filters.driverId && !filters.salesRepId && !filters.status) {
+    if (!filters.driverId && !filters.salesRepId && !filters.status && !filters.businessDayId) {
       q = query(q, orderBy("createdAt", "desc"));
     }
 
@@ -205,7 +209,7 @@ export const DB = {
       }
 
       // Sort in memory if we couldn't sort in the query due to composite index requirements
-      if (filters.driverId || filters.salesRepId || filters.status) {
+      if (filters.driverId || filters.salesRepId || filters.status || filters.businessDayId) {
         orders.sort((a, b) => {
           const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
           const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
@@ -3408,7 +3412,7 @@ export const DB = {
       const q = query(
         collection(db, this.COLLECTIONS.BUSINESS_DAYS),
         where('date', '==', dateStr),
-        limit(1)
+        orderBy('dayNumber', 'asc') // Get all business days for this date, ordered chronologically
       );
 
       const snapshot = await getDocs(q);
@@ -3417,8 +3421,8 @@ export const DB = {
         return null;
       }
 
-      const doc = snapshot.docs[0];
-      return { id: doc.id, ...doc.data() };
+      // Return array of all business days for this date (supports multiple sessions per day)
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
       console.error('Error getting business day by date:', error);
       return null;
@@ -3690,18 +3694,32 @@ export const DB = {
       // For 'day' period, check if there's a business day for this date
       if (period === 'day') {
         const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
-        const businessDay = await this.getBusinessDayByDate(dateStr);
+        const businessDays = await this.getBusinessDayByDate(dateStr);
 
-        if (businessDay) {
-          // Use business day filtering
-          return await this.getOrdersWithFilters({
-            driverId: driverId || undefined,
-            businessDayId: businessDay.id
-          });
+        if (businessDays) {
+          // getBusinessDayByDate now returns an array of business days
+          // Get orders from all business day sessions for this date
+          const businessDayIds = businessDays.map(day => day.id);
+
+          const allOrdersArrays = await Promise.all(
+            businessDayIds.map(dayId =>
+              this.getOrdersWithFilters({
+                driverId: driverId || undefined,
+                businessDayId: dayId
+              })
+            )
+          );
+
+          // Flatten array of arrays into single array
+          return allOrdersArrays.flat();
         }
+
+        // For 'day' period with no business day found, return empty array
+        // This ensures strict business-day-based filtering (no timestamp fallback for days)
+        return [];
       }
 
-      // Fall back to legacy timestamp filtering
+      // Fall back to timestamp filtering for week/month/year periods
       return await this.getOrdersWithFilters({
         driverId: driverId || undefined,
         period: period,

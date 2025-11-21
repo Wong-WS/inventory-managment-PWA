@@ -982,10 +982,18 @@ const OrdersModule = {
     // Apply date range filter
     switch (selectedDateRange) {
       case 'today':
-        // Only fetch today's orders to improve performance
-        // BUT always show ALL pending orders regardless of date
-        filters.todayOnly = true;
-        filters.showAllPending = true;
+        // Check if there's an active business day
+        const activeBusinessDay = BusinessDayModule.activeBusinessDay;
+        if (activeBusinessDay) {
+          // Use business day filtering - shows all orders from current session
+          // This works across midnight (e.g., opened Nov 21, still open Nov 22 4am)
+          filters.businessDayId = activeBusinessDay.id;
+          filters.showAllPending = true;
+        } else {
+          // Fall back to calendar date filtering when no active business day
+          filters.todayOnly = true;
+          filters.showAllPending = true;
+        }
         break;
       case '3days':
         // Fetch last 3 days including today
