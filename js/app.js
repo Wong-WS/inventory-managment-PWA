@@ -479,27 +479,43 @@ const DashboardModule = {
     }
   },
 
-  // Get today's completed orders for admin dashboard
+  // Get today's completed orders for admin dashboard (business-day-aware)
   async getTodayCompletedOrders() {
     try {
       const allOrders = await DB.getAllOrders();
+
+      // Check if there's an active business day
+      const activeBusinessDay = BusinessDayModule.activeBusinessDay;
+
+      if (activeBusinessDay) {
+        // Filter by active business day session
+        const businessDayCompletedOrders = allOrders.filter(order => {
+          if (order.status !== DB.ORDER_STATUS.COMPLETED) return false;
+          return order.businessDayId === activeBusinessDay.id;
+        });
+        return businessDayCompletedOrders;
+      }
+
+      // No active business day - check if there's a business day for today's date
       const today = new Date();
-      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`; // "YYYY-MM-DD" in local timezone
+      const todayBusinessDays = await DB.getBusinessDayByDate(todayStr);
 
-      // Filter to today's completed orders
-      const todayCompletedOrders = allOrders.filter(order => {
-        if (order.status !== DB.ORDER_STATUS.COMPLETED) return false;
+      if (todayBusinessDays && todayBusinessDays.length > 0) {
+        // Get orders from all business days that opened today
+        const businessDayIds = todayBusinessDays.map(day => day.id);
+        const businessDayCompletedOrders = allOrders.filter(order => {
+          if (order.status !== DB.ORDER_STATUS.COMPLETED) return false;
+          return businessDayIds.includes(order.businessDayId);
+        });
+        return businessDayCompletedOrders;
+      }
 
-        // Use completedAt if available, otherwise createdAt
-        const orderDate = order.completedAt?.toDate ? order.completedAt.toDate() :
-                         (order.completedAt ? new Date(order.completedAt) :
-                         (order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt)));
-
-        return orderDate >= todayStart && orderDate < todayEnd;
-      });
-
-      return todayCompletedOrders;
+      // No business day for today - return empty (show $0)
+      return [];
     } catch (error) {
       console.error('Error getting today\'s completed orders:', error);
       return [];
@@ -1328,19 +1344,38 @@ const DashboardModule = {
     }
   },
 
-  // Update admin dashboard order stats
-  updateAdminOrderStats(orders) {
-    // Calculate today's completed order total
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  // Update admin dashboard order stats (business-day-aware)
+  async updateAdminOrderStats(orders) {
+    // Check if there's an active business day
+    const activeBusinessDay = BusinessDayModule.activeBusinessDay;
 
-    const todayCompletedOrders = orders.filter(order => {
-      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
-      return orderDate >= todayStart && orderDate < todayEnd && order.status === DB.ORDER_STATUS.COMPLETED;
-    });
+    let completedOrders = [];
 
-    const todayTotal = todayCompletedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+    if (activeBusinessDay) {
+      // Filter by active business day session
+      completedOrders = orders.filter(order => {
+        return order.businessDayId === activeBusinessDay.id && order.status === DB.ORDER_STATUS.COMPLETED;
+      });
+    } else {
+      // No active business day - check if there's a business day for today's date
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`; // "YYYY-MM-DD" in local timezone
+      const todayBusinessDays = await DB.getBusinessDayByDate(todayStr);
+
+      if (todayBusinessDays && todayBusinessDays.length > 0) {
+        // Get orders from all business days that opened today
+        const businessDayIds = todayBusinessDays.map(day => day.id);
+        completedOrders = orders.filter(order => {
+          return businessDayIds.includes(order.businessDayId) && order.status === DB.ORDER_STATUS.COMPLETED;
+        });
+      }
+      // If no business day for today, completedOrders stays empty (show $0)
+    }
+
+    const todayTotal = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
 
     // Update today's sales display
     const todaySalesElement = document.getElementById("today-sales");

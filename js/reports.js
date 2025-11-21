@@ -1974,10 +1974,13 @@ const ReportsModule = {
     const driverSelect = document.getElementById('admin-payment-driver');
     const dateInput = document.getElementById('admin-payment-date');
 
-    // Set default date to today
+    // Set default date to today (using local timezone)
     if (dateInput) {
-      const today = new Date().toISOString().split('T')[0];
-      dateInput.value = today;
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      dateInput.value = `${year}-${month}-${day}`;
     }
 
     if (form) {
@@ -2169,8 +2172,11 @@ const ReportsModule = {
       driverSelect.value = '';
       amountInput.value = '';
       reasonInput.value = '';
-      const today = new Date().toISOString().split('T')[0];
-      dateInput.value = today; // Reset to today
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      dateInput.value = `${year}-${month}-${day}`; // Reset to today (local timezone)
       document.getElementById('admin-payment-holding').textContent = '-';
       document.getElementById('admin-payment-holding').style.color = '';
       this.currentDriverHolding = undefined;
@@ -2341,9 +2347,12 @@ const ReportsModule = {
    * Handle editing a payment inline
    */
   async handleEditPayment(payment, card) {
-    // Get current values
+    // Get current values (using local timezone)
     const paymentDateObj = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
-    const currentDate = paymentDateObj.toISOString().split('T')[0];
+    const year = paymentDateObj.getFullYear();
+    const month = String(paymentDateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(paymentDateObj.getDate()).padStart(2, '0');
+    const currentDate = `${year}-${month}-${day}`;
     const currentAmount = payment.amount;
     const currentReason = payment.reason;
 

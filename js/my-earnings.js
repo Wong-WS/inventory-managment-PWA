@@ -16,8 +16,12 @@ const MyEarningsModule = {
   async init() {
     console.log('MyEarningsModule.init() called');
 
-    // Set default date to today
-    this.currentDate = new Date().toISOString().split('T')[0];
+    // Set default date to today (using local timezone)
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    this.currentDate = `${year}-${month}-${day}`;
 
     // Initialize UI
     this.setupUI();

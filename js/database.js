@@ -3599,7 +3599,10 @@ export const DB = {
 
       // 4. Create new business day
       const today = new Date();
-      const dateStr = today.toISOString().split('T')[0]; // "2025-01-16"
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`; // Local timezone date
 
       const businessDayData = {
         dayNumber: dayNumber,
@@ -3693,7 +3696,15 @@ export const DB = {
     try {
       // For 'day' period, check if there's a business day for this date
       if (period === 'day') {
-        const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+        let dateStr;
+        if (typeof date === 'string') {
+          dateStr = date;
+        } else {
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          dateStr = `${year}-${month}-${day}`; // Local timezone date
+        }
         const businessDays = await this.getBusinessDayByDate(dateStr);
 
         if (businessDays) {
