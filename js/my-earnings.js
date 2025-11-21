@@ -166,7 +166,7 @@ const MyEarningsModule = {
   // Get filtered orders based on period and date
   async getFilteredOrders(driverId, period, date) {
     const allOrders = await DB.getOrdersByDriver(driverId);
-    
+
     // Include completed orders and cancelled orders where driver should be paid
     const paidOrders = allOrders.filter(order => {
       if (order.status === DB.ORDER_STATUS.COMPLETED) {
@@ -178,22 +178,35 @@ const MyEarningsModule = {
       }
       return false;
     });
-    
+
     if (!date) {
       return paidOrders;
     }
 
     const targetDate = new Date(date);
-    
+
+    // For 'day' period, use business day filtering instead of calendar date
+    if (period === 'day') {
+      // Get business days for the selected date
+      const businessDays = await DB.getBusinessDayByDate(date);
+
+      if (businessDays && businessDays.length > 0) {
+        // Filter by business day IDs
+        const businessDayIds = businessDays.map(d => d.id);
+        return paidOrders.filter(order => businessDayIds.includes(order.businessDayId));
+      } else {
+        // No business day for this date - return empty
+        return [];
+      }
+    }
+
     return paidOrders.filter(order => {
       // Use completedAt for completed orders, cancelledAt for cancelled orders, or createdAt as fallback
       const timestamp = order.completedAt || order.cancelledAt || order.createdAt;
       // Handle Firebase Timestamp properly
       const orderDate = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
-      
+
       switch(period) {
-        case 'day':
-          return orderDate.toDateString() === targetDate.toDateString();
         case 'week':
           const weekStart = new Date(targetDate);
           weekStart.setDate(targetDate.getDate() - targetDate.getDay());

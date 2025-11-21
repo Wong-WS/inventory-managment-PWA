@@ -143,6 +143,12 @@ const MyOrdersModule = {
       filters.status = selectedStatus;
     }
 
+    // Add business day filter if there's an active business day
+    const activeBusinessDay = typeof BusinessDayModule !== 'undefined' ? BusinessDayModule.activeBusinessDay : null;
+    if (activeBusinessDay) {
+      filters.businessDayId = activeBusinessDay.id;
+    }
+
     // Clean up existing listener first
     if (this.ordersListenerUnsubscribe) {
       this.ordersListenerUnsubscribe();

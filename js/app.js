@@ -410,49 +410,51 @@ const DashboardModule = {
     }
   },
 
-  // Get driver order summary for today
+  // Get driver order summary for current business day (business-day-aware)
   async getDriverOrderSummary(driverId) {
     try {
-      console.log('Dashboard - Getting orders for driver:', driverId);
       const orders = await DB.getOrdersByDriver(driverId);
-      console.log('Dashboard - Found orders:', orders);
 
-      const today = new Date();
-      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+      // Check if there's an active business day (fetch if not cached yet)
+      let activeBusinessDay = BusinessDayModule.activeBusinessDay;
+      if (!activeBusinessDay) {
+        // Fetch directly if not yet cached (e.g., on initial page load)
+        activeBusinessDay = await DB.getActiveBusinessDay();
+      }
 
-      // Filter orders for today
-      const todayOrders = orders.filter(order => {
-        // Handle Firebase Timestamp properly
-        const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
-        const isToday = orderDate >= todayStart && orderDate < todayEnd;
-        console.log('Dashboard - Order date check:', {
-          orderId: order.id,
-          orderDate: orderDate,
-          isToday: isToday
-        });
-        return isToday;
-      });
+      let filteredOrders;
 
-      console.log('Dashboard - Today orders:', todayOrders);
+      if (activeBusinessDay) {
+        // Filter by active business day session
+        filteredOrders = orders.filter(order => order.businessDayId === activeBusinessDay.id);
+      } else {
+        // No active business day - check if there's a business day for today
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
+        const todayBusinessDays = await DB.getBusinessDayByDate(todayStr);
+
+        if (todayBusinessDays && todayBusinessDays.length > 0) {
+          const businessDayIds = todayBusinessDays.map(d => d.id);
+          filteredOrders = orders.filter(order => businessDayIds.includes(order.businessDayId));
+        } else {
+          // No business day for today - return empty
+          filteredOrders = [];
+        }
+      }
 
       // Calculate summary
-      const pending = todayOrders.filter(order => order.status === DB.ORDER_STATUS.PENDING);
-      const completed = todayOrders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
-      const cancelled = todayOrders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
-
-      console.log('Dashboard - Order status counts:', {
-        total: todayOrders.length,
-        pending: pending.length,
-        completed: completed.length,
-        cancelled: cancelled.length
-      });
+      const pending = filteredOrders.filter(order => order.status === DB.ORDER_STATUS.PENDING);
+      const completed = filteredOrders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
+      const cancelled = filteredOrders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
 
       const pendingAmount = pending.reduce((sum, order) => sum + order.totalAmount, 0);
       const completedAmount = completed.reduce((sum, order) => sum + order.totalAmount, 0);
 
-      const summary = {
-        total: todayOrders.length,
+      return {
+        total: filteredOrders.length,
         pending: {
           count: pending.length,
           totalAmount: pendingAmount
@@ -465,9 +467,6 @@ const DashboardModule = {
           count: cancelled.length
         }
       };
-
-      console.log('Dashboard - Final summary:', summary);
-      return summary;
     } catch (error) {
       console.error('Error getting driver order summary:', error);
       return {
@@ -484,8 +483,12 @@ const DashboardModule = {
     try {
       const allOrders = await DB.getAllOrders();
 
-      // Check if there's an active business day
-      const activeBusinessDay = BusinessDayModule.activeBusinessDay;
+      // Check if there's an active business day (fetch if not cached yet)
+      let activeBusinessDay = BusinessDayModule.activeBusinessDay;
+      if (!activeBusinessDay) {
+        // Fetch directly if not yet cached (e.g., on initial page load)
+        activeBusinessDay = await DB.getActiveBusinessDay();
+      }
 
       if (activeBusinessDay) {
         // Filter by active business day session
@@ -1248,7 +1251,7 @@ const DashboardModule = {
 
       if (driverId) {
         const driverOrders = orders.filter(order => order.driverId === driverId);
-        const orderSummary = this.calculateDriverOrderSummary(driverOrders);
+        const orderSummary = await this.calculateDriverOrderSummary(driverOrders);
         this.updateDriverDashboardCards(orderSummary);
       }
     } else {
@@ -1257,25 +1260,32 @@ const DashboardModule = {
     }
   },
 
-  // Calculate driver order summary from orders array
-  calculateDriverOrderSummary(orders) {
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  // Calculate driver order summary from orders array (business-day-aware)
+  async calculateDriverOrderSummary(orders) {
+    // Check if there's an active business day (fetch if not cached yet)
+    let activeBusinessDay = BusinessDayModule.activeBusinessDay;
+    if (!activeBusinessDay) {
+      // Fetch directly if not yet cached (e.g., on initial page load)
+      activeBusinessDay = await DB.getActiveBusinessDay();
+    }
 
-    // Filter orders for today
-    const todayOrders = orders.filter(order => {
-      const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
-      return orderDate >= todayStart && orderDate < todayEnd;
-    });
+    let filteredOrders;
+
+    if (activeBusinessDay) {
+      // Filter by active business day session
+      filteredOrders = orders.filter(order => order.businessDayId === activeBusinessDay.id);
+    } else {
+      // No active business day - return empty (will show 0 orders)
+      filteredOrders = [];
+    }
 
     // Calculate summary
-    const pending = todayOrders.filter(order => order.status === DB.ORDER_STATUS.PENDING);
-    const completed = todayOrders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
-    const cancelled = todayOrders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
+    const pending = filteredOrders.filter(order => order.status === DB.ORDER_STATUS.PENDING);
+    const completed = filteredOrders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
+    const cancelled = filteredOrders.filter(order => order.status === DB.ORDER_STATUS.CANCELLED);
 
     return {
-      total: todayOrders.length,
+      total: filteredOrders.length,
       pending: {
         count: pending.length,
         totalAmount: pending.reduce((sum, order) => sum + order.totalAmount, 0)
@@ -1292,10 +1302,10 @@ const DashboardModule = {
 
   // Update driver dashboard cards with new order summary
   updateDriverDashboardCards(orderSummary) {
-    // Update today's orders card
+    // Update today's orders card (index 0)
     const orderCards = document.querySelectorAll('.dashboard-cards .card');
-    if (orderCards.length >= 2) {
-      const todayOrdersCard = orderCards[1];
+    if (orderCards.length >= 1) {
+      const todayOrdersCard = orderCards[0];
       const orderCountElement = todayOrdersCard.querySelector('p');
       const orderDetailsElement = todayOrdersCard.querySelector('small');
 
@@ -1305,9 +1315,9 @@ const DashboardModule = {
       }
     }
 
-    // Update pending revenue card
-    if (orderCards.length >= 3) {
-      const pendingCard = orderCards[2];
+    // Update pending revenue card (index 1)
+    if (orderCards.length >= 2) {
+      const pendingCard = orderCards[1];
       const pendingAmountElement = pendingCard.querySelector('p');
       const pendingDetailsElement = pendingCard.querySelector('small');
 
@@ -1320,9 +1330,9 @@ const DashboardModule = {
       pendingCard.className = `card ${orderSummary.pending.count > 0 ? 'pending-card' : ''}`;
     }
 
-    // Update completed today card
-    if (orderCards.length >= 4) {
-      const completedCard = orderCards[3];
+    // Update completed today card (index 2)
+    if (orderCards.length >= 3) {
+      const completedCard = orderCards[2];
       const completedAmountElement = completedCard.querySelector('p');
       const completedDetailsElement = completedCard.querySelector('small');
 
