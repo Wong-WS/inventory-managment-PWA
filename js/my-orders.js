@@ -143,10 +143,27 @@ const MyOrdersModule = {
       filters.status = selectedStatus;
     }
 
-    // Add business day filter if there's an active business day
+    // Add business day filter - show only current business day's orders
     const activeBusinessDay = typeof BusinessDayModule !== 'undefined' ? BusinessDayModule.activeBusinessDay : null;
     if (activeBusinessDay) {
+      // Active business day - filter by its ID
       filters.businessDayId = activeBusinessDay.id;
+    } else {
+      // No active business day - get today's business days and filter by those
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+      const todayBusinessDays = await DB.getBusinessDayByDate(todayStr);
+
+      if (todayBusinessDays && todayBusinessDays.length > 0) {
+        // Use the most recent business day from today
+        filters.businessDayId = todayBusinessDays[0].id;
+      } else {
+        // No business day for today - use a dummy ID that won't match anything
+        filters.businessDayId = '__no_business_day__';
+      }
     }
 
     // Clean up existing listener first

@@ -990,8 +990,8 @@ const OrdersModule = {
           filters.businessDayId = activeBusinessDay.id;
           filters.showAllPending = true;
         } else {
-          // Fall back to calendar date filtering when no active business day
-          filters.todayOnly = true;
+          // No active business day - show nothing (use dummy ID that won't match)
+          filters.businessDayId = '__no_business_day__';
           filters.showAllPending = true;
         }
         break;
@@ -1011,9 +1011,15 @@ const OrdersModule = {
         filters.showAllPending = false;
         break;
       default:
-        // Default to today only
-        filters.todayOnly = true;
-        filters.showAllPending = true;
+        // Default to today only (same logic as 'today' case)
+        const defaultActiveBusinessDay = BusinessDayModule.activeBusinessDay;
+        if (defaultActiveBusinessDay) {
+          filters.businessDayId = defaultActiveBusinessDay.id;
+          filters.showAllPending = true;
+        } else {
+          filters.businessDayId = '__no_business_day__';
+          filters.showAllPending = true;
+        }
     }
 
     // Setup real-time listener and store unsubscribe function
