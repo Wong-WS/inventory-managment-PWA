@@ -39,6 +39,7 @@ export const DB = {
     DIRECT_PAYMENTS: 'directPayments',
     BUSINESS_DAYS: 'businessDays',
     SETTINGS: 'settings',
+    INVENTORY_SNAPSHOTS: 'inventorySnapshots',
   },
 
 
@@ -3647,7 +3648,10 @@ export const DB = {
         throw new Error('No active business day to close');
       }
 
-      // 3. Update business day to closed
+      // 3. Save inventory snapshots for all drivers BEFORE closing
+      await this.saveInventorySnapshots(activeDay.id, activeDay.date);
+
+      // 4. Update business day to closed
       const dayRef = doc(db, this.COLLECTIONS.BUSINESS_DAYS, activeDay.id);
       await updateDoc(dayRef, {
         status: 'closed',
@@ -3775,6 +3779,78 @@ export const DB = {
     this.listeners.set(listenerId, unsubscribe);
 
     return unsubscribe;
+  },
+
+  // ===============================
+  // INVENTORY SNAPSHOT METHODS
+  // ===============================
+
+  /**
+   * Save inventory snapshot for all drivers when closing a business day
+   * @param {string} businessDayId - Business day ID
+   * @param {string} businessDayDate - Business day date (YYYY-MM-DD)
+   * @returns {Promise<void>}
+   */
+  async saveInventorySnapshots(businessDayId, businessDayDate) {
+    try {
+      const drivers = await this.getAllDrivers();
+
+      for (const driver of drivers) {
+        const inventory = await this.getDriverInventory(driver.id);
+
+        // Create snapshot with only productId, productName, and remaining
+        const snapshot = inventory.map(item => ({
+          productId: item.id,
+          productName: item.name,
+          remaining: item.remaining
+        }));
+
+        const snapshotData = {
+          businessDayId,
+          businessDayDate,
+          driverId: driver.id,
+          driverName: driver.name,
+          snapshot,
+          createdAt: serverTimestamp()
+        };
+
+        await addDoc(collection(db, this.COLLECTIONS.INVENTORY_SNAPSHOTS), snapshotData);
+      }
+
+      console.log(`Inventory snapshots saved for ${drivers.length} drivers`);
+    } catch (error) {
+      console.error('Error saving inventory snapshots:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get inventory snapshot for a driver on a specific date
+   * @param {string} driverId - Driver ID
+   * @param {string} date - Date string (YYYY-MM-DD)
+   * @returns {Promise<Object|null>} Snapshot data or null if not found
+   */
+  async getInventorySnapshot(driverId, date) {
+    try {
+      const q = query(
+        collection(db, this.COLLECTIONS.INVENTORY_SNAPSHOTS),
+        where('driverId', '==', driverId),
+        where('businessDayDate', '==', date),
+        limit(1)
+      );
+
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        return null;
+      }
+
+      const doc = snapshot.docs[0];
+      return { id: doc.id, ...doc.data() };
+    } catch (error) {
+      console.error('Error getting inventory snapshot:', error);
+      return null;
+    }
   }
 };
 

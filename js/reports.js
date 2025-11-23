@@ -890,15 +890,24 @@ const ReportsModule = {
   // Generate inventory report
   async generateInventoryReport() {
     const driverSelect = document.getElementById('inventory-driver');
+    const dateInput = document.getElementById('inventory-date');
     const resultsDiv = document.getElementById('inventory-report-results');
 
     if (!resultsDiv) return;
 
     const driverId = driverSelect.value;
+    const selectedDate = dateInput ? dateInput.value : '';
 
     // Show loading state
     this.showLoading('inventory-report-results', 'Generating inventory report...');
 
+    // If date is selected, show historical snapshot
+    if (selectedDate) {
+      await this.generateHistoricalInventoryReport(driverId, selectedDate, resultsDiv);
+      return;
+    }
+
+    // No date selected - show current live inventory
     let inventoryData = [];
 
     if (driverId) {
@@ -1061,9 +1070,110 @@ const ReportsModule = {
       
       resultsDiv.innerHTML = reportHTML;
     }
-    
+
     // Styles already loaded from sales report generation
     // No need to duplicate
+  },
+
+  // Generate historical inventory report from snapshots
+  async generateHistoricalInventoryReport(driverId, date, resultsDiv) {
+    // Format date for display
+    const displayDate = new Date(date + 'T00:00:00').toLocaleDateString();
+
+    if (driverId) {
+      // Get snapshot for specific driver
+      const snapshot = await DB.getInventorySnapshot(driverId, date);
+
+      if (!snapshot) {
+        resultsDiv.innerHTML = `<p class="no-data">No inventory snapshot available for ${displayDate}. Snapshots are created when a business day is closed.</p>`;
+        return;
+      }
+
+      const driver = await this.getCachedDriver(driverId);
+      const driverName = driver ? driver.name : snapshot.driverName;
+
+      let reportHTML = `
+        <div class="report-summary">
+          <h4>${driverName} Stock List - ${displayDate}</h4>
+          <small class="snapshot-note"><i class="fas fa-history"></i> Historical snapshot from end of business day</small>
+        </div>
+        <table class="report-table inventory-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Remaining stock</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      snapshot.snapshot.forEach(item => {
+        reportHTML += `
+          <tr>
+            <td data-label="Product">${item.productName}</td>
+            <td data-label="Remaining stock">${item.remaining}</td>
+          </tr>
+        `;
+      });
+
+      reportHTML += '</tbody></table>';
+      resultsDiv.innerHTML = reportHTML;
+
+    } else {
+      // Get snapshots for all drivers on this date
+      const drivers = await DB.getAllDrivers();
+
+      if (drivers.length === 0) {
+        resultsDiv.innerHTML = '<p class="no-data">No drivers found.</p>';
+        return;
+      }
+
+      let reportHTML = `
+        <div class="report-summary">
+          <h4>Inventory Report for All Drivers - ${displayDate}</h4>
+          <small class="snapshot-note"><i class="fas fa-history"></i> Historical snapshot from end of business day</small>
+        </div>
+      `;
+
+      let hasAnySnapshot = false;
+
+      for (const driver of drivers) {
+        const snapshot = await DB.getInventorySnapshot(driver.id, date);
+
+        if (snapshot && snapshot.snapshot.length > 0) {
+          hasAnySnapshot = true;
+          reportHTML += `
+            <h4>${driver.name} Stock List</h4>
+            <table class="report-table inventory-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Remaining stock</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+
+          snapshot.snapshot.forEach(item => {
+            reportHTML += `
+              <tr>
+                <td data-label="Product">${item.productName}</td>
+                <td data-label="Remaining stock">${item.remaining}</td>
+              </tr>
+            `;
+          });
+
+          reportHTML += '</tbody></table>';
+        }
+      }
+
+      if (!hasAnySnapshot) {
+        resultsDiv.innerHTML = `<p class="no-data">No inventory snapshots available for ${displayDate}. Snapshots are created when a business day is closed.</p>`;
+        return;
+      }
+
+      resultsDiv.innerHTML = reportHTML;
+    }
   },
 
   // Update driver dropdowns

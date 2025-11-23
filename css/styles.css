@@ -2389,3 +2389,26 @@ button:disabled,
     font-size: 1.1rem;
   }
 }
+
+/* ======================================
+   INVENTORY SNAPSHOT STYLES
+   ====================================== */
+
+.form-hint {
+  display: block;
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 0.25rem;
+}
+
+.snapshot-note {
+  display: block;
+  color: #666;
+  font-style: italic;
+  margin-top: 0.5rem;
+}
+
+.snapshot-note i {
+  margin-right: 0.25rem;
+  color: #888;
+}
