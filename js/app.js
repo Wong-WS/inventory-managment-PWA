@@ -357,12 +357,29 @@ const DashboardModule = {
 
   // Update dashboard for admin/sales rep users
   async updateAdminDashboard() {
-    // Update today's sales
+    // Get all today's orders (for both cards)
+    const allTodayOrders = await this.getTodayOrders();
+
+    // Update today's sales (completed only)
     const todaySales = document.getElementById("today-sales");
+    const todaySalesCount = document.getElementById("today-sales-count");
+    const completedOrders = allTodayOrders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
     if (todaySales) {
-      const todayOrders = await this.getTodayCompletedOrders();
-      const totalSales = todayOrders.reduce((sum, order) => sum + order.totalAmount, 0);
-      todaySales.textContent = `$${totalSales.toFixed(2)}`;
+      const completedTotal = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+      todaySales.textContent = `$${completedTotal.toFixed(2)}`;
+    }
+    if (todaySalesCount) {
+      todaySalesCount.textContent = `${completedOrders.length} completed order${completedOrders.length !== 1 ? 's' : ''}`;
+    }
+
+    // Update today's total sales (completed + pending)
+    const todayTotalSales = document.getElementById("today-total-sales");
+    if (todayTotalSales) {
+      const activeOrders = allTodayOrders.filter(order =>
+        order.status === DB.ORDER_STATUS.COMPLETED || order.status === DB.ORDER_STATUS.PENDING
+      );
+      const totalAmount = activeOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+      todayTotalSales.textContent = `$${totalAmount.toFixed(2)}`;
     }
   },
 
@@ -499,6 +516,43 @@ const DashboardModule = {
       return [];
     } catch (error) {
       console.error('Error getting today\'s completed orders:', error);
+      return [];
+    }
+  },
+
+  // Get all today's orders for admin dashboard (business-day-aware)
+  async getTodayOrders() {
+    try {
+      const allOrders = await DB.getAllOrders();
+
+      // Check if there's an active business day (fetch if not cached yet)
+      let activeBusinessDay = BusinessDayModule.activeBusinessDay;
+      if (!activeBusinessDay) {
+        activeBusinessDay = await DB.getActiveBusinessDay();
+      }
+
+      if (activeBusinessDay) {
+        // Filter by active business day session (all statuses)
+        return allOrders.filter(order => order.businessDayId === activeBusinessDay.id);
+      }
+
+      // No active business day - check if there's a business day for today's date
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+      const todayBusinessDays = await DB.getBusinessDayByDate(todayStr);
+
+      if (todayBusinessDays && todayBusinessDays.length > 0) {
+        const businessDayIds = todayBusinessDays.map(day => day.id);
+        return allOrders.filter(order => businessDayIds.includes(order.businessDayId));
+      }
+
+      // No business day for today - return empty
+      return [];
+    } catch (error) {
+      console.error('Error getting today\'s orders:', error);
       return [];
     }
   },
@@ -1326,13 +1380,11 @@ const DashboardModule = {
     // Check if there's an active business day
     const activeBusinessDay = BusinessDayModule.activeBusinessDay;
 
-    let completedOrders = [];
+    let todayOrders = [];
 
     if (activeBusinessDay) {
       // Filter by active business day session
-      completedOrders = orders.filter(order => {
-        return order.businessDayId === activeBusinessDay.id && order.status === DB.ORDER_STATUS.COMPLETED;
-      });
+      todayOrders = orders.filter(order => order.businessDayId === activeBusinessDay.id);
     } else {
       // No active business day - check if there's a business day for today's date
       const today = new Date();
@@ -1345,19 +1397,35 @@ const DashboardModule = {
       if (todayBusinessDays && todayBusinessDays.length > 0) {
         // Get orders from all business days that opened today
         const businessDayIds = todayBusinessDays.map(day => day.id);
-        completedOrders = orders.filter(order => {
-          return businessDayIds.includes(order.businessDayId) && order.status === DB.ORDER_STATUS.COMPLETED;
-        });
+        todayOrders = orders.filter(order => businessDayIds.includes(order.businessDayId));
       }
-      // If no business day for today, completedOrders stays empty (show $0)
+      // If no business day for today, todayOrders stays empty (show $0)
     }
 
-    const todayTotal = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+    // Calculate completed orders total
+    const completedOrders = todayOrders.filter(order => order.status === DB.ORDER_STATUS.COMPLETED);
+    const completedTotal = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
 
-    // Update today's sales display
+    // Calculate total sales (completed + pending)
+    const activeOrders = todayOrders.filter(order =>
+      order.status === DB.ORDER_STATUS.COMPLETED || order.status === DB.ORDER_STATUS.PENDING
+    );
+    const totalAmount = activeOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+
+    // Update today's sales display (completed only)
     const todaySalesElement = document.getElementById("today-sales");
     if (todaySalesElement) {
-      todaySalesElement.textContent = `$${todayTotal.toFixed(2)}`;
+      todaySalesElement.textContent = `$${completedTotal.toFixed(2)}`;
+    }
+    const todaySalesCountElement = document.getElementById("today-sales-count");
+    if (todaySalesCountElement) {
+      todaySalesCountElement.textContent = `${completedOrders.length} completed order${completedOrders.length !== 1 ? 's' : ''}`;
+    }
+
+    // Update today's total sales display (completed + pending)
+    const todayTotalSalesElement = document.getElementById("today-total-sales");
+    if (todayTotalSalesElement) {
+      todayTotalSalesElement.textContent = `$${totalAmount.toFixed(2)}`;
     }
   },
 
