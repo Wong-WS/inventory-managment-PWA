@@ -2412,3 +2412,30 @@ button:disabled,
   margin-right: 0.25rem;
   color: #888;
 }
+
+.date-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.date-input-wrapper input[type="date"] {
+  flex: 1;
+}
+
+.btn-clear-date {
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.btn-clear-date:hover {
+  background: #c82333;
+}

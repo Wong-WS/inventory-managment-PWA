@@ -587,6 +587,16 @@ const ReportsModule = {
       inventoryReportBtn.addEventListener('click', async () => await this.generateInventoryReport());
     }
 
+    const clearInventoryDateBtn = document.getElementById('clear-inventory-date');
+    if (clearInventoryDateBtn) {
+      clearInventoryDateBtn.addEventListener('click', () => {
+        const dateInput = document.getElementById('inventory-date');
+        if (dateInput) {
+          dateInput.value = '';
+        }
+      });
+    }
+
     const earningsReportBtn = document.getElementById('generate-earnings-report');
     if (earningsReportBtn) {
       earningsReportBtn.addEventListener('click', async () => await this.generateDriverEarningsReport());

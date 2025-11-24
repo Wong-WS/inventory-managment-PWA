@@ -599,7 +599,12 @@
                     </div>
                     <div class="form-group">
                         <label for="inventory-date">Date (optional)</label>
-                        <input type="date" id="inventory-date">
+                        <div class="date-input-wrapper">
+                            <input type="date" id="inventory-date">
+                            <button type="button" id="clear-inventory-date" class="btn-clear-date" title="Clear date">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
                         <small class="form-hint">Leave empty for current inventory</small>
                     </div>
                     <button id="generate-inventory-report" class="secondary-button">Generate Report</button>
