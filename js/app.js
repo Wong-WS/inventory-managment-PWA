@@ -357,34 +357,12 @@ const DashboardModule = {
 
   // Update dashboard for admin/sales rep users
   async updateAdminDashboard() {
-    // Update product count
-    const productCount = document.getElementById("product-count");
-    if (productCount) {
-      const products = await DB.getAllProducts();
-      productCount.textContent = products.length;
-    }
-
-    // Update driver count
-    const driverCount = document.getElementById("driver-count");
-    if (driverCount) {
-      const drivers = await DB.getAllDrivers();
-      driverCount.textContent = drivers.length;
-    }
-
     // Update today's sales
     const todaySales = document.getElementById("today-sales");
     if (todaySales) {
       const todayOrders = await this.getTodayCompletedOrders();
       const totalSales = todayOrders.reduce((sum, order) => sum + order.totalAmount, 0);
       todaySales.textContent = `$${totalSales.toFixed(2)}`;
-    }
-
-    // Update total inventory
-    const totalInventory = document.getElementById("total-inventory");
-    if (totalInventory) {
-      const products = await DB.getAllProducts();
-      const total = products.reduce((sum, product) => sum + (product.totalQuantity || 0), 0);
-      totalInventory.textContent = total;
     }
   },
 
@@ -1224,17 +1202,6 @@ const DashboardModule = {
       this.cachedAssignments = assignments;
     });
 
-    // For admin/sales rep dashboards, also listen to products and drivers
-    if (session.role !== DB.ROLES.DRIVER) {
-      this.productsListenerUnsubscribe = DB.listenToProducts(async (products) => {
-        this.updateProductCountFromProducts(products);
-      });
-
-      this.driversListenerUnsubscribe = DB.listenToDrivers(async (drivers) => {
-        this.updateDriverCountFromDrivers(drivers);
-      });
-    }
-
     // Mark listeners as initialized
     this.dashboardListenersInitialized = true;
   },
@@ -1391,22 +1358,6 @@ const DashboardModule = {
     const todaySalesElement = document.getElementById("today-sales");
     if (todaySalesElement) {
       todaySalesElement.textContent = `$${todayTotal.toFixed(2)}`;
-    }
-  },
-
-  // Update product count from real-time products data
-  updateProductCountFromProducts(products) {
-    const productCount = document.getElementById("product-count");
-    if (productCount) {
-      productCount.textContent = products.length;
-    }
-  },
-
-  // Update driver count from real-time drivers data
-  updateDriverCountFromDrivers(drivers) {
-    const driverCount = document.getElementById("driver-count");
-    if (driverCount) {
-      driverCount.textContent = drivers.length;
     }
   },
 
