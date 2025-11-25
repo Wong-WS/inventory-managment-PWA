@@ -3711,7 +3711,7 @@ export const DB = {
         }
         const businessDays = await this.getBusinessDayByDate(dateStr);
 
-        if (businessDays) {
+        if (businessDays && businessDays.length > 0) {
           // getBusinessDayByDate now returns an array of business days
           // Get orders from all business day sessions for this date
           const businessDayIds = businessDays.map(day => day.id);
@@ -3729,9 +3729,13 @@ export const DB = {
           return allOrdersArrays.flat();
         }
 
-        // For 'day' period with no business day found, return empty array
-        // This ensures strict business-day-based filtering (no timestamp fallback for days)
-        return [];
+        // No business day found - fall back to calendar date filtering for backward compatibility
+        // This allows viewing old orders from before the business day feature was implemented
+        return await this.getOrdersWithFilters({
+          driverId: driverId || undefined,
+          period: 'day',
+          date: date
+        });
       }
 
       // Fall back to timestamp filtering for week/month/year periods
