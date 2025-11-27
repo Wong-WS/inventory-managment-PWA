@@ -3739,6 +3739,79 @@ export const DB = {
   },
 
   /**
+   * Get orders by custom date range (start and end dates)
+   * Prefers business day filtering with fallback to timestamp filtering
+   * @param {string} driverId - Optional driver ID filter
+   * @param {string} startDate - Start date in YYYY-MM-DD format
+   * @param {string} endDate - End date in YYYY-MM-DD format
+   * @returns {Promise<Array>} Filtered orders
+   */
+  async getOrdersByDateRange(driverId, startDate, endDate) {
+    try {
+      console.log(`Getting orders by date range: ${startDate} to ${endDate}, driver: ${driverId || 'all'}`);
+
+      // Get all business days within the date range
+      const q = query(
+        collection(db, this.COLLECTIONS.BUSINESS_DAYS),
+        where('date', '>=', startDate),
+        where('date', '<=', endDate)
+      );
+
+      const snapshot = await getDocs(q);
+      const businessDays = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      console.log(`Found ${businessDays.length} business days in range`);
+
+      // Get orders from business days
+      let businessDayOrders = [];
+      if (businessDays.length > 0) {
+        const businessDayIds = businessDays.map(day => day.id);
+
+        // Fetch orders for all business days in parallel
+        const ordersArrays = await Promise.all(
+          businessDayIds.map(dayId =>
+            this.getOrdersWithFilters({
+              driverId: driverId || undefined,
+              businessDayId: dayId
+            })
+          )
+        );
+
+        businessDayOrders = ordersArrays.flat();
+        console.log(`Found ${businessDayOrders.length} orders from business days`);
+      }
+
+      // Get legacy orders (without businessDayId) using timestamp filtering
+      const start = new Date(startDate + 'T00:00:00');
+      const end = new Date(endDate + 'T23:59:59');
+
+      const legacyOrders = await this.getOrdersWithFilters({
+        driverId: driverId || undefined,
+        startDate: start,
+        endDate: end
+      });
+
+      // Filter out orders that already have businessDayId (to avoid duplicates)
+      const trueLegacyOrders = legacyOrders.filter(order => !order.businessDayId);
+      console.log(`Found ${trueLegacyOrders.length} legacy orders (without businessDayId)`);
+
+      // Combine both sets and sort by date
+      const allOrders = [...businessDayOrders, ...trueLegacyOrders];
+      allOrders.sort((a, b) => {
+        const dateA = this.toDate(a.createdAt);
+        const dateB = this.toDate(b.createdAt);
+        return dateB - dateA; // Newest first
+      });
+
+      console.log(`Total orders in range: ${allOrders.length}`);
+      return allOrders;
+    } catch (error) {
+      console.error('Error getting orders by date range:', error);
+      return [];
+    }
+  },
+
+  /**
    * Listen to active business day changes
    * @param {Function} callback - Callback function to handle updates
    * @returns {Function} Unsubscribe function

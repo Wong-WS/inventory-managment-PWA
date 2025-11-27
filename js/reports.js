@@ -607,6 +607,28 @@ const ReportsModule = {
       tab.addEventListener('click', () => this.switchReportTab(tab.dataset.report));
     });
 
+    // Period selector change handler - toggle between single date and date range
+    const periodSelect = document.getElementById('report-period');
+    if (periodSelect) {
+      periodSelect.addEventListener('change', () => {
+        const singleDateGroup = document.getElementById('single-date-group');
+        const dateRangeGroup = document.getElementById('date-range-group');
+        const dateRangeEndGroup = document.getElementById('date-range-end-group');
+
+        if (periodSelect.value === 'custom') {
+          // Show date range inputs, hide single date input
+          if (singleDateGroup) singleDateGroup.style.display = 'none';
+          if (dateRangeGroup) dateRangeGroup.style.display = 'block';
+          if (dateRangeEndGroup) dateRangeEndGroup.style.display = 'block';
+        } else {
+          // Show single date input, hide date range inputs
+          if (singleDateGroup) singleDateGroup.style.display = 'block';
+          if (dateRangeGroup) dateRangeGroup.style.display = 'none';
+          if (dateRangeEndGroup) dateRangeEndGroup.style.display = 'none';
+        }
+      });
+    }
+
     // Admin payment form (submit on behalf of driver)
     this.bindAdminPaymentForm();
 
@@ -680,12 +702,47 @@ const ReportsModule = {
     const driverSelect = document.getElementById('report-driver');
     const periodSelect = document.getElementById('report-period');
     const dateInput = document.getElementById('report-date');
+    const startDateInput = document.getElementById('report-start-date');
+    const endDateInput = document.getElementById('report-end-date');
     const resultsDiv = document.getElementById('sales-report-results');
 
     if (!resultsDiv) return;
 
     const driverId = driverSelect.value;
     const period = periodSelect.value;
+
+    // Handle custom date range
+    if (period === 'custom') {
+      const startDate = startDateInput.value;
+      const endDate = endDateInput.value;
+
+      if (!startDate || !endDate) {
+        alert('Please select both start and end dates for custom range.');
+        return;
+      }
+
+      if (startDate > endDate) {
+        alert('Start date must be before or equal to end date.');
+        return;
+      }
+
+      // Show loading state
+      this.showLoading('sales-report-results', 'Generating sales report...');
+
+      // Get orders for custom date range
+      const orders = await DB.getOrdersByDateRange(driverId, startDate, endDate);
+
+      if (orders.length === 0) {
+        resultsDiv.innerHTML = '<p class="no-data">No order data found for the selected date range.</p>';
+        return;
+      }
+
+      // Render custom range report
+      this.renderSalesReportForCustomRange(orders, driverId, startDate, endDate);
+      return;
+    }
+
+    // Handle standard periods (day/week/month/year)
     const date = dateInput.value;
 
     if (!period || !date) {
@@ -853,6 +910,180 @@ const ReportsModule = {
       reportHTML += '</tbody></table>';
     }
     
+    // Product breakdown
+    reportHTML += '<h4>Sales by Product</h4>';
+    reportHTML += '<table class="report-table">';
+    reportHTML += '<thead><tr><th>Product</th><th>Quantity</th></tr></thead>';
+    reportHTML += '<tbody>';
+
+    Object.values(productTotals)
+      .sort((a, b) => b.quantity - a.quantity)
+      .forEach(product => {
+        reportHTML += `
+          <tr>
+            <td data-label="Product">${product.name}</td>
+            <td data-label="Quantity">${product.quantity}</td>
+          </tr>
+        `;
+      });
+
+    reportHTML += '</tbody></table>';
+
+    // Free gifts breakdown (only show if there are free gifts)
+    if (totalFreeGifts > 0) {
+      reportHTML += '<h4>Free Gifts by Product</h4>';
+      reportHTML += '<table class="report-table">';
+      reportHTML += '<thead><tr><th>Product</th><th>Quantity</th></tr></thead>';
+      reportHTML += '<tbody>';
+
+      Object.values(freeGiftProductTotals)
+        .sort((a, b) => b.quantity - a.quantity)
+        .forEach(product => {
+          reportHTML += `
+            <tr>
+              <td data-label="Product">${product.name}</td>
+              <td data-label="Quantity">${product.quantity}</td>
+            </tr>
+          `;
+        });
+
+      reportHTML += '</tbody></table>';
+    }
+
+    // Display the report
+    resultsDiv.innerHTML = reportHTML;
+  },
+
+  // Render sales report for custom date range
+  async renderSalesReportForCustomRange(orders, driverId, startDate, endDate) {
+    const resultsDiv = document.getElementById('sales-report-results');
+    if (!resultsDiv) return;
+
+    // Calculate totals and prepare report data (same logic as standard report)
+    let totalSales = 0;
+    let totalItems = 0;
+    let totalFreeGifts = 0;
+    const productTotals = {};
+    const freeGiftProductTotals = {};
+    const driverTotals = {};
+
+    // Pre-fetch all unique driver IDs in parallel batch
+    const driverIds = [...new Set(orders.map(o => o.driverId))];
+    const missingDrivers = driverIds.filter(id => !this.driversCache.has(id));
+
+    if (missingDrivers.length > 0) {
+      await Promise.all(missingDrivers.map(id => this.getCachedDriver(id)));
+    }
+
+    for (const order of orders) {
+      // Skip cancelled orders for sales report (only count completed orders)
+      if (order.status === DB.ORDER_STATUS.CANCELLED) {
+        continue;
+      }
+
+      // Use cached driver (instant lookup!)
+      const driver = this.driversCache.get(order.driverId);
+      if (!driver) continue;
+
+      // Aggregate total order amount (completed orders only)
+      totalSales += order.totalAmount;
+
+      // Aggregate by driver
+      if (!driverTotals[order.driverId]) {
+        driverTotals[order.driverId] = {
+          name: driver.name,
+          sales: 0,
+          items: 0
+        };
+      }
+      driverTotals[order.driverId].sales += order.totalAmount;
+
+      // Aggregate by product (separate tracking for paid items vs free gifts)
+      order.lineItems.forEach(item => {
+        // Use actualQuantity if available (new format), otherwise fall back to quantity (old format)
+        const deductionAmount = item.actualQuantity != null ? item.actualQuantity : item.quantity;
+
+        if (!item.isFreeGift) {
+          // Track paid items (for "Sales by Product")
+          totalItems += deductionAmount;
+          driverTotals[order.driverId].items += deductionAmount;
+
+          if (!productTotals[item.productId]) {
+            productTotals[item.productId] = {
+              name: item.productName,
+              quantity: 0
+            };
+          }
+          productTotals[item.productId].quantity += deductionAmount;
+        } else {
+          // Track free gifts separately (for "Free Gifts by Product")
+          totalFreeGifts += deductionAmount;
+
+          if (!freeGiftProductTotals[item.productId]) {
+            freeGiftProductTotals[item.productId] = {
+              name: item.productName,
+              quantity: 0
+            };
+          }
+          freeGiftProductTotals[item.productId].quantity += deductionAmount;
+        }
+      });
+    }
+
+    // Format date range for display
+    const startDateObj = new Date(startDate + 'T00:00:00');
+    const endDateObj = new Date(endDate + 'T00:00:00');
+    const dateRangeText = `${startDateObj.toLocaleDateString()} - ${endDateObj.toLocaleDateString()}`;
+
+    // Build report HTML
+    let reportHTML = `
+      <div class="report-summary">
+        <h4>Orders Report: ${dateRangeText}</h4>
+        <div class="report-stats">
+          <div class="stat-item">
+            <span class="stat-label">Total Revenue:</span>
+            <span class="stat-value">$${totalSales.toFixed(2)}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Total Items Sold:</span>
+            <span class="stat-value">${totalItems}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Number of Orders:</span>
+            <span class="stat-value">${orders.length}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Number of Free Gifts:</span>
+            <span class="stat-value">${totalFreeGifts}</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Driver breakdown (if not filtering by a specific driver)
+    if (!driverId && Object.keys(driverTotals).length > 1) {
+      reportHTML += '<h4>Orders by Driver</h4>';
+      reportHTML += '<table class="report-table">';
+      reportHTML += '<thead><tr><th>Driver</th><th>Revenue</th><th>Items</th><th>% of Total</th></tr></thead>';
+      reportHTML += '<tbody>';
+
+      Object.values(driverTotals)
+        .sort((a, b) => b.sales - a.sales)
+        .forEach(driver => {
+          const percentage = (driver.sales / totalSales * 100).toFixed(1);
+          reportHTML += `
+            <tr>
+              <td data-label="Driver">${driver.name}</td>
+              <td data-label="Revenue">$${driver.sales.toFixed(2)}</td>
+              <td data-label="Items">${driver.items}</td>
+              <td data-label="% of Total">${percentage}%</td>
+            </tr>
+          `;
+        });
+
+      reportHTML += '</tbody></table>';
+    }
+
     // Product breakdown
     reportHTML += '<h4>Sales by Product</h4>';
     reportHTML += '<table class="report-table">';

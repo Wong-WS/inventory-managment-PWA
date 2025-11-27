@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventory-manager-v41';
+const CACHE_NAME = 'inventory-manager-v42';
 
 // Core application files to cache
 const filesToCache = [
