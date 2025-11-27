@@ -2004,19 +2004,13 @@ export const DB = {
     if (filters.businessDayId) {
       orders = orders.filter(order => order.businessDayId === filters.businessDayId);
     }
-    // PRIORITY 2: Period and date filtering (legacy + new hybrid)
+    // PRIORITY 2: Period and date filtering (for week/month/year periods)
     else if (filters.period && filters.date) {
       const dateRange = this.calculateDateRange(filters.period, filters.date);
 
       if (dateRange) {
         orders = orders.filter(order => {
-          // Orders WITH businessDayId - filter by business day's date
-          if (order.businessDayId) {
-            // Skip for now - will be filtered by specific businessDayId when needed
-            return false;
-          }
-
-          // Orders WITHOUT businessDayId (legacy) - filter by createdAt timestamp
+          // Filter by createdAt timestamp (works for both legacy and new orders)
           const orderDate = this.toDate(order.createdAt);
           if (!orderDate) return false;
 
@@ -2028,9 +2022,6 @@ export const DB = {
       if (filters.startDate) {
         const startDate = new Date(filters.startDate);
         orders = orders.filter(order => {
-          // Only apply to legacy orders without businessDayId
-          if (order.businessDayId) return false;
-
           const orderDate = this.toDate(order.createdAt);
           return orderDate && orderDate >= startDate;
         });
@@ -2039,9 +2030,6 @@ export const DB = {
       if (filters.endDate) {
         const endDate = new Date(filters.endDate);
         orders = orders.filter(order => {
-          // Only apply to legacy orders without businessDayId
-          if (order.businessDayId) return false;
-
           const orderDate = this.toDate(order.createdAt);
           return orderDate && orderDate <= endDate;
         });
