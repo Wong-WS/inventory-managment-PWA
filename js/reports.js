@@ -1165,6 +1165,8 @@ const ReportsModule = {
 
       // Build report HTML for a specific driver
       const driver = await this.getCachedDriver(driverId);
+      const allProducts = await DB.getAllProducts();
+      const mainStockMap = new Map(allProducts.map(p => [p.id, p.totalQuantity]));
 
       // Store current state for reordering
       this.currentInventoryData = inventoryData;
@@ -1191,14 +1193,15 @@ const ReportsModule = {
             <tr>
               <th class="reorder-controls-col" style="display: none;"></th>
               <th>Product</th>
-              <th>Sale</th>
               <th>Remaining stock</th>
+              <th>Main Stock</th>
             </tr>
           </thead>
           <tbody>
       `;
 
       inventoryData.forEach((item, index) => {
+        const mainQty = mainStockMap.has(item.id) ? mainStockMap.get(item.id) : 0;
         reportHTML += `
           <tr data-product-id="${item.id}" data-index="${index}">
             <td class="reorder-controls" style="display: none;">
@@ -1210,8 +1213,8 @@ const ReportsModule = {
               </button>
             </td>
             <td data-label="Product">${item.name}</td>
-            <td data-label="Sale">${item.sold}</td>
             <td data-label="Remaining stock">${item.remaining}</td>
+            <td data-label="Main Stock">${mainQty}</td>
           </tr>
         `;
       });
@@ -1240,7 +1243,8 @@ const ReportsModule = {
 
       // Overall inventory status
       const products = await DB.getAllProducts();
-      
+      const mainStockMap = new Map(products.map(p => [p.id, p.totalQuantity]));
+
       reportHTML += `
         <h4>Overall Inventory Status</h4>
         <table class="report-table">
@@ -1282,8 +1286,8 @@ const ReportsModule = {
               <thead>
                 <tr>
                   <th>Product</th>
-                  <th>Sale</th>
                   <th>Remaining stock</th>
+                  <th>Main Stock</th>
                 </tr>
               </thead>
               <tbody>
@@ -1291,11 +1295,12 @@ const ReportsModule = {
 
           // Sorting is already handled in getDriverInventory()
           driverInventory.forEach(item => {
+            const mainQty = mainStockMap.has(item.id) ? mainStockMap.get(item.id) : 0;
             reportHTML += `
               <tr>
                 <td data-label="Product">${item.name}</td>
-                <td data-label="Sale">${item.sold}</td>
                 <td data-label="Remaining stock">${item.remaining}</td>
+                <td data-label="Main Stock">${mainQty}</td>
               </tr>
             `;
           });
