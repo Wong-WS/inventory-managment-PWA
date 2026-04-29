@@ -110,6 +110,13 @@ const AuthModule = {
     // Update user info in header
     this.updateUserInfo(session);
 
+    // Listen for admin-triggered force-logout across devices
+    DB.attachGlobalLogoutListener(() => {
+      DB.logout();
+      this.showLogin();
+      this.showNotification('You have been logged out by an administrator. Please log in again.');
+    });
+
     // Setup role-based navigation - handle both session formats for compatibility
     const userRole = session.user?.role || session.role;
     console.log('Setting up navigation for user role:', userRole);

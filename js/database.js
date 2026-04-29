@@ -1232,6 +1232,9 @@ export const DB = {
    * Logout and clear session
    */
   logout() {
+    // Detach the global force-logout listener so it stops firing once we're out
+    this.cleanupListener('globalLogout');
+
     // Clear all session-related data
     localStorage.removeItem('inventory_session');
     localStorage.removeItem('inventory_session_active');
@@ -1248,6 +1251,56 @@ export const DB = {
     keysToRemove.forEach(key => localStorage.removeItem(key));
 
     console.log('Session cleared securely');
+  },
+
+  /**
+   * Force-logout every active session across all devices.
+   * Bumps a global "logout epoch" timestamp in Firestore. Every client running
+   * attachGlobalLogoutListener() picks up the change in real time and ends any
+   * session that was created before this moment (including the caller's own).
+   */
+  async forceLogoutAllUsers() {
+    const session = this.getCurrentSession();
+    const docRef = doc(db, 'system', 'security');
+    await setDoc(docRef, {
+      globalLogoutAt: Date.now(),
+      globalLogoutBy: session?.userId || null,
+      globalLogoutByUsername: session?.username || null,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  },
+
+  /**
+   * Listen for global force-logout events and invoke onForceLogout() when this
+   * client's current session has been invalidated. The check is "session was
+   * created before globalLogoutAt", so users who log in after a force-logout
+   * are unaffected.
+   * @param {Function} onForceLogout - called when this client must log out
+   */
+  attachGlobalLogoutListener(onForceLogout) {
+    // Replace any previously attached listener so we don't double-fire
+    this.cleanupListener('globalLogout');
+
+    const docRef = doc(db, 'system', 'security');
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+
+      const globalLogoutAt = snapshot.data().globalLogoutAt;
+      if (!globalLogoutAt) return;
+
+      const session = this.getCurrentSession();
+      if (!session) return;
+
+      const sessionCreatedAt = new Date(session.createdAt).getTime();
+      if (globalLogoutAt > sessionCreatedAt) {
+        console.log('Global force-logout detected, ending session');
+        onForceLogout();
+      }
+    }, (error) => {
+      console.error('Global logout listener error:', error);
+    });
+
+    this.listeners.set('globalLogout', unsubscribe);
   },
 
   /**

@@ -38,6 +38,12 @@ const UsersModule = {
       resetDatabaseBtn.addEventListener('click', this.handleResetDatabase.bind(this));
     }
 
+    // Force-logout-all button
+    const forceLogoutBtn = document.getElementById('force-logout-btn');
+    if (forceLogoutBtn) {
+      forceLogoutBtn.addEventListener('click', this.handleForceLogoutAll.bind(this));
+    }
+
     // Business Day PIN form
     const setPinForm = document.getElementById('set-pin-form');
     if (setPinForm) {
@@ -391,6 +397,36 @@ const UsersModule = {
       AppModule.showNotification(message);
     } else {
       alert(message);
+    }
+  },
+
+  // Force-logout every active session across all devices.
+  async handleForceLogoutAll() {
+    const confirmed = confirm(
+      'Force logout every user, on every device?\n\n' +
+      'Anyone currently signed in will be returned to the login screen within ' +
+      'a few seconds and will need to sign in again. This includes you.\n\n' +
+      'Continue?'
+    );
+
+    if (!confirmed) return;
+
+    const btn = document.getElementById('force-logout-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Logging everyone out...';
+    }
+
+    try {
+      await DB.forceLogoutAllUsers();
+      this.showNotification('All sessions have been ended. You will be logged out shortly.');
+    } catch (error) {
+      console.error('Force logout failed:', error);
+      alert(`Failed to force logout: ${error.message}`);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Force Logout All Users';
+      }
     }
   },
 
