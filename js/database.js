@@ -1592,7 +1592,35 @@ export const DB = {
       return [];
     }
   },
-  
+
+  /**
+   * Sum assignments made to a driver on a specific local-time date,
+   * grouped by productId.
+   * @param {string} driverId - Driver ID
+   * @param {string} dateString - Local date in YYYY-MM-DD format
+   * @returns {Promise<Map<string, number>>} productId → total quantity assigned that day
+   */
+  async getDailyAssignmentsByDriver(driverId, dateString) {
+    const result = new Map();
+    if (!driverId || !dateString) return result;
+
+    const startOfDay = new Date(`${dateString}T00:00:00`);
+    const endOfDay = new Date(`${dateString}T23:59:59.999`);
+
+    const assignments = await this.getAssignmentsByDriver(driverId);
+
+    assignments.forEach(assignment => {
+      const ts = assignment.assignedAt;
+      const assignedDate = ts?.toDate ? ts.toDate() : new Date(ts);
+      if (assignedDate >= startOfDay && assignedDate <= endOfDay) {
+        const prev = result.get(assignment.productId) || 0;
+        result.set(assignment.productId, prev + (assignment.quantity || 0));
+      }
+    });
+
+    return result;
+  },
+
   async getAssignmentsByProduct(productId) {
     try {
       const q = query(

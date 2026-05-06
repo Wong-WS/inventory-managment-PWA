@@ -1148,12 +1148,19 @@ const ReportsModule = {
       return;
     }
 
+    // Local-time today as YYYY-MM-DD (matches how getDailyAssignmentsByDriver expects dates)
+    const today = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+
     // No date selected - show current live inventory
     let inventoryData = [];
 
     if (driverId) {
       // Get inventory for a specific driver
       inventoryData = await DB.getDriverInventory(driverId);
+      const dailyAssignments = await DB.getDailyAssignmentsByDriver(driverId, today);
 
       if (inventoryData.length === 0) {
         resultsDiv.innerHTML = '<p class="no-data">No inventory data found for the selected driver.</p>';
@@ -1195,6 +1202,7 @@ const ReportsModule = {
               <th>Product</th>
               <th>Remaining stock</th>
               <th>Main Stock</th>
+              <th>Assigned</th>
             </tr>
           </thead>
           <tbody>
@@ -1202,6 +1210,7 @@ const ReportsModule = {
 
       inventoryData.forEach((item, index) => {
         const mainQty = mainStockMap.has(item.id) ? mainStockMap.get(item.id) : 0;
+        const assignedToday = dailyAssignments.get(item.id) ?? 0;
         reportHTML += `
           <tr data-product-id="${item.id}" data-index="${index}">
             <td class="reorder-controls" style="display: none;">
@@ -1215,6 +1224,7 @@ const ReportsModule = {
             <td data-label="Product">${item.name}</td>
             <td data-label="Remaining stock">${item.remaining}</td>
             <td data-label="Main Stock">${mainQty}</td>
+            <td data-label="Assigned">${assignedToday}</td>
           </tr>
         `;
       });
@@ -1268,16 +1278,17 @@ const ReportsModule = {
 
       reportHTML += '</tbody></table>';
 
-      // Pre-fetch all driver inventories in parallel (much faster!)
+      // Pre-fetch all driver inventories AND today's daily assignments in parallel
       const driverInventories = await Promise.all(
         drivers.map(async (driver) => ({
           driver,
-          inventory: await DB.getDriverInventory(driver.id)
+          inventory: await DB.getDriverInventory(driver.id),
+          dailyAssignments: await DB.getDailyAssignmentsByDriver(driver.id, today)
         }))
       );
 
       // Per driver inventory
-      for (const { driver, inventory: driverInventory } of driverInventories) {
+      for (const { driver, inventory: driverInventory, dailyAssignments } of driverInventories) {
 
         if (driverInventory.length > 0) {
           reportHTML += `
@@ -1288,6 +1299,7 @@ const ReportsModule = {
                   <th>Product</th>
                   <th>Remaining stock</th>
                   <th>Main Stock</th>
+                  <th>Assigned</th>
                 </tr>
               </thead>
               <tbody>
@@ -1296,11 +1308,13 @@ const ReportsModule = {
           // Sorting is already handled in getDriverInventory()
           driverInventory.forEach(item => {
             const mainQty = mainStockMap.has(item.id) ? mainStockMap.get(item.id) : 0;
+            const assignedToday = dailyAssignments.get(item.id) ?? 0;
             reportHTML += `
               <tr>
                 <td data-label="Product">${item.name}</td>
                 <td data-label="Remaining stock">${item.remaining}</td>
                 <td data-label="Main Stock">${mainQty}</td>
+                <td data-label="Assigned">${assignedToday}</td>
               </tr>
             `;
           });
@@ -1335,6 +1349,8 @@ const ReportsModule = {
         return;
       }
 
+      const dailyAssignments = await DB.getDailyAssignmentsByDriver(driverId, date);
+
       const driver = await this.getCachedDriver(driverId);
       const driverName = driver ? driver.name : snapshot.driverName;
 
@@ -1348,16 +1364,19 @@ const ReportsModule = {
             <tr>
               <th>Product</th>
               <th>Remaining stock</th>
+              <th>Assigned</th>
             </tr>
           </thead>
           <tbody>
       `;
 
       snapshot.snapshot.forEach(item => {
+        const assignedThatDay = dailyAssignments.get(item.productId) ?? 0;
         reportHTML += `
           <tr>
             <td data-label="Product">${item.productName}</td>
             <td data-label="Remaining stock">${item.remaining}</td>
+            <td data-label="Assigned">${assignedThatDay}</td>
           </tr>
         `;
       });
@@ -1383,9 +1402,16 @@ const ReportsModule = {
 
       let hasAnySnapshot = false;
 
-      for (const driver of drivers) {
-        const snapshot = await DB.getInventorySnapshot(driver.id, date);
+      // Pre-fetch each driver's snapshot AND daily assignments in parallel
+      const driverData = await Promise.all(
+        drivers.map(async (driver) => ({
+          driver,
+          snapshot: await DB.getInventorySnapshot(driver.id, date),
+          dailyAssignments: await DB.getDailyAssignmentsByDriver(driver.id, date)
+        }))
+      );
 
+      for (const { driver, snapshot, dailyAssignments } of driverData) {
         if (snapshot && snapshot.snapshot.length > 0) {
           hasAnySnapshot = true;
           reportHTML += `
@@ -1395,16 +1421,19 @@ const ReportsModule = {
                 <tr>
                   <th>Product</th>
                   <th>Remaining stock</th>
+                  <th>Assigned</th>
                 </tr>
               </thead>
               <tbody>
           `;
 
           snapshot.snapshot.forEach(item => {
+            const assignedThatDay = dailyAssignments.get(item.productId) ?? 0;
             reportHTML += `
               <tr>
                 <td data-label="Product">${item.productName}</td>
                 <td data-label="Remaining stock">${item.remaining}</td>
+                <td data-label="Assigned">${assignedThatDay}</td>
               </tr>
             `;
           });
