@@ -62,3 +62,6 @@ coverage/
 tmp/
 temp/
 .firebase/hosting..cache
+
+# Brainstorming sessions (visual companion)
+.superpowers/
