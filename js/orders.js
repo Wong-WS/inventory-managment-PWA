@@ -612,7 +612,7 @@ const OrdersModule = {
     }
 
     if (isNaN(driverSalary) || driverSalary < 0) {
-      alert('Driver salary must be a valid positive number.');
+      alert('Driver salary must be 0 or a positive number.');
       return;
     }
 
