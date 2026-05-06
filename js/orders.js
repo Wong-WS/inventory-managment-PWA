@@ -1575,7 +1575,7 @@ const OrdersModule = {
       document.getElementById('edit-customer-address').value = order.customerAddress || '';
       document.getElementById('edit-customer-description').value = order.customerDescription || '';
       document.getElementById('edit-order-remark').value = order.remark || '';
-      document.getElementById('edit-driver-salary').value = order.driverSalary || 30;
+      document.getElementById('edit-driver-salary').value = order.driverSalary ?? 0;
       document.getElementById('edit-total-amount').value = order.totalAmount || 0;
 
       // Get adjusted inventory for this order
