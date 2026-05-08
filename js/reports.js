@@ -177,6 +177,50 @@ const ReportsModule = {
         background-color: #e3f2fd;
       }
 
+      /* Inline stepper in the Assigned column */
+      .assigned-stepper {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-wrap: nowrap;
+      }
+      .assigned-stepper .assigned-today {
+        font-weight: 600;
+        min-width: 1.5em;
+        text-align: right;
+      }
+      .btn-stock-plus,
+      .btn-stock-minus {
+        min-height: 32px !important;
+        min-width: 32px !important;
+        padding: 0 0.55rem !important;
+        font-size: 1rem;
+        font-weight: bold;
+        line-height: 1;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .btn-stock-plus { background: #28a745; }
+      .btn-stock-plus:hover:not(:disabled) { background: #218838; }
+      .btn-stock-minus { background: #dc3545; }
+      .btn-stock-minus:hover:not(:disabled) { background: #c82333; }
+      .btn-stock-plus:disabled,
+      .btn-stock-minus:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .stock-qty-input {
+        width: 3rem;
+        height: 32px;
+        padding: 0 0.4rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        text-align: center;
+      }
+
       /* Mobile: Keep table horizontal and scrollable */
       @media (max-width: 768px) {
         .report-stats {
@@ -1251,11 +1295,11 @@ const ReportsModule = {
             <td data-label="Remaining stock">${item.remaining}</td>
             <td data-label="Main Stock">${mainQty}</td>
             <td data-label="Assigned">
-              <div class="assigned-stepper" style="display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap;">
-                <span class="assigned-today" style="font-weight: bold; min-width: 1.5em;">${assignedToday}</span>
-                <button class="btn-stock-minus" data-product-id="${item.id}" data-product-name="${item.name}" ${minusDisabled} style="padding: 0.2rem 0.5rem; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">−</button>
-                <input type="number" class="stock-qty-input" data-product-id="${item.id}" min="1" step="1" value="1" style="width: 3rem; padding: 0.2rem; border: 1px solid #ccc; border-radius: 3px;">
-                <button class="btn-stock-plus" data-product-id="${item.id}" data-product-name="${item.name}" ${plusDisabled} style="padding: 0.2rem 0.5rem; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer;">+</button>
+              <div class="assigned-stepper">
+                <span class="assigned-today">${assignedToday}</span>
+                <button class="btn-stock-minus" data-product-id="${item.id}" data-product-name="${item.name}" ${minusDisabled}>−</button>
+                <input type="number" class="stock-qty-input" data-product-id="${item.id}" min="1" step="1" value="1">
+                <button class="btn-stock-plus" data-product-id="${item.id}" data-product-name="${item.name}" ${plusDisabled}>+</button>
               </div>
             </td>
           </tr>
