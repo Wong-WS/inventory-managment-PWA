@@ -177,49 +177,135 @@ const ReportsModule = {
         background-color: #e3f2fd;
       }
 
-      /* Inline stepper in the Assigned column */
-      .assigned-stepper {
+      /* Assigned column: today's net + adjust link (modal opens on click) */
+      .assigned-cell {
         display: inline-flex;
         align-items: center;
-        gap: 0.35rem;
-        flex-wrap: nowrap;
+        gap: 0.6rem;
+        white-space: nowrap;
       }
-      .assigned-stepper .assigned-today {
+      .assigned-cell .today-num {
         font-weight: 600;
+        color: #1864ab;
         min-width: 1.5em;
         text-align: right;
       }
-      .btn-stock-plus,
-      .btn-stock-minus {
-        min-height: 32px !important;
-        min-width: 32px !important;
-        padding: 0 0.55rem !important;
-        font-size: 1rem;
-        font-weight: bold;
+      .adjust-link {
+        min-height: auto !important;
+        min-width: auto !important;
+        padding: 0.25rem 0.55rem !important;
+        background: transparent !important;
+        color: #1971c2 !important;
+        border: 1px solid #d0e2f5 !important;
+        border-radius: 4px !important;
+        font-size: 0.82rem !important;
+        font-weight: 500;
         line-height: 1;
-        color: #fff;
-        border: none;
-        border-radius: 4px;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
       }
-      .btn-stock-plus { background: #28a745; }
-      .btn-stock-plus:hover:not(:disabled) { background: #218838; }
-      .btn-stock-minus { background: #dc3545; }
-      .btn-stock-minus:hover:not(:disabled) { background: #c82333; }
-      .btn-stock-plus:disabled,
-      .btn-stock-minus:disabled {
-        opacity: 0.45;
-        cursor: not-allowed;
+      .adjust-link:hover { background: #e7f1fb !important; }
+      .adjust-link i { font-size: 0.78rem; }
+
+      /* Stock-adjust modal */
+      .stock-adjust-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.45);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 1000;
+        padding: 1rem;
       }
-      .stock-qty-input {
-        width: 3rem;
-        height: 32px;
-        padding: 0 0.4rem;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        font-size: 0.9rem;
+      .stock-adjust-modal {
+        background: #fff;
+        border-radius: 10px;
+        padding: 1.25rem 1.25rem 1rem;
+        max-width: 360px;
+        width: 100%;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        position: relative;
+      }
+      .stock-adjust-modal h4 {
+        margin: 0 0 0.3rem 0;
+        font-size: 1.05rem;
+      }
+      .stock-adjust-modal .modal-subtitle {
+        font-size: 0.82rem;
+        color: #6c757d;
+        margin-bottom: 0.85rem;
+      }
+      .stock-adjust-modal label {
+        display: block;
+        font-size: 0.78rem;
+        color: #495057;
+        margin-bottom: 0.25rem;
+      }
+      .stock-adjust-modal input[type="number"] {
+        width: 100%;
+        padding: 0.55rem 0.6rem;
+        border: 1px solid #ced4da;
+        border-radius: 5px;
+        font-size: 1rem;
         text-align: center;
       }
+      .stock-adjust-modal .modal-error {
+        margin-top: 0.5rem;
+        padding: 0.45rem 0.6rem;
+        background: #f8d7da;
+        color: #721c24;
+        border-radius: 4px;
+        font-size: 0.82rem;
+      }
+      .stock-adjust-modal .modal-actions {
+        display: flex; gap: 0.5rem;
+        margin-top: 0.9rem;
+      }
+      .stock-adjust-modal .modal-actions button {
+        flex: 1;
+        min-height: 44px !important;
+        min-width: auto !important;
+        padding: 0.55rem !important;
+        border: none;
+        border-radius: 5px;
+        font-size: 0.92rem;
+        font-weight: 600;
+        color: #fff;
+        cursor: pointer;
+      }
+      .btn-modal-add { background: #2b8a3e; }
+      .btn-modal-add:hover:not(:disabled) { background: #237032; }
+      .btn-modal-return { background: #c92a2a; }
+      .btn-modal-return:hover:not(:disabled) { background: #a51d1d; }
+      .btn-modal-add:disabled, .btn-modal-return:disabled {
+        opacity: 0.45; cursor: not-allowed;
+      }
+      .btn-modal-cancel {
+        width: 100%;
+        margin-top: 0.5rem;
+        min-height: 40px !important;
+        padding: 0.5rem !important;
+        background: #f1f3f5 !important;
+        color: #495057 !important;
+        border: none;
+        border-radius: 5px;
+        font-size: 0.88rem;
+        cursor: pointer;
+      }
+      .btn-modal-cancel:hover { background: #e9ecef !important; }
+      .modal-close {
+        position: absolute;
+        top: 0.4rem; right: 0.5rem;
+        min-height: auto !important;
+        min-width: auto !important;
+        padding: 0.25rem 0.5rem !important;
+        background: transparent !important;
+        border: none;
+        font-size: 1.4rem;
+        color: #868e96;
+        cursor: pointer;
+      }
+      .modal-close:hover { color: #212529; }
 
       /* Mobile: Keep table horizontal and scrollable */
       @media (max-width: 768px) {
@@ -1279,8 +1365,6 @@ const ReportsModule = {
         const productNameCell = item.isUnassigned
           ? `<span style="color: #999;">${item.name} <em style="font-size: 0.85em;">(no inventory yet)</em></span>`
           : item.name;
-        const minusDisabled = item.remaining <= 0 ? 'disabled' : '';
-        const plusDisabled = mainQty <= 0 ? 'disabled' : '';
         reportHTML += `
           <tr data-product-id="${item.id}" data-index="${index}">
             <td class="reorder-controls" style="display: none;">
@@ -1295,12 +1379,12 @@ const ReportsModule = {
             <td data-label="Remaining stock">${item.remaining}</td>
             <td data-label="Main Stock">${mainQty}</td>
             <td data-label="Assigned">
-              <div class="assigned-stepper">
-                <span class="assigned-today">${assignedToday}</span>
-                <button class="btn-stock-minus" data-product-id="${item.id}" data-product-name="${item.name}" ${minusDisabled}>−</button>
-                <input type="number" class="stock-qty-input" data-product-id="${item.id}" min="1" step="1" value="1">
-                <button class="btn-stock-plus" data-product-id="${item.id}" data-product-name="${item.name}" ${plusDisabled}>+</button>
-              </div>
+              <span class="assigned-cell">
+                <span class="today-num">${assignedToday}</span>
+                <button class="adjust-link" data-product-id="${item.id}" data-product-name="${item.name}" data-remaining="${item.remaining}" data-main-qty="${mainQty}" aria-label="Adjust ${item.name} stock">
+                  <i class="fas fa-edit"></i>Adjust
+                </button>
+              </span>
             </td>
           </tr>
         `;
@@ -1581,67 +1665,97 @@ const ReportsModule = {
     });
   },
 
-  // Bind +/- inline-stepper handlers in the single-driver live inventory report
+  // Bind "Adjust" link clicks in the single-driver live inventory report
   bindInventoryEditEvents() {
-    const plusButtons = document.querySelectorAll('.btn-stock-plus');
-    const minusButtons = document.querySelectorAll('.btn-stock-minus');
-
-    plusButtons.forEach(btn => {
+    const adjustButtons = document.querySelectorAll('.adjust-link');
+    adjustButtons.forEach(btn => {
       const fresh = btn.cloneNode(true);
       btn.parentNode.replaceChild(fresh, btn);
-      fresh.addEventListener('click', (e) => this.handleStockAdjustClick(e, '+'));
-    });
-
-    minusButtons.forEach(btn => {
-      const fresh = btn.cloneNode(true);
-      btn.parentNode.replaceChild(fresh, btn);
-      fresh.addEventListener('click', (e) => this.handleStockAdjustClick(e, '-'));
+      fresh.addEventListener('click', (e) => this.openStockAdjustModal(e));
     });
   },
 
-  // Handle a + or - stepper click: validate, confirm, run, and refresh
-  async handleStockAdjustClick(event, direction) {
-    const button = event.currentTarget;
-    const productId = button.getAttribute('data-product-id');
-    const productName = button.getAttribute('data-product-name');
+  // Open the stock-adjust modal for a given row
+  async openStockAdjustModal(event) {
+    const trigger = event.currentTarget;
+    const productId = trigger.getAttribute('data-product-id');
+    const productName = trigger.getAttribute('data-product-name');
+    const remaining = parseInt(trigger.getAttribute('data-remaining'), 10) || 0;
+    const mainQty = parseInt(trigger.getAttribute('data-main-qty'), 10) || 0;
     const driverId = this.currentDriverId;
     if (!productId || !driverId) return;
 
-    const qtyInput = document.querySelector(`.stock-qty-input[data-product-id="${productId}"]`);
-    const qty = parseInt(qtyInput?.value, 10);
-
-    if (!Number.isInteger(qty) || qty < 1) {
-      alert('Enter a valid quantity (1 or more).');
-      return;
-    }
-
-    // Look up current state for validation
-    const row = this.currentInventoryData.find(item => item.id === productId);
-    if (!row) {
-      alert('Product no longer available — refresh the report.');
-      return;
-    }
-    const allProducts = await DB.getAllProducts();
-    const mainProduct = allProducts.find(p => p.id === productId);
-    const mainQty = mainProduct ? mainProduct.totalQuantity : 0;
-
-    if (direction === '+') {
-      if (qty > mainQty) {
-        alert(`Only ${mainQty} available in main inventory.`);
-        return;
-      }
-    } else {
-      if (qty > row.remaining) {
-        alert(`Driver only has ${row.remaining} remaining.`);
-        return;
-      }
-    }
-
     const driver = await this.getCachedDriver(driverId);
     const driverName = driver ? driver.name : 'this driver';
-    const verb = direction === '+' ? `Add ${qty} of ${productName} to ${driverName}` : `Return ${qty} of ${productName} from ${driverName} to main inventory`;
 
-    if (!confirm(`${verb}?`)) return;
+    // Build modal
+    const backdrop = document.createElement('div');
+    backdrop.className = 'stock-adjust-backdrop';
+    backdrop.innerHTML = `
+      <div class="stock-adjust-modal" role="dialog" aria-modal="true" aria-labelledby="stock-adjust-title">
+        <button class="modal-close" aria-label="Close">×</button>
+        <h4 id="stock-adjust-title">Adjust ${driverName} — ${productName}</h4>
+        <div class="modal-subtitle">Currently with driver: ${remaining} · Main: ${mainQty}</div>
+        <label for="stock-adjust-qty">Quantity</label>
+        <input id="stock-adjust-qty" type="number" min="1" step="1" value="1">
+        <div class="modal-error" hidden></div>
+        <div class="modal-actions">
+          <button class="btn-modal-add" ${mainQty <= 0 ? 'disabled' : ''}>+ Add to driver</button>
+          <button class="btn-modal-return" ${remaining <= 0 ? 'disabled' : ''}>− Return to main</button>
+        </div>
+        <button class="btn-modal-cancel">Cancel</button>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+
+    const modal = backdrop.querySelector('.stock-adjust-modal');
+    const qtyInput = backdrop.querySelector('#stock-adjust-qty');
+    const errorEl = backdrop.querySelector('.modal-error');
+    const closeBtn = backdrop.querySelector('.modal-close');
+    const cancelBtn = backdrop.querySelector('.btn-modal-cancel');
+    const addBtn = backdrop.querySelector('.btn-modal-add');
+    const returnBtn = backdrop.querySelector('.btn-modal-return');
+
+    const close = () => {
+      document.removeEventListener('keydown', onKey);
+      backdrop.remove();
+    };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+
+    closeBtn.addEventListener('click', close);
+    cancelBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+    modal.addEventListener('click', (e) => e.stopPropagation());
+
+    const showError = (msg) => {
+      errorEl.textContent = msg;
+      errorEl.hidden = false;
+    };
+    const hideError = () => { errorEl.hidden = true; };
+    qtyInput.addEventListener('input', hideError);
+
+    addBtn.addEventListener('click', () => this.runStockAdjust({ direction: '+', productId, qty: parseInt(qtyInput.value, 10), driverId, mainQty, remaining, showError, close }));
+    returnBtn.addEventListener('click', () => this.runStockAdjust({ direction: '-', productId, qty: parseInt(qtyInput.value, 10), driverId, mainQty, remaining, showError, close }));
+
+    // Auto-focus the quantity input
+    setTimeout(() => { qtyInput.focus(); qtyInput.select(); }, 0);
+  },
+
+  // Validate, run the DB action, then close + refresh
+  async runStockAdjust({ direction, productId, qty, driverId, mainQty, remaining, showError, close }) {
+    if (!Number.isInteger(qty) || qty < 1) {
+      showError('Enter a valid quantity (1 or more).');
+      return;
+    }
+    if (direction === '+' && qty > mainQty) {
+      showError(`Only ${mainQty} available in main inventory.`);
+      return;
+    }
+    if (direction === '-' && qty > remaining) {
+      showError(`Driver only has ${remaining} remaining.`);
+      return;
+    }
 
     try {
       if (direction === '+') {
@@ -1649,11 +1763,11 @@ const ReportsModule = {
       } else {
         await DB.transferStock(driverId, 'main-inventory', productId, qty);
       }
-      // Refresh: re-run the report with the same filters (driver still selected, no date)
+      close();
       await this.generateInventoryReport();
     } catch (error) {
       console.error('Stock adjustment error:', error);
-      alert(`Failed to update stock: ${error.message || error}`);
+      showError(`Failed to update stock: ${error.message || error}`);
     }
   },
 
