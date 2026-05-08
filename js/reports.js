@@ -1158,24 +1158,45 @@ const ReportsModule = {
     let inventoryData = [];
 
     if (driverId) {
-      // Get inventory for a specific driver
-      inventoryData = await DB.getDriverInventory(driverId);
+      // Get the driver's inventory rows (only includes products they've been assigned at some point)
+      const driverInventory = await DB.getDriverInventory(driverId);
       const dailyAssignments = await DB.getDailyAssignmentsByDriver(driverId, today);
-
-      if (inventoryData.length === 0) {
-        resultsDiv.innerHTML = '<p class="no-data">No inventory data found for the selected driver.</p>';
-        return;
-      }
-
-      // Sorting is now handled in getDriverInventory() based on custom productOrder
-      // No need to sort here anymore
-
-      // Build report HTML for a specific driver
-      const driver = await this.getCachedDriver(driverId);
       const allProducts = await DB.getAllProducts();
       const mainStockMap = new Map(allProducts.map(p => [p.id, p.totalQuantity]));
 
-      // Store current state for reordering
+      // Build the row list as the union of driver's inventory + full catalog.
+      // Products the driver has never had appear with remaining=0, assigned=0, and an "(no inventory yet)" hint.
+      const inventoryById = new Map(driverInventory.map(item => [item.id, item]));
+
+      const driver = await this.getCachedDriver(driverId);
+
+      const inventoryData = [];
+      // Existing inventory rows first, preserving order from getDriverInventory (which honors productOrder)
+      for (const item of driverInventory) {
+        inventoryData.push({ ...item, isUnassigned: false });
+      }
+      // Then add catalog products the driver has never touched, sorted alphabetically
+      const catalogOnlyProducts = allProducts
+        .filter(p => !inventoryById.has(p.id))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      for (const product of catalogOnlyProducts) {
+        inventoryData.push({
+          id: product.id,
+          name: product.name,
+          assigned: 0,
+          sold: 0,
+          transferred: 0,
+          remaining: 0,
+          isUnassigned: true
+        });
+      }
+
+      if (inventoryData.length === 0) {
+        resultsDiv.innerHTML = '<p class="no-data">No products in catalog.</p>';
+        return;
+      }
+
+      // Store current state for reordering and edit handlers
       this.currentInventoryData = inventoryData;
       this.currentDriverId = driverId;
       this.isEditOrderMode = false;
@@ -1211,6 +1232,11 @@ const ReportsModule = {
       inventoryData.forEach((item, index) => {
         const mainQty = mainStockMap.has(item.id) ? mainStockMap.get(item.id) : 0;
         const assignedToday = dailyAssignments.get(item.id) ?? 0;
+        const productNameCell = item.isUnassigned
+          ? `<span style="color: #999;">${item.name} <em style="font-size: 0.85em;">(no inventory yet)</em></span>`
+          : item.name;
+        const minusDisabled = item.remaining <= 0 ? 'disabled' : '';
+        const plusDisabled = mainQty <= 0 ? 'disabled' : '';
         reportHTML += `
           <tr data-product-id="${item.id}" data-index="${index}">
             <td class="reorder-controls" style="display: none;">
@@ -1221,10 +1247,17 @@ const ReportsModule = {
                 <i class="fas fa-arrow-down"></i>
               </button>
             </td>
-            <td data-label="Product">${item.name}</td>
+            <td data-label="Product">${productNameCell}</td>
             <td data-label="Remaining stock">${item.remaining}</td>
             <td data-label="Main Stock">${mainQty}</td>
-            <td data-label="Assigned">${assignedToday}</td>
+            <td data-label="Assigned">
+              <div class="assigned-stepper" style="display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap;">
+                <span class="assigned-today" style="font-weight: bold; min-width: 1.5em;">${assignedToday}</span>
+                <button class="btn-stock-minus" data-product-id="${item.id}" data-product-name="${item.name}" ${minusDisabled} style="padding: 0.2rem 0.5rem; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">−</button>
+                <input type="number" class="stock-qty-input" data-product-id="${item.id}" min="1" step="1" value="1" style="width: 3rem; padding: 0.2rem; border: 1px solid #ccc; border-radius: 3px;">
+                <button class="btn-stock-plus" data-product-id="${item.id}" data-product-name="${item.name}" ${plusDisabled} style="padding: 0.2rem 0.5rem; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer;">+</button>
+              </div>
+            </td>
           </tr>
         `;
       });
@@ -1232,9 +1265,10 @@ const ReportsModule = {
       reportHTML += '</tbody></table>';
       resultsDiv.innerHTML = reportHTML;
 
-      // Bind event listeners
+      // Bind event listeners (reorder + new edit-stock listeners)
       this.bindInventoryReorderEvents();
-      
+      this.bindInventoryEditEvents();
+
     } else {
       // Get inventory for all drivers
       const drivers = await DB.getAllDrivers();
@@ -1501,6 +1535,82 @@ const ReportsModule = {
         this.moveProductDown(index);
       });
     });
+  },
+
+  // Bind +/- inline-stepper handlers in the single-driver live inventory report
+  bindInventoryEditEvents() {
+    const plusButtons = document.querySelectorAll('.btn-stock-plus');
+    const minusButtons = document.querySelectorAll('.btn-stock-minus');
+
+    plusButtons.forEach(btn => {
+      const fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
+      fresh.addEventListener('click', (e) => this.handleStockAdjustClick(e, '+'));
+    });
+
+    minusButtons.forEach(btn => {
+      const fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
+      fresh.addEventListener('click', (e) => this.handleStockAdjustClick(e, '-'));
+    });
+  },
+
+  // Handle a + or - stepper click: validate, confirm, run, and refresh
+  async handleStockAdjustClick(event, direction) {
+    const button = event.currentTarget;
+    const productId = button.getAttribute('data-product-id');
+    const productName = button.getAttribute('data-product-name');
+    const driverId = this.currentDriverId;
+    if (!productId || !driverId) return;
+
+    const qtyInput = document.querySelector(`.stock-qty-input[data-product-id="${productId}"]`);
+    const qty = parseInt(qtyInput?.value, 10);
+
+    if (!Number.isInteger(qty) || qty < 1) {
+      alert('Enter a valid quantity (1 or more).');
+      return;
+    }
+
+    // Look up current state for validation
+    const row = this.currentInventoryData.find(item => item.id === productId);
+    if (!row) {
+      alert('Product no longer available — refresh the report.');
+      return;
+    }
+    const allProducts = await DB.getAllProducts();
+    const mainProduct = allProducts.find(p => p.id === productId);
+    const mainQty = mainProduct ? mainProduct.totalQuantity : 0;
+
+    if (direction === '+') {
+      if (qty > mainQty) {
+        alert(`Only ${mainQty} available in main inventory.`);
+        return;
+      }
+    } else {
+      if (qty > row.remaining) {
+        alert(`Driver only has ${row.remaining} remaining.`);
+        return;
+      }
+    }
+
+    const driver = await this.getCachedDriver(driverId);
+    const driverName = driver ? driver.name : 'this driver';
+    const verb = direction === '+' ? `Add ${qty} of ${productName} to ${driverName}` : `Return ${qty} of ${productName} from ${driverName} to main inventory`;
+
+    if (!confirm(`${verb}?`)) return;
+
+    try {
+      if (direction === '+') {
+        await DB.addAssignment(driverId, productId, qty);
+      } else {
+        await DB.transferStock(driverId, 'main-inventory', productId, qty);
+      }
+      // Refresh: re-run the report with the same filters (driver still selected, no date)
+      await this.generateInventoryReport();
+    } catch (error) {
+      console.error('Stock adjustment error:', error);
+      alert(`Failed to update stock: ${error.message || error}`);
+    }
   },
 
   toggleEditOrderMode() {
