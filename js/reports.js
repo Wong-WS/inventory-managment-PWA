@@ -177,18 +177,19 @@ const ReportsModule = {
         background-color: #e3f2fd;
       }
 
-      /* Assigned column: today's net + adjust link (modal opens on click) */
+      /* Assigned column: today's net stacked above the adjust link */
       .assigned-cell {
         display: inline-flex;
+        flex-direction: column;
         align-items: center;
-        gap: 0.6rem;
+        gap: 0.3rem;
         white-space: nowrap;
       }
       .assigned-cell .today-num {
         font-weight: 600;
         color: #1864ab;
         min-width: 1.5em;
-        text-align: right;
+        text-align: center;
       }
       .adjust-link {
         min-height: auto !important;
