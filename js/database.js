@@ -1594,11 +1594,13 @@ export const DB = {
   },
 
   /**
-   * Sum assignments made to a driver on a specific local-time date,
-   * grouped by productId.
+   * Net per-product stock movement to a driver on a specific local-time date:
+   * sum of assignments (which already include transfer-IN records the system
+   * auto-creates) minus sum of transfers OUT that day. Clamped at 0 — a
+   * driver can't physically have negative stock from a day's activity.
    * @param {string} driverId - Driver ID
    * @param {string} dateString - Local date in YYYY-MM-DD format
-   * @returns {Promise<Map<string, number>>} productId → total quantity assigned that day
+   * @returns {Promise<Map<string, number>>} productId → net quantity that day
    */
   async getDailyAssignmentsByDriver(driverId, dateString) {
     const result = new Map();
@@ -1617,6 +1619,23 @@ export const DB = {
         result.set(assignment.productId, prev + (assignment.quantity || 0));
       }
     });
+
+    // Subtract transfers OUT (driver-to-driver and collect-to-main) on this date
+    const transfers = await this.getTransfersByDriver(driverId);
+    transfers.forEach(transfer => {
+      if (transfer.fromDriverId !== driverId) return;
+      const ts = transfer.transferredAt;
+      const transferDate = ts?.toDate ? ts.toDate() : new Date(ts);
+      if (transferDate >= startOfDay && transferDate <= endOfDay) {
+        const prev = result.get(transfer.productId) || 0;
+        result.set(transfer.productId, prev - (transfer.quantity || 0));
+      }
+    });
+
+    // Clamp at 0 — net outflow shouldn't surface as a negative
+    for (const [productId, qty] of result) {
+      if (qty < 0) result.set(productId, 0);
+    }
 
     return result;
   },
