@@ -1594,13 +1594,18 @@ export const DB = {
   },
 
   /**
-   * Net per-product stock movement to a driver on a specific local-time date:
-   * sum of assignments (which already include transfer-IN records the system
-   * auto-creates) minus sum of transfers OUT that day. Clamped at 0 — a
-   * driver can't physically have negative stock from a day's activity.
+   * Net per-product stock ASSIGNED to a driver on a specific local-time date.
+   *
+   * Assignments (+, including transfer-IN records the system auto-creates) and
+   * outgoing transfers (−, driver-to-driver and collect-to-main) are replayed in
+   * chronological order, and the running total is floored at 0 after each event.
+   * Flooring per-event (instead of summing everything then flooring once) means a
+   * collection can only cancel assignments that came BEFORE it: once the count hits
+   * 0 the leftover deficit is forgiven, so a later assignment that day counts fresh
+   * rather than being swallowed by an earlier over-collection.
    * @param {string} driverId - Driver ID
    * @param {string} dateString - Local date in YYYY-MM-DD format
-   * @returns {Promise<Map<string, number>>} productId → net quantity that day
+   * @returns {Promise<Map<string, number>>} productId → net quantity assigned that day
    */
   async getDailyAssignmentsByDriver(driverId, dateString) {
     const result = new Map();
@@ -1608,33 +1613,34 @@ export const DB = {
 
     const startOfDay = new Date(`${dateString}T00:00:00`);
     const endOfDay = new Date(`${dateString}T23:59:59.999`);
+    const toDate = (ts) => (ts?.toDate ? ts.toDate() : new Date(ts));
+
+    // Gather each product's events for the day, tagged with a timestamp so we can
+    // replay them in the order they actually happened.
+    const eventsByProduct = new Map(); // productId → [{ time, delta }]
+    const addEvent = (productId, time, delta) => {
+      if (!(time >= startOfDay && time <= endOfDay)) return;
+      if (!eventsByProduct.has(productId)) eventsByProduct.set(productId, []);
+      eventsByProduct.get(productId).push({ time, delta });
+    };
 
     const assignments = await this.getAssignmentsByDriver(driverId);
+    assignments.forEach(a => addEvent(a.productId, toDate(a.assignedAt), a.quantity || 0));
 
-    assignments.forEach(assignment => {
-      const ts = assignment.assignedAt;
-      const assignedDate = ts?.toDate ? ts.toDate() : new Date(ts);
-      if (assignedDate >= startOfDay && assignedDate <= endOfDay) {
-        const prev = result.get(assignment.productId) || 0;
-        result.set(assignment.productId, prev + (assignment.quantity || 0));
-      }
-    });
-
-    // Subtract transfers OUT (driver-to-driver and collect-to-main) on this date
     const transfers = await this.getTransfersByDriver(driverId);
-    transfers.forEach(transfer => {
-      if (transfer.fromDriverId !== driverId) return;
-      const ts = transfer.transferredAt;
-      const transferDate = ts?.toDate ? ts.toDate() : new Date(ts);
-      if (transferDate >= startOfDay && transferDate <= endOfDay) {
-        const prev = result.get(transfer.productId) || 0;
-        result.set(transfer.productId, prev - (transfer.quantity || 0));
-      }
+    transfers.forEach(t => {
+      if (t.fromDriverId !== driverId) return; // only stock leaving this driver
+      addEvent(t.productId, toDate(t.transferredAt), -(t.quantity || 0));
     });
 
-    // Clamp at 0 — net outflow shouldn't surface as a negative
-    for (const [productId, qty] of result) {
-      if (qty < 0) result.set(productId, 0);
+    for (const [productId, events] of eventsByProduct) {
+      events.sort((a, b) => a.time - b.time);
+      let running = 0;
+      for (const e of events) {
+        running += e.delta;
+        if (running < 0) running = 0; // forgive the deficit; don't carry it forward
+      }
+      result.set(productId, running);
     }
 
     return result;
